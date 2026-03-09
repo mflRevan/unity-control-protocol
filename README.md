@@ -48,6 +48,14 @@ cargo build --release
 #   Windows:     copy target\release\ucp.exe %USERPROFILE%\.cargo\bin\
 ```
 
+**Via npm** (GitHub Packages):
+
+```bash
+npm install -g @mflrevan/ucp --registry=https://npm.pkg.github.com
+```
+
+> Requires a GitHub personal access token with `read:packages` scope. See [GitHub Packages docs](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry) for auth setup.
+
 **From GitHub releases:**
 
 Download a prebuilt binary from [Releases](https://github.com/mflRevan/unity-control-protocol/releases) and place it on your PATH.
@@ -253,6 +261,16 @@ Communication uses **JSON-RPC 2.0** over WebSocket on `127.0.0.1`. The bridge wr
 cargo install --git https://github.com/mflRevan/unity-control-protocol --path cli
 ```
 
+### npm/pnpm (GitHub Packages)
+
+```bash
+npm install -g @mflrevan/ucp --registry=https://npm.pkg.github.com
+# or
+pnpm add -g @mflrevan/ucp --registry=https://npm.pkg.github.com
+```
+
+The npm package auto-downloads the correct prebuilt binary for your platform on install.
+
 ### Prebuilt binaries
 
 Grab the latest binary for your platform from [GitHub Releases](https://github.com/mflRevan/unity-control-protocol/releases).
@@ -333,6 +351,10 @@ unity-control-protocol/
 │           │   └── VcsController.cs     # Version control operations
 │           └── Scripts/
 │               └── IUCPScript.cs    # Script interface
+├── npm/                              # npm distribution wrapper
+│   ├── package.json                  # @mflrevan/ucp (GitHub Packages)
+│   ├── bin/ucp.js                    # CLI wrapper
+│   └── scripts/install.js           # Postinstall binary downloader
 └── scripts/
     └── build.sh                     # Cross-platform build script
 ```

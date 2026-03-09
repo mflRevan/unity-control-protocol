@@ -1,0 +1,31 @@
+{
+  "name": "@mflrevan/ucp",
+  "version": "0.1.0",
+  "description": "Unity Control Protocol — CLI for programmatic Unity Editor control",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mflRevan/unity-control-protocol.git"
+  },
+  "bin": {
+    "ucp": "bin/ucp.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "dependencies": {
+    "@mflrevan/ucp": "link:"
+  }
+}

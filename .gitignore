@@ -5,6 +5,11 @@ PROJECT.md
 cli/target/
 **/*.rs.bk
 
+# npm native binaries (downloaded at install time)
+npm/native/
+node_modules/
+dist/
+
 # IDE
 .idea/
 .vscode/
