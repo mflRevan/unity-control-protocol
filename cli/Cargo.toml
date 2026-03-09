@@ -1,0 +1,43 @@
+[package]
+name = "ucp"
+version = "0.1.0"
+edition = "2024"
+description = "Unity Control Protocol — CLI for programmatic Unity Editor control"
+license = "MIT"
+repository = "https://github.com/AimMakerOrg/unity-control-protocol"
+readme = "../README.md"
+keywords = ["unity", "gamedev", "automation", "devtools"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "ucp"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+indicatif = "0.17"
+console = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.26"
+futures-util = "0.3"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+base64 = "0.22"
+sha1 = "0.10"
+rand = "0.9"
+sysinfo = "0.35"
+directories = "6"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+similar = "2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "z"
