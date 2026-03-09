@@ -89,7 +89,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -97,8 +96,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://npm.pkg.github.com
-          scope: '@mflrevan'
+          registry-url: https://registry.npmjs.org
 
       - name: Set version from tag
         run: |
@@ -106,7 +104,7 @@ jobs:
           cd npm
           npm version "$VERSION" --no-git-tag-version --allow-same-version
 
-      - name: Publish to GitHub Packages
-        run: cd npm && npm publish
+      - name: Publish to npmjs
+        run: cd npm && npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

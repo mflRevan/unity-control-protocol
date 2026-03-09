@@ -48,13 +48,11 @@ cargo build --release
 #   Windows:     copy target\release\ucp.exe %USERPROFILE%\.cargo\bin\
 ```
 
-**Via npm** (GitHub Packages):
+**Via npm:**
 
 ```bash
-npm install -g @mflrevan/ucp --registry=https://npm.pkg.github.com
+npm install -g @mflrevan/ucp
 ```
-
-> Requires a GitHub personal access token with `read:packages` scope. See [GitHub Packages docs](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry) for auth setup.
 
 **From GitHub releases:**
 
@@ -261,12 +259,10 @@ Communication uses **JSON-RPC 2.0** over WebSocket on `127.0.0.1`. The bridge wr
 cargo install --git https://github.com/mflRevan/unity-control-protocol --path cli
 ```
 
-### npm/pnpm (GitHub Packages)
+### npm
 
 ```bash
-npm install -g @mflrevan/ucp --registry=https://npm.pkg.github.com
-# or
-pnpm add -g @mflrevan/ucp --registry=https://npm.pkg.github.com
+npm install -g @mflrevan/ucp
 ```
 
 The npm package auto-downloads the correct prebuilt binary for your platform on install.

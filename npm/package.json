@@ -14,7 +14,8 @@
     "postinstall": "node scripts/install.js"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "os": [
     "darwin",
@@ -24,8 +25,5 @@
   "cpu": [
     "x64",
     "arm64"
-  ],
-  "dependencies": {
-    "@mflrevan/ucp": "link:"
-  }
+  ]
 }
