@@ -89,6 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -105,6 +106,4 @@ jobs:
           npm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Publish to npmjs
-        run: cd npm && npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: cd npm && npm publish --access public --provenance
