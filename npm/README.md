@@ -10,6 +10,8 @@ npm install -g @mflrevan/ucp
 
 The package automatically downloads the correct prebuilt binary for your platform (macOS, Linux, Windows).
 
+> **pnpm users:** pnpm blocks postinstall scripts by default. After installing, run `pnpm approve-builds` to allow the binary download, or use `npm install -g @mflrevan/ucp` instead.
+
 ## Usage
 
 ```bash
@@ -44,20 +46,20 @@ Or add to `Packages/manifest.json`:
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `ucp connect` | Verify connection to Unity bridge |
-| `ucp doctor` | Run health checks |
-| `ucp compile` | Trigger recompilation |
-| `ucp play` / `stop` / `pause` | Play mode control |
-| `ucp scene list\|active\|load` | Scene management |
-| `ucp snapshot` | Capture scene hierarchy |
-| `ucp screenshot` | Capture screenshot |
-| `ucp logs` | Stream console logs |
-| `ucp run-tests` | Run edit/play mode tests |
-| `ucp read-file` / `write-file` / `patch-file` | File operations |
-| `ucp exec list\|run` | Run automation scripts |
-| `ucp vcs *` | Version control (Plastic SCM) |
+| Command                                       | Description                       |
+| --------------------------------------------- | --------------------------------- |
+| `ucp connect`                                 | Verify connection to Unity bridge |
+| `ucp doctor`                                  | Run health checks                 |
+| `ucp compile`                                 | Trigger recompilation             |
+| `ucp play` / `stop` / `pause`                 | Play mode control                 |
+| `ucp scene list\|active\|load`                | Scene management                  |
+| `ucp snapshot`                                | Capture scene hierarchy           |
+| `ucp screenshot`                              | Capture screenshot                |
+| `ucp logs`                                    | Stream console logs               |
+| `ucp run-tests`                               | Run edit/play mode tests          |
+| `ucp read-file` / `write-file` / `patch-file` | File operations                   |
+| `ucp exec list\|run`                          | Run automation scripts            |
+| `ucp vcs *`                                   | Version control (Plastic SCM)     |
 
 All commands support `--json` for structured output.
 

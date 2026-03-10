@@ -54,6 +54,8 @@ cargo build --release
 npm install -g @mflrevan/ucp
 ```
 
+> **pnpm users:** pnpm blocks postinstall scripts by default. After installing, run `pnpm approve-builds` to allow the binary download, or use npm instead.
+
 **From GitHub releases:**
 
 Download a prebuilt binary from [Releases](https://github.com/mflRevan/unity-control-protocol/releases) and place it on your PATH.
@@ -266,6 +268,8 @@ npm install -g @mflrevan/ucp
 ```
 
 The npm package auto-downloads the correct prebuilt binary for your platform on install.
+
+> **pnpm users:** pnpm blocks postinstall scripts by default. After installing, run `pnpm approve-builds` to allow the binary download, or use npm instead.
 
 ### Prebuilt binaries
 
