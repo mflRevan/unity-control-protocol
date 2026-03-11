@@ -10,7 +10,7 @@ use super::Context;
 
 const PACKAGE_NAME: &str = "com.ucp.bridge";
 const PACKAGE_GIT_URL: &str =
-    "https://github.com/AimMakerOrg/unity-control-protocol.git?path=unity-package/com.ucp.bridge";
+    "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge";
 
 pub async fn run(path: Option<String>, ctx: &Context) -> anyhow::Result<()> {
     let project_path = if let Some(p) = path {

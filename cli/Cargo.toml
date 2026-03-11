@@ -1,10 +1,10 @@
 [package]
 name = "ucp"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 description = "Unity Control Protocol — CLI for programmatic Unity Editor control"
 license = "MIT"
-repository = "https://github.com/AimMakerOrg/unity-control-protocol"
+repository = "https://github.com/mflRevan/unity-control-protocol"
 readme = "../README.md"
 keywords = ["unity", "gamedev", "automation", "devtools"]
 categories = ["command-line-utilities", "development-tools"]

@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.1.0";
+        private const string ProtocolVersion = "0.2.0";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -139,6 +139,27 @@ namespace UCP.Bridge
 
             // Version Control (Unity VCS / Plastic SCM)
             VcsController.Register(s_router);
+
+            // Object Properties
+            PropertyController.Register(s_router);
+
+            // Hierarchy Operations
+            HierarchyController.Register(s_router);
+
+            // Asset Management
+            AssetController.Register(s_router);
+
+            // Editor Settings (Player, Quality, Physics, Lighting, Tags/Layers)
+            EditorSettingsController.Register(s_router);
+
+            // Material Properties
+            MaterialController.Register(s_router);
+
+            // Prefab Operations
+            PrefabController.Register(s_router);
+
+            // Build Pipeline
+            BuildController.Register(s_router);
         }
 
         private static void StartServer()

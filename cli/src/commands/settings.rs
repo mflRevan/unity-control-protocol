@@ -1,0 +1,253 @@
+use crate::client::BridgeClient;
+use crate::discovery;
+use crate::output;
+use clap::Subcommand;
+
+use super::Context;
+
+#[derive(Subcommand)]
+pub enum SettingsAction {
+    /// Get player settings
+    Player,
+    /// Set a player setting
+    SetPlayer {
+        /// Setting key
+        #[arg(long)]
+        key: String,
+        /// Setting value (as JSON)
+        #[arg(long)]
+        value: String,
+    },
+    /// Get quality settings
+    Quality,
+    /// Set a quality setting
+    SetQuality {
+        /// Setting key
+        #[arg(long)]
+        key: String,
+        /// Setting value (as JSON)
+        #[arg(long)]
+        value: String,
+    },
+    /// Get physics settings
+    Physics,
+    /// Set a physics setting
+    SetPhysics {
+        /// Setting key
+        #[arg(long)]
+        key: String,
+        /// Setting value (as JSON)
+        #[arg(long)]
+        value: String,
+    },
+    /// Get lighting/render settings
+    Lighting,
+    /// Set a lighting setting
+    SetLighting {
+        /// Setting key
+        #[arg(long)]
+        key: String,
+        /// Setting value (as JSON)
+        #[arg(long)]
+        value: String,
+    },
+    /// List tags and layers
+    TagsLayers,
+    /// Add a tag
+    AddTag {
+        /// Tag name
+        tag: String,
+    },
+    /// Add a layer
+    AddLayer {
+        /// Layer name
+        name: String,
+        /// Layer index (8-31, auto-assigned if omitted)
+        #[arg(long)]
+        index: Option<i64>,
+    },
+}
+
+pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
+    let project = discovery::resolve_project(ctx.project.as_deref())?;
+    let lock = discovery::read_lock_file(&project)?;
+    let mut client = BridgeClient::connect(&lock).await?;
+    client.handshake().await?;
+
+    let result = match &action {
+        SettingsAction::Player => {
+            client
+                .call("settings/player", serde_json::json!({}))
+                .await?
+        }
+        SettingsAction::SetPlayer { key, value } => {
+            let parsed: serde_json::Value = serde_json::from_str(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.clone()));
+            client
+                .call(
+                    "settings/player-set",
+                    serde_json::json!({ "key": key, "value": parsed }),
+                )
+                .await?
+        }
+        SettingsAction::Quality => {
+            client
+                .call("settings/quality", serde_json::json!({}))
+                .await?
+        }
+        SettingsAction::SetQuality { key, value } => {
+            let parsed: serde_json::Value = serde_json::from_str(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.clone()));
+            client
+                .call(
+                    "settings/quality-set",
+                    serde_json::json!({ "key": key, "value": parsed }),
+                )
+                .await?
+        }
+        SettingsAction::Physics => {
+            client
+                .call("settings/physics", serde_json::json!({}))
+                .await?
+        }
+        SettingsAction::SetPhysics { key, value } => {
+            let parsed: serde_json::Value = serde_json::from_str(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.clone()));
+            client
+                .call(
+                    "settings/physics-set",
+                    serde_json::json!({ "key": key, "value": parsed }),
+                )
+                .await?
+        }
+        SettingsAction::Lighting => {
+            client
+                .call("settings/lighting", serde_json::json!({}))
+                .await?
+        }
+        SettingsAction::SetLighting { key, value } => {
+            let parsed: serde_json::Value = serde_json::from_str(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.clone()));
+            client
+                .call(
+                    "settings/lighting-set",
+                    serde_json::json!({ "key": key, "value": parsed }),
+                )
+                .await?
+        }
+        SettingsAction::TagsLayers => {
+            client
+                .call("settings/tags-layers", serde_json::json!({}))
+                .await?
+        }
+        SettingsAction::AddTag { tag } => {
+            client
+                .call("settings/add-tag", serde_json::json!({ "tag": tag }))
+                .await?
+        }
+        SettingsAction::AddLayer { name, index } => {
+            let mut params = serde_json::json!({ "name": name });
+            if let Some(idx) = index {
+                params["index"] = serde_json::json!(idx);
+            }
+            client.call("settings/add-layer", params).await?
+        }
+    };
+
+    client.close().await;
+
+    if ctx.json {
+        output::print_json(&output::success_json(result));
+    } else {
+        match &action {
+            SettingsAction::Player => {
+                output::print_success("Player Settings");
+                print_kv_object(&result);
+            }
+            SettingsAction::SetPlayer { key, .. } => {
+                output::print_success(&format!("Set player setting: {key}"));
+            }
+            SettingsAction::Quality => {
+                output::print_success("Quality Settings");
+                print_kv_object(&result);
+            }
+            SettingsAction::SetQuality { key, .. } => {
+                output::print_success(&format!("Set quality setting: {key}"));
+            }
+            SettingsAction::Physics => {
+                output::print_success("Physics Settings");
+                print_kv_object(&result);
+            }
+            SettingsAction::SetPhysics { key, .. } => {
+                output::print_success(&format!("Set physics setting: {key}"));
+            }
+            SettingsAction::Lighting => {
+                output::print_success("Lighting Settings");
+                print_kv_object(&result);
+            }
+            SettingsAction::SetLighting { key, .. } => {
+                output::print_success(&format!("Set lighting setting: {key}"));
+            }
+            SettingsAction::TagsLayers => {
+                if let Some(tags) = result.get("tags").and_then(|v| v.as_array()) {
+                    output::print_success(&format!("Tags ({})", tags.len()));
+                    for t in tags {
+                        if let Some(s) = t.as_str() {
+                            eprintln!("  {s}");
+                        }
+                    }
+                }
+                if let Some(layers) = result.get("layers").and_then(|v| v.as_array()) {
+                    eprintln!();
+                    output::print_success(&format!("Layers ({})", layers.len()));
+                    for l in layers {
+                        let idx = l.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let name = l.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                        eprintln!("  [{idx}] {name}");
+                    }
+                }
+            }
+            SettingsAction::AddTag { tag } => {
+                let status = result
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("ok");
+                if status == "exists" {
+                    output::print_success(&format!("Tag '{tag}' already exists"));
+                } else {
+                    output::print_success(&format!("Added tag: {tag}"));
+                }
+            }
+            SettingsAction::AddLayer { name, .. } => {
+                let idx = result.get("index").and_then(|v| v.as_i64()).unwrap_or(0);
+                let status = result
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("ok");
+                if status == "exists" {
+                    output::print_success(&format!("Layer '{name}' already exists at index {idx}"));
+                } else {
+                    output::print_success(&format!("Added layer: {name} at index {idx}"));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn print_kv_object(val: &serde_json::Value) {
+    if let Some(obj) = val.as_object() {
+        for (k, v) in obj {
+            let display = match v {
+                serde_json::Value::String(s) => s.to_string(),
+                serde_json::Value::Array(arr) => {
+                    let parts: Vec<String> = arr.iter().map(|x| x.to_string()).collect();
+                    format!("[{}]", parts.join(", "))
+                }
+                other => other.to_string(),
+            };
+            eprintln!("  {k}: {display}");
+        }
+    }
+}

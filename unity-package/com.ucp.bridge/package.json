@@ -1,6 +1,6 @@
 {
   "name": "com.ucp.bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Unity Control Protocol Bridge",
   "description": "WebSocket bridge for programmatic Unity Editor control via CLI and AI agents.",
   "unity": "2021.3",
@@ -13,12 +13,12 @@
   ],
   "author": {
     "name": "UCP Contributors",
-    "url": "https://github.com/AimMakerOrg/unity-control-protocol"
+    "url": "https://github.com/mflRevan/unity-control-protocol"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AimMakerOrg/unity-control-protocol.git"
+    "url": "https://github.com/mflRevan/unity-control-protocol.git"
   },
   "type": "tool",
   "documentationUrl": "https://github.com/AimMakerOrg/unity-control-protocol/blob/main/docs/bridge-internals.md",

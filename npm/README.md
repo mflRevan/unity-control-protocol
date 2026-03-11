@@ -1,6 +1,8 @@
 # @mflrevan/ucp
 
-CLI for programmatic control of Unity Editor over WebSocket. Enables AI agents, CI/CD pipelines, and automation tools to interact with Unity projects.
+Version `0.2.0` of the Unity Control Protocol CLI.
+
+This package installs the `ucp` command and downloads the matching published binary for your platform during `postinstall`.
 
 ## Install
 
@@ -8,33 +10,39 @@ CLI for programmatic control of Unity Editor over WebSocket. Enables AI agents, 
 npm install -g @mflrevan/ucp
 ```
 
-The package automatically downloads the correct prebuilt binary for your platform (macOS, Linux, Windows).
+### pnpm
 
-> **pnpm users:** pnpm blocks postinstall scripts by default. After installing, run `pnpm approve-builds` to allow the binary download, or use `npm install -g @mflrevan/ucp` instead.
+```bash
+pnpm add -g @mflrevan/ucp
+pnpm approve-builds
+```
+
+## Supported platforms
+
+- Windows x64
+- macOS x64
+- macOS arm64
+- Linux x64
 
 ## Usage
 
 ```bash
 cd /path/to/MyUnityProject
-ucp connect         # verify connection to Unity bridge
-ucp snapshot         # capture full scene hierarchy
-ucp compile          # trigger recompilation
-ucp play             # enter play mode
-ucp write-file Assets/Scripts/MyScript.cs --content "..."
+ucp doctor
+ucp connect
+ucp snapshot
+ucp object get-fields --id 46894 --component Transform
+ucp asset search -t Material
+ucp build targets
 ```
 
-## Requirements
-
-- Unity project with the UCP bridge package installed
-- Supported platforms: macOS (x64, ARM64), Linux (x64), Windows (x64)
-
-### Install the Bridge
+## Bridge install
 
 ```bash
 ucp install
 ```
 
-Or add to `Packages/manifest.json`:
+Or add this to `Packages/manifest.json`:
 
 ```json
 {
@@ -44,35 +52,18 @@ Or add to `Packages/manifest.json`:
 }
 ```
 
-## Commands
+## Release asset source
 
-| Command                                       | Description                       |
-| --------------------------------------------- | --------------------------------- |
-| `ucp connect`                                 | Verify connection to Unity bridge |
-| `ucp doctor`                                  | Run health checks                 |
-| `ucp compile`                                 | Trigger recompilation             |
-| `ucp play` / `stop` / `pause`                 | Play mode control                 |
-| `ucp scene list\|active\|load`                | Scene management                  |
-| `ucp snapshot`                                | Capture scene hierarchy           |
-| `ucp screenshot`                              | Capture screenshot                |
-| `ucp logs`                                    | Stream console logs               |
-| `ucp run-tests`                               | Run edit/play mode tests          |
-| `ucp read-file` / `write-file` / `patch-file` | File operations                   |
-| `ucp exec list\|run`                          | Run automation scripts            |
-| `ucp vcs *`                                   | Version control (Plastic SCM)     |
+The installer downloads from:
 
-All commands support `--json` for structured output.
+`https://github.com/mflRevan/unity-control-protocol/releases/download/v<version>/...`
 
-## Alternative Install Methods
-
-- **cargo:** `cargo install --git https://github.com/mflRevan/unity-control-protocol --path cli`
-- **Binary:** [GitHub Releases](https://github.com/mflRevan/unity-control-protocol/releases)
-- **Source:** `git clone` + `cargo build --release`
+That means npm publish depends on the matching GitHub release artifacts existing for the same tag.
 
 ## Links
 
-- [Full documentation](https://github.com/mflRevan/unity-control-protocol)
-- [GitHub Releases](https://github.com/mflRevan/unity-control-protocol/releases)
+- Repository: https://github.com/mflRevan/unity-control-protocol
+- Releases: https://github.com/mflRevan/unity-control-protocol/releases
 
 ## License
 

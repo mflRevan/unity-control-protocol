@@ -1,3 +1,5 @@
+pub mod asset;
+pub mod build;
 pub mod compile;
 pub mod connect;
 pub mod doctor;
@@ -5,9 +7,13 @@ pub mod exec;
 pub mod files;
 pub mod install;
 pub mod logs;
+pub mod material;
+pub mod object;
 pub mod play;
+pub mod prefab;
 pub mod scene;
 pub mod screenshot;
+pub mod settings;
 pub mod snapshot;
 pub mod tests;
 pub mod vcs;
@@ -134,6 +140,36 @@ pub enum Command {
         #[command(subcommand)]
         action: vcs::VcsAction,
     },
+    /// Inspect and modify GameObjects, components, and properties
+    Object {
+        #[command(subcommand)]
+        action: object::ObjectAction,
+    },
+    /// Search and manage project assets
+    Asset {
+        #[command(subcommand)]
+        action: asset::AssetAction,
+    },
+    /// Read and modify project settings
+    Settings {
+        #[command(subcommand)]
+        action: settings::SettingsAction,
+    },
+    /// Inspect and modify materials
+    Material {
+        #[command(subcommand)]
+        action: material::MaterialAction,
+    },
+    /// Prefab operations (status, apply, revert, unpack, create)
+    Prefab {
+        #[command(subcommand)]
+        action: prefab::PrefabAction,
+    },
+    /// Build pipeline operations
+    Build {
+        #[command(subcommand)]
+        action: build::BuildAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -178,5 +214,11 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             ExecAction::Run { name, params } => exec::run(&name, params, &ctx).await,
         },
         Command::Vcs { action } => vcs::run(action, &ctx).await,
+        Command::Object { action } => object::run(action, &ctx).await,
+        Command::Asset { action } => asset::run(action, &ctx).await,
+        Command::Settings { action } => settings::run(action, &ctx).await,
+        Command::Material { action } => material::run(action, &ctx).await,
+        Command::Prefab { action } => prefab::run(action, &ctx).await,
+        Command::Build { action } => build::run(action, &ctx).await,
     }
 }
