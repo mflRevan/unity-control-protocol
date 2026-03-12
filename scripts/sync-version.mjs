@@ -102,6 +102,7 @@ const replacements = [
         /  \{ text: '  Protocol: v.*', type: 'info', delay: 200 \},/,
         `  { text: '  Protocol: v${protocolVersion}', type: 'info', delay: 200 },`,
       ),
+    { optionalFile: true },
   ],
   [
     'skills/unity-control-protocol/SKILL.md',
@@ -121,8 +122,11 @@ const replacements = [
 ];
 
 const failures = [];
-for (const [relativePath, transform] of replacements) {
+for (const [relativePath, transform, options = {}] of replacements) {
   const absolutePath = path.join(root, relativePath);
+  if (options.optionalFile && !fs.existsSync(absolutePath)) {
+    continue;
+  }
   const current = fs.readFileSync(absolutePath, 'utf8');
   const next = withExistingLineEndings(transform(current), current);
   if (isCheck) {

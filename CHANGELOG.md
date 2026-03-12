@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.3] - 2026-03-12
+
+### Fixed
+
+- Fixed release validation by making `scripts/sync-version.mjs` tolerate optional website demo files that are not present in every tagged tree
+
 ## [0.2.2] - 2026-03-12
 
 ### Changed

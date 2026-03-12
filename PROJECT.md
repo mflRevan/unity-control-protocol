@@ -13,8 +13,8 @@ UCP exposes the Unity Editor as a local automation target through:
 
 The CLI talks to the bridge over localhost WebSocket using JSON-RPC 2.0.
 
-Current release target: `0.2.2`
-Current protocol version: `0.2.2`
+Current release target: `0.2.3`
+Current protocol version: `0.2.3`
 Canonical metadata source: `version.json`
 
 ## Repository layout

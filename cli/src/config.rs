@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const PROTOCOL_VERSION: &str = "0.2.2";
+pub const PROTOCOL_VERSION: &str = "0.2.3";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LockFile {

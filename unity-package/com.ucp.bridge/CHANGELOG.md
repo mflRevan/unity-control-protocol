@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.3] - 2026-03-12
+
+### Fixed
+
+- Fixed the release packaging pipeline so metadata validation no longer depends on optional website-only files
+
 ## [0.2.2] - 2026-03-12
 
 ### Changed
