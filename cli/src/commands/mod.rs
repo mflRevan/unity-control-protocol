@@ -37,6 +37,12 @@ pub enum Command {
     Install {
         /// Path to Unity project (defaults to current directory)
         path: Option<String>,
+        /// Force a local-only embedded install using the best available local bridge payload
+        #[arg(long)]
+        embedded: bool,
+        /// Force a tracked manifest dependency install
+        #[arg(long)]
+        manifest: bool,
         /// Mount the bridge from the local repository package path as a local-only embedded package
         #[arg(long)]
         dev: bool,
@@ -217,12 +223,16 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
     match cmd {
         Command::Install {
             path,
+            embedded,
+            manifest,
             dev,
             bridge_path,
             bridge_ref,
             no_wait,
         } => {
             let options = install::InstallOptions {
+                embedded,
+                manifest,
                 dev,
                 bridge_path,
                 bridge_ref,

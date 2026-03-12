@@ -7,6 +7,8 @@ cli/target/
 
 # npm native binaries (downloaded at install time)
 npm/native/
+npm/bridge/
+npm/*.tgz
 node_modules/
 dist/
 

@@ -13,8 +13,8 @@ UCP exposes the Unity Editor as a local automation target through:
 
 The CLI talks to the bridge over localhost WebSocket using JSON-RPC 2.0.
 
-Current release target: `0.2.1`
-Current protocol version: `0.2.1`
+Current release target: `0.2.2`
+Current protocol version: `0.2.2`
 Canonical metadata source: `version.json`
 
 ## Repository layout
@@ -110,7 +110,10 @@ unity-control-protocol/
 
 ### Bridge/package alignment
 
-- `ucp install` pins the Unity bridge dependency to `#v<cli-version>` by default.
+- `ucp install` should treat the bridge as a local CLI-managed payload first, not as a tracked project dependency.
+- Published npm packages bundle `bridge/com.ucp.bridge` alongside the CLI wrapper package.
+- GitHub releases publish bundled archives containing the CLI binary plus `bridge/com.ucp.bridge`.
+- The tracked manifest dependency path remains available via `ucp install --manifest`.
 - The default bridge dependency is:
   `https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v<cli-version>`
 - The npm wrapper downloads release binaries from the matching GitHub release tag.
@@ -127,6 +130,7 @@ cargo run --manifest-path cli/Cargo.toml -- --project <UnityProject> install --d
 
 Behavior:
 
+- `ucp install` prefers a local embedded bridge payload when one is available next to the CLI, in the repository checkout, or in the local cache.
 - `install --dev` mounts `unity-package/com.ucp.bridge/` into the target Unity project as `Packages/com.ucp.bridge`.
 - This keeps `Packages/manifest.json` unchanged, so the dev bridge stays local to that workspace instead of becoming a tracked project dependency.
 - When the target project is a git repo, the installer adds `Packages/com.ucp.bridge/` and `.ucp/` to `.git/info/exclude` instead of editing tracked ignore files.
@@ -138,6 +142,8 @@ Behavior:
 
 Advanced options:
 
+- `ucp install --embedded` to force a local embedded install even if a tracked dependency path is available
+- `ucp install --manifest` to force a tracked manifest dependency pinned to the CLI release tag
 - `ucp install --bridge-path <path>` to point at another local Unity package directory
 - `ucp install --bridge-ref <manifest-ref>` to inject an explicit dependency reference
 - `ucp install --no-wait` to skip the wait/reconnect step
@@ -204,6 +210,7 @@ JSON output remains intentionally full-fidelity. Use it for targeted machine rea
 - Unity on Windows did not reliably react to plain foreground-window APIs alone; `AppActivate` was required as a fallback.
 - `run-tests --filter` semantics are still governed by Unity Test Runner behavior and should be validated against host-project expectations before relying on it as a strict selector.
 - Some host projects still report container-level names like the project name in Unity test results, so current live test output should be treated as pass/fail confirmation rather than authoritative leaf-test naming.
+- Raw standalone binaries without the bundled archive layout still do not carry the bridge payload; use the bundled release archives or npm package when local-first install behavior matters.
 - Fresh snapshot-derived instance ids were valid in HijraVR; the earlier failure was caused by stale ids after scene/reload churn, and the CLI's field output now reads the correct `name` key from the bridge response.
 - Treat instance ids as session-scoped editor handles. Re-run `snapshot` after compilation, package reloads, scene loads, or tests before using object-level commands.
 

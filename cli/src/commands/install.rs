@@ -3,8 +3,10 @@ use crate::client::BridgeClient;
 use crate::discovery;
 use crate::output;
 use console::style;
+use directories::ProjectDirs;
 use dialoguer::{Confirm, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,13 +17,22 @@ use super::Context;
 const PACKAGE_NAME: &str = "com.ucp.bridge";
 const PACKAGE_GIT_URL_BASE: &str =
     "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge";
+const INSTALL_STATE_FILE: &str = "install-state.json";
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
     pub dev: bool,
+    pub embedded: bool,
+    pub manifest: bool,
     pub bridge_path: Option<String>,
     pub bridge_ref: Option<String>,
     pub no_wait: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InstallState {
+    mode: String,
+    source: Option<String>,
 }
 
 pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -> anyhow::Result<()> {
@@ -51,8 +62,12 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         anyhow::bail!("Use either --dev or --bridge-path, not both");
     }
 
-    if options.bridge_ref.is_some() && (options.dev || options.bridge_path.is_some()) {
-        anyhow::bail!("Use --bridge-ref by itself, or use --dev/--bridge-path");
+    if options.manifest && (options.dev || options.embedded || options.bridge_path.is_some()) {
+        anyhow::bail!("Use --manifest by itself, or use --dev/--embedded/--bridge-path");
+    }
+
+    if options.bridge_ref.is_some() && (options.dev || options.bridge_path.is_some() || options.embedded) {
+        anyhow::bail!("Use --bridge-ref by itself, or use --dev/--embedded/--bridge-path");
     }
 
     let manifest_path = project_path.join("Packages").join("manifest.json");
@@ -63,9 +78,12 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         );
     }
 
-    if uses_embedded_local_package(&options) {
-        return run_embedded_local_install(&project_path, &options, ctx).await;
+    if let Some(source_path) = desired_embedded_package_source(&options)? {
+        return run_embedded_local_install(&project_path, source_path, options.no_wait, ctx).await;
     }
+
+    remove_owned_embedded_mount_if_present(&project_path)?;
+    clear_install_state(&project_path)?;
 
     let desired_package_url = desired_package_reference(&options)?;
     let using_custom_source = options.bridge_ref.is_some();
@@ -203,6 +221,11 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         eprintln!();
     }
 
+    write_install_state(&project_path, InstallState {
+        mode: "manifest".to_string(),
+        source: Some(desired_package_url.clone()),
+    })?;
+
     if options.no_wait {
         if ctx.json {
             output::print_json(&output::success_json(serde_json::json!({
@@ -289,19 +312,23 @@ fn package_git_url() -> String {
 }
 
 fn uses_embedded_local_package(options: &InstallOptions) -> bool {
-    options.dev || options.bridge_path.is_some()
+    options.dev || options.embedded || options.bridge_path.is_some()
 }
 
 fn should_refresh_existing_custom_source(same_dependency: bool, using_custom_source: bool) -> bool {
     same_dependency && using_custom_source
 }
 
-fn desired_embedded_package_source(options: &InstallOptions) -> anyhow::Result<PathBuf> {
+fn desired_embedded_package_source(options: &InstallOptions) -> anyhow::Result<Option<PathBuf>> {
     if let Some(path) = &options.bridge_path {
-        return canonicalize_package_dir(PathBuf::from(path));
+        return Ok(Some(canonicalize_package_dir(PathBuf::from(path))?));
     }
 
-    canonicalize_package_dir(default_dev_bridge_path()?)
+    if uses_embedded_local_package(options) {
+        return Ok(Some(require_local_bridge_package()?));
+    }
+
+    autodetect_local_bridge_package()
 }
 
 fn desired_package_reference(options: &InstallOptions) -> anyhow::Result<String> {
@@ -338,6 +365,73 @@ fn default_dev_bridge_path() -> anyhow::Result<PathBuf> {
             path.display()
         );
     }
+}
+
+fn require_local_bridge_package() -> anyhow::Result<PathBuf> {
+    autodetect_local_bridge_package()?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "No local bridge package payload is available. Use --manifest for a tracked project dependency, or provide --bridge-path."
+        )
+    })
+}
+
+fn autodetect_local_bridge_package() -> anyhow::Result<Option<PathBuf>> {
+    for candidate in bridge_source_candidates() {
+        if candidate.is_dir() {
+            return Ok(Some(canonicalize_package_dir(candidate)?));
+        }
+    }
+
+    Ok(None)
+}
+
+fn bridge_source_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Some(path) = repo_bridge_package_path() {
+        candidates.push(path);
+    }
+    if let Some(path) = executable_bridge_package_path() {
+        candidates.push(path);
+    }
+    if let Some(path) = cached_bridge_package_path() {
+        candidates.push(path);
+    }
+
+    candidates
+}
+
+fn repo_bridge_package_path() -> Option<PathBuf> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("unity-package")
+        .join(PACKAGE_NAME);
+
+    path.is_dir().then_some(path)
+}
+
+fn executable_bridge_package_path() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    let parent = exe_dir.parent();
+
+    [
+        exe_dir.join("bridge").join(PACKAGE_NAME),
+        parent?.join("bridge").join(PACKAGE_NAME),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_dir())
+}
+
+fn cached_bridge_package_path() -> Option<PathBuf> {
+    let dirs = ProjectDirs::from("io", "mflrevan", "ucp")?;
+    let path = dirs
+        .cache_dir()
+        .join("bridge")
+        .join(format!("v{}", env!("CARGO_PKG_VERSION")))
+        .join(PACKAGE_NAME);
+
+    path.is_dir().then_some(path)
 }
 
 fn canonicalize_package_dir(path: PathBuf) -> anyhow::Result<PathBuf> {
@@ -380,11 +474,12 @@ fn file_package_reference(path: PathBuf) -> anyhow::Result<String> {
 
 async fn run_embedded_local_install(
     project_path: &Path,
-    options: &InstallOptions,
+    source_path: PathBuf,
+    no_wait: bool,
     ctx: &Context,
 ) -> anyhow::Result<()> {
-    let source_path = desired_embedded_package_source(options)?;
     let mount_path = embedded_package_mount(project_path);
+    let manifest_path = project_path.join("Packages").join("manifest.json");
     let previous_lock = discovery::read_lock_file(project_path).ok();
 
     if !ctx.json {
@@ -400,7 +495,7 @@ async fn run_embedded_local_install(
         eprintln!();
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Proceed with local dev bridge mount?")
+            .with_prompt("Proceed with local bridge mount?")
             .default(true)
             .interact()?;
 
@@ -412,18 +507,24 @@ async fn run_embedded_local_install(
 
     let same_source = is_same_package_source(&mount_path, &source_path)?;
     if !same_source {
-        replace_embedded_mount(&mount_path, &source_path)?;
+        replace_embedded_mount(project_path, &mount_path, &source_path)?;
     }
+
+    let removed_local_manifest_ref = remove_local_file_dependency(&manifest_path)?;
 
     ensure_ucp_state_dir(project_path)?;
     ensure_local_git_exclude(project_path, ".ucp/")?;
     ensure_local_git_exclude(project_path, "Packages/com.ucp.bridge/")?;
+    write_install_state(project_path, InstallState {
+        mode: "embedded-local".to_string(),
+        source: Some(source_path.display().to_string()),
+    })?;
 
     if let Some(lock) = previous_lock.as_ref() {
         let _ = request_asset_refresh(lock).await;
     }
 
-    if options.no_wait {
+    if no_wait {
         if ctx.json {
             output::print_json(&output::success_json(serde_json::json!({
                 "installed": true,
@@ -440,6 +541,12 @@ async fn run_embedded_local_install(
             } else {
                 "Local UCP bridge mounted successfully"
             });
+            if removed_local_manifest_ref {
+                eprintln!(
+                    "  {} Removed the existing tracked local file dependency from Packages/manifest.json.",
+                    style("ℹ").cyan()
+                );
+            }
             eprintln!(
                 "  {} Skipped automatic bridge wait. Run {} when Unity finishes importing.",
                 style("ℹ").cyan(),
@@ -489,6 +596,12 @@ async fn run_embedded_local_install(
                 style("ℹ").cyan()
             );
         }
+        if removed_local_manifest_ref {
+            eprintln!(
+                "  {} Removed the existing tracked local file dependency from Packages/manifest.json.",
+                style("ℹ").cyan()
+            );
+        }
         eprintln!(
             "  {} Local-only mount: {}",
             style("ℹ").cyan(),
@@ -500,7 +613,7 @@ async fn run_embedded_local_install(
             source_path.display()
         );
         eprintln!(
-            "  {} The project manifest was left unchanged; this local mount is ignored via .git/info/exclude when available.",
+            "  {} This local mount is ignored via .git/info/exclude when available.",
             style("ℹ").cyan()
         );
         eprintln!();
@@ -518,18 +631,19 @@ fn is_same_package_source(mount_path: &Path, source_path: &Path) -> anyhow::Resu
         return Ok(false);
     }
 
-    let mount = fs::canonicalize(mount_path)
-        .map_err(|e| anyhow::anyhow!("Failed to resolve embedded package mount {}: {e}", mount_path.display()))?;
+    let mount = normalize_windows_path(
+        fs::canonicalize(mount_path)
+            .map_err(|e| anyhow::anyhow!("Failed to resolve embedded package mount {}: {e}", mount_path.display()))?,
+    );
 
     Ok(mount == source_path)
 }
 
-fn replace_embedded_mount(mount_path: &Path, source_path: &Path) -> anyhow::Result<()> {
+fn replace_embedded_mount(project_path: &Path, mount_path: &Path, source_path: &Path) -> anyhow::Result<()> {
     if mount_path.exists() {
-        let metadata = fs::symlink_metadata(mount_path)?;
-        if !metadata.file_type().is_symlink() {
+        if !mount_is_owned_by_ucp(project_path)? {
             anyhow::bail!(
-                "Embedded package path {} already exists and is not a removable symlink/junction. Remove it manually or use --bridge-ref.",
+                "Embedded package path {} already exists and is not a managed UCP local mount. Remove it manually or use --manifest/--bridge-ref.",
                 mount_path.display()
             );
         }
@@ -617,10 +731,9 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
     let project = discovery::resolve_project(ctx.project.as_deref())?;
     let mount_path = embedded_package_mount(&project);
 
-    if mount_path.exists() {
-        let metadata = fs::symlink_metadata(&mount_path)?;
-        if metadata.file_type().is_symlink() {
+    if mount_path.exists() && mount_is_owned_by_ucp(&project)? {
             remove_mount_link(&mount_path)?;
+            clear_install_state(&project)?;
 
             if ctx.json {
                 output::print_json(&output::success_json(serde_json::json!({
@@ -632,7 +745,6 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
             }
 
             return Ok(());
-        }
     }
 
     let manifest_path = project.join("Packages").join("manifest.json");
@@ -663,6 +775,52 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
         output::print_success("UCP bridge uninstalled");
     }
 
+    clear_install_state(&project)?;
+
+    Ok(())
+}
+
+fn install_state_path(project_path: &Path) -> PathBuf {
+    project_path.join(".ucp").join(INSTALL_STATE_FILE)
+}
+
+fn read_install_state(project_path: &Path) -> anyhow::Result<Option<InstallState>> {
+    let path = install_state_path(project_path);
+    if !path.is_file() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&path)?;
+    Ok(Some(serde_json::from_str(&content)?))
+}
+
+fn write_install_state(project_path: &Path, state: InstallState) -> anyhow::Result<()> {
+    ensure_ucp_state_dir(project_path)?;
+    let path = install_state_path(project_path);
+    fs::write(path, format!("{}\n", serde_json::to_string_pretty(&state)?))?;
+    Ok(())
+}
+
+fn clear_install_state(project_path: &Path) -> anyhow::Result<()> {
+    let path = install_state_path(project_path);
+    if path.exists() {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+fn mount_is_owned_by_ucp(project_path: &Path) -> anyhow::Result<bool> {
+    Ok(matches!(
+        read_install_state(project_path)?,
+        Some(state) if state.mode == "embedded-local"
+    ))
+}
+
+fn remove_owned_embedded_mount_if_present(project_path: &Path) -> anyhow::Result<()> {
+    let mount_path = embedded_package_mount(project_path);
+    if mount_path.exists() && mount_is_owned_by_ucp(project_path)? {
+        remove_mount_link(&mount_path)?;
+    }
     Ok(())
 }
 
@@ -682,6 +840,31 @@ fn inject_package(manifest_path: &Path, name: &str, url: &str) -> anyhow::Result
     Ok(())
 }
 
+fn remove_local_file_dependency(manifest_path: &Path) -> anyhow::Result<bool> {
+    let content = fs::read_to_string(manifest_path)?;
+    let mut manifest: serde_json::Value = serde_json::from_str(&content)?;
+
+    let should_remove = manifest
+        .get("dependencies")
+        .and_then(|v| v.as_object())
+        .and_then(|deps| deps.get(PACKAGE_NAME))
+        .and_then(|v| v.as_str())
+        .map(|value| value.starts_with("file:"))
+        .unwrap_or(false);
+
+    if !should_remove {
+        return Ok(false);
+    }
+
+    if let Some(deps) = manifest.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+        deps.remove(PACKAGE_NAME);
+    }
+
+    let out = serde_json::to_string_pretty(&manifest)?;
+    fs::write(manifest_path, format!("{out}\n"))?;
+    Ok(true)
+}
+
 async fn request_asset_refresh(lock: &crate::config::LockFile) -> anyhow::Result<()> {
     let mut client = BridgeClient::connect(lock).await?;
     client.handshake().await?;
@@ -696,8 +879,9 @@ async fn request_asset_refresh(lock: &crate::config::LockFile) -> anyhow::Result
 mod tests {
     use super::{
         InstallOptions, canonicalize_package_dir, desired_package_reference,
-        file_package_reference, should_refresh_existing_custom_source,
-        uses_embedded_local_package,
+        file_package_reference, read_install_state, remove_local_file_dependency,
+        should_refresh_existing_custom_source, uses_embedded_local_package, write_install_state,
+        InstallState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -746,6 +930,10 @@ mod tests {
             ..InstallOptions::default()
         }));
         assert!(uses_embedded_local_package(&InstallOptions {
+            embedded: true,
+            ..InstallOptions::default()
+        }));
+        assert!(uses_embedded_local_package(&InstallOptions {
             bridge_path: Some("../bridge".to_string()),
             ..InstallOptions::default()
         }));
@@ -765,6 +953,51 @@ mod tests {
         fs::create_dir_all(&temp_root).unwrap();
 
         assert!(canonicalize_package_dir(temp_root.clone()).is_err());
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn install_state_round_trip() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-install-state-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(temp_root.join(".ucp")).unwrap();
+
+        write_install_state(&temp_root, InstallState {
+            mode: "embedded-local".to_string(),
+            source: Some("C:/bridge".to_string()),
+        })
+        .unwrap();
+
+        let state = read_install_state(&temp_root).unwrap().unwrap();
+        assert_eq!(state.mode, "embedded-local");
+        assert_eq!(state.source.as_deref(), Some("C:/bridge"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn removes_local_file_dependency_from_manifest() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-install-manifest-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(&temp_root).unwrap();
+        let manifest_path = temp_root.join("manifest.json");
+        fs::write(
+            &manifest_path,
+            "{\n  \"dependencies\": {\n    \"com.ucp.bridge\": \"file:C:/temp/com.ucp.bridge\",\n    \"com.foo.bar\": \"1.0.0\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        assert!(remove_local_file_dependency(&manifest_path).unwrap());
+        let manifest = fs::read_to_string(&manifest_path).unwrap();
+        assert!(!manifest.contains("file:C:/temp/com.ucp.bridge"));
+        assert!(manifest.contains("com.foo.bar"));
 
         let _ = fs::remove_dir_all(&temp_root);
     }

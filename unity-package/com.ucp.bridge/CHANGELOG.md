@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-03-12
+
+### Changed
+
+- The bridge is now intended to be consumed through CLI-managed local mounts by default, with tracked manifest installation remaining an explicit opt-in path
+
 ## [0.2.1] - 2026-03-12
 
 ### Added

@@ -67,6 +67,28 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Prepare bundled CLI archives
+        run: |
+          mkdir -p artifacts/bundles
+
+          prepare_bundle() {
+            artifact="$1"
+            executable_name="$2"
+            bundle_dir="artifacts/bundles/${artifact}"
+            mkdir -p "${bundle_dir}/bridge"
+            cp "artifacts/${artifact}" "${bundle_dir}/${executable_name}"
+            cp -R unity-package/com.ucp.bridge "${bundle_dir}/bridge/com.ucp.bridge"
+            (
+              cd artifacts/bundles
+              zip -r "../${artifact}.zip" "${artifact}" >/dev/null
+            )
+          }
+
+          prepare_bundle ucp-linux-x64 ucp
+          prepare_bundle ucp-darwin-x64 ucp
+          prepare_bundle ucp-darwin-arm64 ucp
+          prepare_bundle ucp-win32-x64.exe ucp.exe
+
       - name: Compute checksums
         run: |
           cd artifacts
@@ -82,6 +104,10 @@ jobs:
             artifacts/ucp-darwin-x64
             artifacts/ucp-darwin-arm64
             artifacts/ucp-win32-x64.exe
+            artifacts/ucp-linux-x64.zip
+            artifacts/ucp-darwin-x64.zip
+            artifacts/ucp-darwin-arm64.zip
+            artifacts/ucp-win32-x64.exe.zip
             artifacts/checksums-sha256.txt
 
   publish-npm:
@@ -107,6 +133,12 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           cd npm
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Bundle bridge payload into npm package
+        run: |
+          rm -rf npm/bridge
+          mkdir -p npm/bridge
+          cp -R unity-package/com.ucp.bridge npm/bridge/com.ucp.bridge
 
       - name: Publish to npmjs
         run: cd npm && npm publish --access public --provenance

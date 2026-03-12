@@ -2,7 +2,7 @@
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.2.1`
+Release: `0.2.2`
 
 ## What ships
 
@@ -61,12 +61,14 @@ From your Unity project:
 ucp install
 ```
 
+By default, `ucp install` now prefers a local-only embedded bridge mount when the CLI can find a matching local bridge payload. Published npm packages ship that payload, and bundled GitHub release archives do too. Use `ucp install --manifest` if you explicitly want a tracked project dependency.
+
 Or add this dependency manually:
 
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.1"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.2"
   }
 }
 ```
@@ -106,7 +108,7 @@ ucp stop
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.2.1`
+### Advanced editor control in `0.2.2`
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -124,7 +126,7 @@ Example:
 
 ```bash
 ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.2.1"}}
+# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.2.2"}}
 ```
 
 ## Skills and docs
@@ -139,8 +141,10 @@ ucp connect --json
 - Pushing a tag matching `v*` runs `.github/workflows/release.yml`
 - The tag workflow builds binaries for Linux, macOS, and Windows
 - The same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
-- The npm package downloads the tagged release asset during `postinstall`
-- `ucp install` pins the Unity bridge package to the matching CLI tag by default
+- The npm package downloads the tagged release asset during `postinstall` and bundles the matching Unity bridge payload into the published package
+- GitHub releases publish bundled CLI archives that include the Unity bridge payload next to the binary
+- `ucp install` prefers a local-only embedded bridge mount when a local bridge payload is available
+- `ucp install --manifest` pins the Unity bridge package to the matching CLI tag as a tracked dependency
 
 ## Development
 
@@ -166,7 +170,9 @@ Or use the helper script:
 ./scripts/smoke-dev.ps1 -Project D:/Unity/Projects/MyGame
 ```
 
-`install --dev` now mounts the repo-local `unity-package/com.ucp.bridge/` as `Packages/com.ucp.bridge` inside the target Unity project, nudges Unity to reload it, and waits for the bridge to come back. This is a local-only dev overlay: the project manifest stays unchanged, and the mount is added to `.git/info/exclude` when the target project is a git repo.
+`ucp install` prefers a local-only embedded bridge mount when the CLI can resolve a bridge payload locally. `install --dev` forces the repo-local package source, `install --bridge-path` forces another local package source, and `install --manifest` opts back into a tracked manifest dependency.
+
+The clean long-term packaging model for UCP is: ship or cache a versioned bridge payload with the CLI, then mount it locally into `Packages/com.ucp.bridge` on demand. That keeps the product centered on the CLI instead of treating the bridge as a repo dependency users have to commit.
 
 Log inspection now supports both live follow mode and buffered history queries:
 

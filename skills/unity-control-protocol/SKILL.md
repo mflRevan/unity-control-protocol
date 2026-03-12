@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.2.1'
+  version: '0.2.2'
 ---
 
 # Unity Control Protocol (UCP)
@@ -37,14 +37,15 @@ Always verify the bridge before issuing commands.
 ```bash
 ucp doctor                  # Health check
 ucp connect                 # Verify live connection
-ucp install                 # Install bridge into current Unity project (one-time)
+ucp install                 # Install bridge into current Unity project (local-only by default)
 ucp install --dev           # Mount the repo-local bridge package as a local-only embedded package
+ucp install --manifest      # Force a tracked manifest dependency install
 ucp uninstall               # Remove bridge
 ```
 
 If `ucp connect` fails, either Unity is not open or the bridge is not installed. Run `ucp install` from the project root and reopen Unity.
 
-`ucp install --dev` leaves the target project's manifest alone. It mounts `Packages/com.ucp.bridge` locally so the dev bridge does not become a tracked dependency.
+`ucp install` prefers a local embedded bridge mount when the CLI can resolve a local bridge payload. `ucp install --dev` leaves the target project's manifest alone and forces the repo-local bridge source. `ucp install --manifest` opts back into a tracked dependency.
 
 Without `--json`, commands use human mode: concise terminal-oriented summaries meant for people and agent review loops. Broad read commands intentionally truncate in human mode so scenes, settings, and log searches do not flood the terminal.
 

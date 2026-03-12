@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2] - 2026-03-12
+
+### Changed
+
+- `ucp install` now prefers a local embedded bridge mount when a bridge payload is available, while `ucp install --manifest` remains the explicit tracked-dependency path
+- Published npm packages now bundle the Unity bridge payload, and GitHub releases now publish bundled CLI archives that include the bridge payload next to the binary
+
+### Fixed
+
+- Fixed migration from stale tracked `file:` bridge dependencies by scrubbing them from Unity manifests during local-first installs
+- Fixed the GitHub Pages workflow by removing the failing dependency-cache setup that could not resolve the website lockfile path in Actions
+
 ## [0.2.1] - 2026-03-12
 
 ### Added
