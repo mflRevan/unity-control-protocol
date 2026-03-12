@@ -1,3 +1,4 @@
+mod bridge_lifecycle;
 mod client;
 mod commands;
 mod config;

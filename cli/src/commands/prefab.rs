@@ -5,6 +5,9 @@ use clap::Subcommand;
 
 use super::Context;
 
+const MAX_PREFAB_OVERRIDES: usize = 20;
+const MAX_PREFAB_COMPONENT_CHANGES: usize = 20;
+
 #[derive(Subcommand)]
 pub enum PrefabAction {
     /// Get prefab status of a GameObject
@@ -144,7 +147,7 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                     .and_then(|v| v.as_array())
                 {
                     output::print_success(&format!("{} property modification(s)", mods.len()));
-                    for m in mods.iter().take(20) {
+                    for m in mods.iter().take(MAX_PREFAB_OVERRIDES) {
                         let path = m
                             .get("propertyPath")
                             .and_then(|v| v.as_str())
@@ -152,28 +155,40 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                         let val = m.get("value").and_then(|v| v.as_str()).unwrap_or("?");
                         eprintln!("  {path} = {val}");
                     }
+                    if mods.len() > MAX_PREFAB_OVERRIDES {
+                        eprintln!(
+                            "  ... {} more modification(s) omitted; use --json for the full override list",
+                            mods.len() - MAX_PREFAB_OVERRIDES
+                        );
+                    }
                 }
                 if let Some(added) = result.get("addedComponents").and_then(|v| v.as_array()) {
                     if !added.is_empty() {
                         eprintln!("  Added components:");
-                        for a in added {
+                        for a in added.iter().take(MAX_PREFAB_COMPONENT_CHANGES) {
                             let comp = a
                                 .get("component")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("?");
                             eprintln!("    + {comp}");
                         }
+                        if added.len() > MAX_PREFAB_COMPONENT_CHANGES {
+                            eprintln!("    ... {} more added component(s) omitted", added.len() - MAX_PREFAB_COMPONENT_CHANGES);
+                        }
                     }
                 }
                 if let Some(removed) = result.get("removedComponents").and_then(|v| v.as_array()) {
                     if !removed.is_empty() {
                         eprintln!("  Removed components:");
-                        for r in removed {
+                        for r in removed.iter().take(MAX_PREFAB_COMPONENT_CHANGES) {
                             let comp = r
                                 .get("component")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("?");
                             eprintln!("    - {comp}");
+                        }
+                        if removed.len() > MAX_PREFAB_COMPONENT_CHANGES {
+                            eprintln!("    ... {} more removed component(s) omitted", removed.len() - MAX_PREFAB_COMPONENT_CHANGES);
                         }
                     }
                 }

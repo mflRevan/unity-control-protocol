@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.1] - 2026-03-12
+
+### Added
+
+- `LogsController` buffered history support for `logs/tail`, `logs/search`, and `logs/get`
+- EditMode smoke coverage for buffered log truncation, regex filtering, and id-window filtering
+
+### Changed
+
+- Snapshot responses remain shallow by default and log-heavy reads are now designed for summary-first inspection
+
+### Fixed
+
+- EditMode test duration reporting now uses the editor uptime clock to avoid negative durations
+
 ## [0.2.0] - 2026-03-12
 
 ### Added

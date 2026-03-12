@@ -83,10 +83,10 @@ Start a build with the current settings. Specify an output path for the built ar
 ucp build start --output "Builds/MyGame.exe"
 ```
 
-| Flag                  | Description                        |
-| --------------------- | ---------------------------------- |
-| `--output <path>`     | Output path for the build artifact |
-| `--development`       | Build with Unity development build options |
+| Flag              | Description                                |
+| ----------------- | ------------------------------------------ |
+| `--output <path>` | Output path for the build artifact         |
+| `--development`   | Build with Unity development build options |
 
 **Output:**
 

@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.2.0";
+        private const string ProtocolVersion = "0.2.1";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -117,16 +117,8 @@ namespace UCP.Bridge
             // Screenshots
             ScreenshotController.Register(s_router);
 
-            // Log streaming
-            s_router.Register("logs/subscribe", (paramsJson) =>
-            {
-                // Handled specially in message processing
-                return new { subscribed = true };
-            });
-            s_router.Register("logs/unsubscribe", (paramsJson) =>
-            {
-                return new { unsubscribed = true };
-            });
+            // Logs
+            LogsController.Register(s_router);
 
             // Tests
             TestRunnerController.Register(s_router);
@@ -463,22 +455,7 @@ namespace UCP.Bridge
             // Don't forward our own log messages to avoid infinite recursion
             if (message.StartsWith("[UCP]")) return;
 
-            string level = type switch
-            {
-                LogType.Error => "error",
-                LogType.Exception => "exception",
-                LogType.Warning => "warning",
-                LogType.Assert => "error",
-                _ => "info"
-            };
-
-            SendNotification("log", new Dictionary<string, object>
-            {
-                ["level"] = level,
-                ["message"] = message,
-                ["stackTrace"] = stackTrace,
-                ["timestamp"] = DateTime.UtcNow.ToString("o")
-            });
+            SendNotification("log", LogsController.RecordLog(message, stackTrace, type));
         }
 
         private static void PumpMainThread()

@@ -5,6 +5,8 @@ use clap::Subcommand;
 
 use super::Context;
 
+const MAX_FIELD_LINES: usize = 40;
+
 #[derive(Subcommand)]
 pub enum ObjectAction {
     /// List all fields on a GameObject's component
@@ -260,7 +262,7 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
             ObjectAction::GetFields { .. } => {
                 if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
                     let obj_name = result
-                        .get("objectName")
+                        .get("name")
                         .and_then(|v| v.as_str())
                         .unwrap_or("?");
                     let comp = result
@@ -271,11 +273,17 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                         "{obj_name}.{comp}: {} field(s)",
                         fields.len()
                     ));
-                    for f in fields {
+                    for f in fields.iter().take(MAX_FIELD_LINES) {
                         let name = f.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                         let ftype = f.get("type").and_then(|v| v.as_str()).unwrap_or("?");
                         let val = f.get("value").map(|v| v.to_string()).unwrap_or_default();
                         eprintln!("  {name} ({ftype}): {val}");
+                    }
+                    if fields.len() > MAX_FIELD_LINES {
+                        eprintln!(
+                            "  ... {} more field(s) omitted; use --json or --property for a narrower read",
+                            fields.len() - MAX_FIELD_LINES
+                        );
                     }
                 }
             }

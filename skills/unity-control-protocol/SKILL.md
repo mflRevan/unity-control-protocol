@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.2.0'
+  version: '0.2.1'
 ---
 
 # Unity Control Protocol (UCP)
@@ -38,10 +38,15 @@ Always verify the bridge before issuing commands.
 ucp doctor                  # Health check
 ucp connect                 # Verify live connection
 ucp install                 # Install bridge into current Unity project (one-time)
+ucp install --dev           # Mount the repo-local bridge package as a local-only embedded package
 ucp uninstall               # Remove bridge
 ```
 
 If `ucp connect` fails, either Unity is not open or the bridge is not installed. Run `ucp install` from the project root and reopen Unity.
+
+`ucp install --dev` leaves the target project's manifest alone. It mounts `Packages/com.ucp.bridge` locally so the dev bridge does not become a tracked dependency.
+
+Without `--json`, commands use human mode: concise terminal-oriented summaries meant for people and agent review loops. Broad read commands intentionally truncate in human mode so scenes, settings, and log searches do not flood the terminal.
 
 ## Global flags
 
@@ -49,7 +54,7 @@ If `ucp connect` fails, either Unity is not open or the bridge is not installed.
 | ------------------ | ------------------------------------------------- |
 | `--json`           | Machine-readable JSON output                      |
 | `--project <path>` | Target a specific Unity project (defaults to cwd) |
-| `--timeout <ms>`   | Timeout in milliseconds (default 30000)           |
+| `--timeout <s>`    | Timeout in seconds (default 30)                   |
 | `--verbose`        | Extra diagnostic output                           |
 
 ## Scene management
@@ -65,13 +70,13 @@ ucp scene load Assets/Scenes/Level1.unity   # Load a scene
 Run a snapshot before any GameObject command to discover instance IDs.
 
 ```bash
-ucp snapshot                        # Full hierarchy with IDs, positions, components
+ucp snapshot                        # Root objects only, with lean metadata
 ucp snapshot --filter "Player"      # Filter by name
 ucp snapshot --depth 2              # Limit depth
 ucp snapshot --json                 # JSON for parsing
 ```
 
-Use the `[ID]` numbers from the output in subsequent `object` and `prefab` commands.
+Use the `[ID]` numbers from the output in subsequent `object` and `prefab` commands. Treat instance IDs as short-lived editor handles and refresh them with `ucp snapshot` after compilation, domain reloads, package refreshes, scene loads, or test runs.
 
 ## Editor control
 
@@ -127,6 +132,8 @@ ucp object remove-component --id -15774 --component BoxCollider
 ```
 
 Newly created objects get negative instance IDs. All modifications register with Unity's Undo system.
+
+`ucp object get-fields` in human mode intentionally prints only a bounded field list. Use `ucp object get-property` or `--json` when you need deeper inspection.
 
 ## Assets
 
@@ -218,18 +225,26 @@ ucp screenshot                                 # Capture game view
 ucp screenshot --view scene                    # Capture scene view
 ucp screenshot --output capture.png            # Save to file
 
-ucp logs                                        # Recent console logs
-ucp logs --level error                         # Filter by level
-ucp logs --count 50                            # Last N entries
+ucp logs --follow                              # Stream all new logs
+ucp logs --follow --level error               # Stream only new errors
+ucp logs --count 10                           # Read the latest buffered logs
+ucp logs --pattern "NullReference|Exception" --count 100
+ucp logs --pattern "failed" --before-id 200 --after-id 100
+ucp logs --id 42                              # Inspect one buffered log entry in full
 ```
+
+Bulk history reads are intentionally capped to `10` returned entries in human mode. Use the returned IDs with `ucp logs --id <logId>` or narrow the search space further.
 
 ## Testing
 
 ```bash
 ucp run-tests --mode edit                      # Edit mode tests
 ucp run-tests --mode play                      # Play mode tests
-ucp run-tests --mode edit --filter "MyTest"    # Filter by name
+ucp run-tests --mode edit --filter "MyTest"    # Filter using a Unity Test Runner name or fully qualified name
+ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTail_TruncatesBulkResultsToTenEntries"
 ```
+
+`--filter` uses Unity Test Runner semantics rather than a UCP-defined regex engine. Prefer fully qualified test names when you need precise selection.
 
 ## Editor scripting
 

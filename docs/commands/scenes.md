@@ -30,10 +30,10 @@ ucp scene load Assets/Scenes/Level1.unity
 
 ### `ucp snapshot`
 
-Capture a complete hierarchy snapshot of the active scene. Returns all GameObjects with their instance IDs, names, positions, components, and parent-child relationships.
+Capture a lean hierarchy snapshot of the active scene. By default this returns only root objects with lightweight metadata such as instance ID, name, active state, tags, layers, child counts, and component type names. Use `--depth` to expand into children. Use object-specific commands for full component/property inspection.
 
 ```bash
-# Full snapshot
+# Root objects only (default depth 0)
 ucp snapshot
 
 # Filter by name
@@ -46,20 +46,17 @@ ucp snapshot --depth 2
 ucp snapshot --json
 ```
 
-| Flag                 | Description             |
-| -------------------- | ----------------------- |
-| `--filter <pattern>` | Filter objects by name  |
-| `--depth <n>`        | Maximum hierarchy depth |
-| `--json`             | Output as JSON          |
+| Flag                 | Description                            |
+| -------------------- | -------------------------------------- |
+| `--filter <pattern>` | Filter objects by name                 |
+| `--depth <n>`        | Maximum hierarchy depth (default: `0`) |
+| `--json`             | Output as JSON                         |
 
 **Example output:**
 
 ```
 [OK] Active scene: SampleScene (3 root objects)
-  Main Camera [46894] @ (0.0, 1.0, -10.0)
-    Components: Transform, Camera, AudioListener
-  Directional Light [46896] @ (0.0, 3.0, 0.0)
-    Components: Transform, Light
-  Player [46900] @ (0.0, 0.0, 0.0)
-    Components: Transform, Rigidbody, PlayerController
+  Main Camera [46894] children=0 tag=Untagged layer=Default components=Transform, Camera, AudioListener
+  Directional Light [46896] children=0 tag=Untagged layer=Default components=Transform, Light
+  Player [46900] children=4 tag=Player layer=Default components=Transform, Rigidbody, PlayerController
 ```

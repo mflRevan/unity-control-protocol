@@ -5,6 +5,9 @@ use clap::Subcommand;
 
 use super::Context;
 
+const MAX_COLLECTION_ITEMS: usize = 20;
+const MAX_STRING_LEN: usize = 120;
+
 #[derive(Subcommand)]
 pub enum SettingsAction {
     /// Get player settings
@@ -239,15 +242,46 @@ pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
 fn print_kv_object(val: &serde_json::Value) {
     if let Some(obj) = val.as_object() {
         for (k, v) in obj {
-            let display = match v {
-                serde_json::Value::String(s) => s.to_string(),
-                serde_json::Value::Array(arr) => {
-                    let parts: Vec<String> = arr.iter().map(|x| x.to_string()).collect();
-                    format!("[{}]", parts.join(", "))
-                }
-                other => other.to_string(),
-            };
+            let display = summarize_value(v);
             eprintln!("  {k}: {display}");
         }
+    }
+}
+
+fn summarize_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => truncate_string(s),
+        serde_json::Value::Array(arr) => {
+            let mut parts: Vec<String> = arr
+                .iter()
+                .take(MAX_COLLECTION_ITEMS)
+                .map(summarize_value)
+                .collect();
+            if arr.len() > MAX_COLLECTION_ITEMS {
+                parts.push(format!("... {} more", arr.len() - MAX_COLLECTION_ITEMS));
+            }
+            format!("[{}]", parts.join(", "))
+        }
+        serde_json::Value::Object(obj) => {
+            let mut parts: Vec<String> = obj
+                .iter()
+                .take(MAX_COLLECTION_ITEMS)
+                .map(|(key, entry)| format!("{key}: {}", summarize_value(entry)))
+                .collect();
+            if obj.len() > MAX_COLLECTION_ITEMS {
+                parts.push(format!("... {} more", obj.len() - MAX_COLLECTION_ITEMS));
+            }
+            format!("{{{}}}", parts.join(", "))
+        }
+        other => other.to_string(),
+    }
+}
+
+fn truncate_string(value: &str) -> String {
+    if value.chars().count() <= MAX_STRING_LEN {
+        value.to_string()
+    } else {
+        let truncated: String = value.chars().take(MAX_STRING_LEN).collect();
+        format!("{truncated}...")
     }
 }

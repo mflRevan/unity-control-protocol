@@ -18,7 +18,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.2.0
+  Version: 0.2.1
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 
@@ -32,10 +32,10 @@ ucp settings set-player --key productName --value '"MyGame"'
 ucp settings set-player --key bundleVersion --value '"1.0.0"'
 ```
 
-| Flag            | Description                         |
-| --------------- | ----------------------------------- |
-| `--key <name>`  | Setting key to modify               |
-| `--value <json>`| New value serialized as JSON        |
+| Flag             | Description                  |
+| ---------------- | ---------------------------- |
+| `--key <name>`   | Setting key to modify        |
+| `--value <json>` | New value serialized as JSON |
 
 ### `ucp settings quality`
 

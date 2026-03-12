@@ -2,8 +2,11 @@ use crate::client::BridgeClient;
 use crate::discovery;
 use crate::output;
 use clap::Subcommand;
+use std::path::Path;
 
 use super::Context;
+
+const MAX_ASSET_FIELDS: usize = 40;
 
 #[derive(Subcommand)]
 pub enum AssetAction {
@@ -127,7 +130,16 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     for r in results {
                         let path = r.get("path").and_then(|v| v.as_str()).unwrap_or("?");
                         let atype = r.get("type").and_then(|v| v.as_str()).unwrap_or("?");
-                        eprintln!("  [{atype}] {path}");
+                        let name = r.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                        let path_name = Path::new(path)
+                            .file_stem()
+                            .and_then(|v| v.to_str())
+                            .unwrap_or("");
+                        if name != "?" && !name.is_empty() && name != path_name {
+                            eprintln!("  [{atype}] {path} :: {name}");
+                        } else {
+                            eprintln!("  [{atype}] {path}");
+                        }
                     }
                 }
             }
@@ -155,11 +167,17 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     .unwrap_or("?");
                 output::print_success(&format!("{name} ({atype})"));
                 if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
-                    for f in fields {
+                    for f in fields.iter().take(MAX_ASSET_FIELDS) {
                         let fname = f.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                         let ftype = f.get("type").and_then(|v| v.as_str()).unwrap_or("?");
                         let val = f.get("value").map(|v| v.to_string()).unwrap_or_default();
                         eprintln!("  {fname} ({ftype}): {val}");
+                    }
+                    if fields.len() > MAX_ASSET_FIELDS {
+                        eprintln!(
+                            "  ... {} more field(s) omitted; use --json or --field for a narrower read",
+                            fields.len() - MAX_ASSET_FIELDS
+                        );
                     }
                 }
             }

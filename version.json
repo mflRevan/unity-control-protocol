@@ -1,0 +1,12 @@
+{
+  "version": "0.2.1",
+  "protocolVersion": "0.2.1",
+  "repository": {
+    "owner": "mflRevan",
+    "name": "unity-control-protocol",
+    "url": "https://github.com/mflRevan/unity-control-protocol",
+    "gitUrl": "https://github.com/mflRevan/unity-control-protocol.git"
+  },
+  "npmPackage": "@mflrevan/ucp",
+  "bridgePackage": "com.ucp.bridge"
+}

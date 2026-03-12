@@ -5,6 +5,8 @@ use clap::Subcommand;
 
 use super::Context;
 
+const MAX_PROPERTIES: usize = 40;
+
 #[derive(Subcommand)]
 pub enum MaterialAction {
     /// List all properties on a material
@@ -150,11 +152,17 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
                         "{mat_name} ({shader}): {} properties",
                         props.len()
                     ));
-                    for p in props {
+                    for p in props.iter().take(MAX_PROPERTIES) {
                         let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                         let ptype = p.get("type").and_then(|v| v.as_str()).unwrap_or("?");
                         let val = p.get("value").map(|v| v.to_string()).unwrap_or_default();
                         eprintln!("  {name} ({ptype}): {val}");
+                    }
+                    if props.len() > MAX_PROPERTIES {
+                        eprintln!(
+                            "  ... {} more propertie(s) omitted; use --json or get-property for a narrower read",
+                            props.len() - MAX_PROPERTIES
+                        );
                     }
                 }
             }

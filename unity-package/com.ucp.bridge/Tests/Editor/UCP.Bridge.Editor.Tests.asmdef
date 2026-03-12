@@ -1,0 +1,12 @@
+{
+  "name": "UCP.Bridge.Editor.Tests",
+  "references": [
+    "UCP.Bridge.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

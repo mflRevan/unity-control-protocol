@@ -1,6 +1,8 @@
 # Commands Overview
 
-UCP provides a comprehensive set of commands organized by domain. All commands support `--json` for machine-readable JSON output and `--project` to target a specific Unity project directory.
+UCP provides a comprehensive set of commands organized by domain. All commands support `--json` for machine-readable output and `--project` to target a specific Unity project directory.
+
+Without `--json`, commands use human mode: terminal-friendly summaries optimized for interactive use. Human mode intentionally truncates broad reads so scenes, settings, and logs stay inspectable without overwhelming the terminal or an agent context window.
 
 ## Global Flags
 
@@ -8,7 +10,7 @@ UCP provides a comprehensive set of commands organized by domain. All commands s
 | ------------------ | ----------------------------------------------------- |
 | `--json`           | Output results as JSON                                |
 | `--project <path>` | Path to Unity project (defaults to current directory) |
-| `--timeout <ms>`   | Request timeout in milliseconds (default: 30000)      |
+| `--timeout <s>`    | Request timeout in seconds (default: 30)              |
 | `--verbose`        | Enable verbose output                                 |
 
 ## Command Groups
@@ -22,6 +24,8 @@ UCP provides a comprehensive set of commands organized by domain. All commands s
 | `ucp doctor`         | Check CLI and bridge health                     |
 | `ucp connect`        | Test connection to the running bridge           |
 
+`ucp install --dev` mounts the repo-local bridge package into `Packages/com.ucp.bridge` as a local-only embedded package for live development and smoke testing.
+
 ### Editor Control
 
 | Command                   | Description                  |
@@ -33,12 +37,12 @@ UCP provides a comprehensive set of commands organized by domain. All commands s
 
 ### Scene Management
 
-| Command                             | Description                      |
-| ----------------------------------- | -------------------------------- |
-| `ucp scene list`                    | List all scenes in the project   |
-| `ucp scene active`                  | Get the active scene             |
-| `ucp scene load <path>`             | Load a scene                     |
-| `ucp snapshot [--filter] [--depth]` | Capture scene hierarchy snapshot |
+| Command                             | Description                                                    |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `ucp scene list`                    | List all scenes in the project                                 |
+| `ucp scene active`                  | Get the active scene                                           |
+| `ucp scene load <path>`             | Load a scene                                                   |
+| `ucp snapshot [--filter] [--depth]` | Capture a shallow hierarchy snapshot (root objects by default) |
 
 ### File Operations
 
@@ -50,10 +54,10 @@ UCP provides a comprehensive set of commands organized by domain. All commands s
 
 ### Media
 
-| Command                              | Description                           |
-| ------------------------------------ | ------------------------------------- |
-| `ucp screenshot [--view] [--output]` | Capture game or scene view screenshot |
-| `ucp logs [--level] [--count]`       | Stream or fetch console logs          |
+| Command                                  | Description                                    |
+| ---------------------------------------- | ---------------------------------------------- |
+| `ucp screenshot [--view] [--output]`     | Capture game or scene view screenshot          |
+| `ucp logs [--follow] [--pattern] [--id]` | Follow live logs or query buffered log history |
 
 ### Testing
 

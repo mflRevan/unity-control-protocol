@@ -27,7 +27,7 @@ ucp connect
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.2.0
+  | Protocol: 0.2.1
 ```
 
 ### `ucp install [path]`

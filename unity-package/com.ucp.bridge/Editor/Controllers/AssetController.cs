@@ -42,7 +42,7 @@ namespace UCP.Bridge
             if (!string.IsNullOrEmpty(nameFilter))
                 filter += nameFilter + " ";
             if (!string.IsNullOrEmpty(typeFilter))
-                filter += $"t:{typeFilter}";
+                filter += $"t:{GetSearchTypeFilter(typeFilter)}";
 
             string[] searchFolders = null;
             if (!string.IsNullOrEmpty(pathFilter))
@@ -55,26 +55,32 @@ namespace UCP.Bridge
                 guids = AssetDatabase.FindAssets(filter.Trim());
 
             var results = new List<object>();
-            int count = Math.Min(guids.Length, maxResults);
-            for (int i = 0; i < count; i++)
+            int totalMatches = 0;
+            for (int i = 0; i < guids.Length; i++)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(guids[i]);
-                var assetType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-
-                results.Add(new Dictionary<string, object>
+                foreach (var asset in GetMatchingAssets(assetPath, typeFilter, nameFilter))
                 {
-                    ["guid"] = guids[i],
-                    ["path"] = assetPath,
-                    ["type"] = assetType?.Name ?? "Unknown",
-                    ["name"] = System.IO.Path.GetFileNameWithoutExtension(assetPath)
-                });
+                    totalMatches++;
+                    if (results.Count >= maxResults)
+                        continue;
+
+                    results.Add(new Dictionary<string, object>
+                    {
+                        ["guid"] = guids[i],
+                        ["path"] = assetPath,
+                        ["type"] = GetDisplayType(assetPath, asset),
+                        ["name"] = asset.name,
+                        ["isSubAsset"] = AssetDatabase.IsSubAsset(asset)
+                    });
+                }
             }
 
             return new Dictionary<string, object>
             {
                 ["results"] = results,
-                ["total"] = guids.Length,
-                ["returned"] = count
+                ["total"] = totalMatches,
+                ["returned"] = results.Count
             };
         }
 
@@ -285,6 +291,80 @@ namespace UCP.Bridge
                     AssetDatabase.CreateFolder(current, parts[i]);
                 current = next;
             }
+        }
+
+        private static IEnumerable<UnityEngine.Object> GetMatchingAssets(string assetPath, string typeFilter, string nameFilter)
+        {
+            UnityEngine.Object[] candidates;
+            if (string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(nameFilter))
+            {
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+                candidates = mainAsset != null ? new[] { mainAsset } : Array.Empty<UnityEngine.Object>();
+            }
+            else
+            {
+                candidates = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate == null) continue;
+                if (!MatchesName(candidate, assetPath, nameFilter)) continue;
+                if (!MatchesType(candidate, assetPath, typeFilter)) continue;
+                yield return candidate;
+            }
+        }
+
+        private static bool MatchesName(UnityEngine.Object asset, string assetPath, string nameFilter)
+        {
+            if (string.IsNullOrEmpty(nameFilter))
+                return true;
+
+            return asset.name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)
+                || System.IO.Path.GetFileNameWithoutExtension(assetPath).Contains(nameFilter, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool MatchesType(UnityEngine.Object asset, string assetPath, string typeFilter)
+        {
+            if (string.IsNullOrEmpty(typeFilter))
+                return true;
+
+            if (typeFilter.Equals("Prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                return asset is GameObject
+                    && !AssetDatabase.IsSubAsset(asset)
+                    && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var normalizedType = NormalizeTypeFilter(typeFilter);
+            var assetType = asset.GetType();
+            return assetType.Name.Equals(normalizedType, StringComparison.OrdinalIgnoreCase)
+                || (assetType.FullName != null && assetType.FullName.Equals(normalizedType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string GetDisplayType(string assetPath, UnityEngine.Object asset)
+        {
+            if (asset is GameObject
+                && !AssetDatabase.IsSubAsset(asset)
+                && assetPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Prefab";
+            }
+
+            return asset.GetType().Name;
+        }
+
+        private static string GetSearchTypeFilter(string typeFilter)
+        {
+            if (typeFilter.Equals("Prefab", StringComparison.OrdinalIgnoreCase))
+                return "GameObject";
+
+            return NormalizeTypeFilter(typeFilter);
+        }
+
+        private static string NormalizeTypeFilter(string typeFilter)
+        {
+            return typeFilter?.Trim() ?? string.Empty;
         }
 
         // ---- Serialized property value reading/writing ----

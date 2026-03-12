@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.1] - 2026-03-12
+
+### Added
+
+- Buffered log history reads with regex search, id-based inspection, and explicit history windowing
+- Persistent Unity EditMode smoke tests for buffered log filtering and truncation behavior
+
+### Changed
+
+- `snapshot` now defaults to depth `0` with lean root-object metadata and the docs/skill now describe human-mode output guardrails explicitly
+- `ucp install --dev` now supports repeat local package refreshes without requiring a changed manifest reference
+- The docs website is now built for root hosting instead of `/unity-control-protocol/`, and Pages deploys when `docs/` or `skills/` content changes
+
+### Fixed
+
+- Fixed Windows local package `file:` references so dev bridge installs resolve cleanly in Unity
+- Fixed Unity bridge reload nudging on Windows by falling back to `AppActivate` when native foreground APIs are insufficient
+- Fixed `ucp object get-fields` human-mode headers to use the returned object name
+- Fixed EditMode test duration reporting so completed runs no longer show negative elapsed time
+
 ## [0.2.0] - 2026-03-12
 
 ### Added

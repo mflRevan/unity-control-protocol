@@ -37,6 +37,18 @@ pub enum Command {
     Install {
         /// Path to Unity project (defaults to current directory)
         path: Option<String>,
+        /// Mount the bridge from the local repository package path as a local-only embedded package
+        #[arg(long)]
+        dev: bool,
+        /// Mount the bridge from a local package path as a local-only embedded package
+        #[arg(long, value_name = "PATH")]
+        bridge_path: Option<String>,
+        /// Install the bridge from an explicit manifest reference
+        #[arg(long, value_name = "REF")]
+        bridge_ref: Option<String>,
+        /// Skip waiting for Unity to import and restart the bridge
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Uninstall the UCP bridge package
     Uninstall,
@@ -66,9 +78,9 @@ pub enum Command {
         /// Filter objects by name pattern
         #[arg(long)]
         filter: Option<String>,
-        /// Max hierarchy depth
-        #[arg(long)]
-        depth: Option<u32>,
+        /// Max hierarchy depth (default: 0, root objects only)
+        #[arg(long, default_value_t = 0)]
+        depth: u32,
     },
     /// Capture a screenshot
     Screenshot {
@@ -90,9 +102,24 @@ pub enum Command {
         /// Filter by level: info, warn, error
         #[arg(long)]
         level: Option<String>,
-        /// Get last N logs then exit
+        /// Read up to N buffered logs when searching or tailing, or stop after N live logs when following
         #[arg(long)]
         count: Option<u32>,
+        /// Search buffered logs by regex pattern
+        #[arg(long)]
+        pattern: Option<String>,
+        /// Read one buffered log entry by id
+        #[arg(long)]
+        id: Option<u64>,
+        /// Restrict buffered reads to log ids lower than this value
+        #[arg(long, value_name = "ID")]
+        before_id: Option<u64>,
+        /// Restrict buffered reads to log ids higher than this value
+        #[arg(long, value_name = "ID")]
+        after_id: Option<u64>,
+        /// Follow live log notifications instead of reading buffered history
+        #[arg(long)]
+        follow: bool,
     },
     /// Run tests
     RunTests {
@@ -188,7 +215,21 @@ pub enum ExecAction {
 
 pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
     match cmd {
-        Command::Install { path } => install::run(path.or(ctx.project.clone()), &ctx).await,
+        Command::Install {
+            path,
+            dev,
+            bridge_path,
+            bridge_ref,
+            no_wait,
+        } => {
+            let options = install::InstallOptions {
+                dev,
+                bridge_path,
+                bridge_ref,
+                no_wait,
+            };
+            install::run(path.or(ctx.project.clone()), options, &ctx).await
+        }
         Command::Uninstall => install::uninstall(&ctx).await,
         Command::Doctor => doctor::run(&ctx).await,
         Command::Connect => connect::run(&ctx).await,
@@ -204,7 +245,15 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             height,
             output,
         } => screenshot::run(&view, width, height, output, &ctx).await,
-        Command::Logs { level, count } => logs::run(level, count, &ctx).await,
+        Command::Logs {
+            level,
+            count,
+            pattern,
+            id,
+            before_id,
+            after_id,
+            follow,
+        } => logs::run(level, count, pattern, id, before_id, after_id, follow, &ctx).await,
         Command::RunTests { mode, filter } => tests::run(&mode, filter, &ctx).await,
         Command::ReadFile { path } => files::read(&path, &ctx).await,
         Command::WriteFile { path, content, compile } => files::write(&path, content, compile, &ctx).await,

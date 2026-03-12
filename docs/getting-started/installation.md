@@ -36,6 +36,8 @@ ucp install
 
 This adds the UCP bridge package to your project's `Packages/manifest.json`. The bridge runs as an Editor-only package — it does not affect your builds.
 
+For local bridge development against this repository, use `ucp install --dev` instead. That mounts the repo-local bridge into `Packages/com.ucp.bridge` without changing `Packages/manifest.json`.
+
 ### Manual Installation
 
 Add the following to your `Packages/manifest.json`:
@@ -43,7 +45,7 @@ Add the following to your `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.1"
   }
 }
 ```

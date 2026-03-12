@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -18,18 +19,19 @@ namespace UCP.Bridge
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
             var filter = p != null && p.TryGetValue("filter", out var f) ? f?.ToString() : null;
-            var maxDepth = 10;
+            var maxDepth = 0;
             if (p != null && p.TryGetValue("depth", out var d))
                 maxDepth = System.Convert.ToInt32(d);
 
             var scene = SceneManager.GetActiveScene();
             var roots = scene.GetRootGameObjects();
             var objects = new List<object>();
+            int totalObjects = 0;
             int totalComponents = 0;
 
             foreach (var root in roots)
             {
-                SerializeGameObject(root, objects, ref totalComponents, filter, 0, maxDepth);
+                SerializeGameObject(root, objects, ref totalObjects, ref totalComponents, filter, 0, maxDepth);
             }
 
             return new Dictionary<string, object>
@@ -41,76 +43,78 @@ namespace UCP.Bridge
                 ["objects"] = objects,
                 ["stats"] = new Dictionary<string, object>
                 {
-                    ["objectCount"] = objects.Count,
+                    ["objectCount"] = totalObjects,
                     ["componentCount"] = totalComponents,
                     ["rootCount"] = roots.Length
                 }
             };
         }
 
-        private static void SerializeGameObject(
-            GameObject go, List<object> list, ref int componentCount,
+        private static bool SerializeGameObject(
+            GameObject go, List<object> list, ref int objectCount, ref int componentCount,
             string filter, int depth, int maxDepth)
         {
-            if (filter != null && !go.name.Contains(filter, System.StringComparison.OrdinalIgnoreCase))
-            {
-                // Still recurse children in case they match
-                if (depth < maxDepth)
-                {
-                    for (int i = 0; i < go.transform.childCount; i++)
-                        SerializeGameObject(go.transform.GetChild(i).gameObject, list, ref componentCount, filter, depth + 1, maxDepth);
-                }
-                return;
-            }
+            bool matchesFilter = string.IsNullOrEmpty(filter)
+                || go.name.Contains(filter, System.StringComparison.OrdinalIgnoreCase);
 
-            var components = go.GetComponents<Component>();
-            var compList = new List<object>();
-            foreach (var c in components)
-            {
-                if (c == null) continue;
-                componentCount++;
-                var compDict = new Dictionary<string, object>
-                {
-                    ["type"] = c.GetType().Name
-                };
-                if (c is Behaviour b)
-                    compDict["enabled"] = b.enabled;
-                compList.Add(compDict);
-            }
-
-            var t = go.transform;
             var children = new List<object>();
-
             if (depth < maxDepth)
             {
-                for (int i = 0; i < t.childCount; i++)
-                    SerializeGameObject(t.GetChild(i).gameObject, children, ref componentCount, null, depth + 1, maxDepth);
+                for (int i = 0; i < go.transform.childCount; i++)
+                {
+                    SerializeGameObject(
+                        go.transform.GetChild(i).gameObject,
+                        children,
+                        ref objectCount,
+                        ref componentCount,
+                        filter,
+                        depth + 1,
+                        maxDepth);
+                }
             }
 
-            list.Add(new Dictionary<string, object>
+            if (!matchesFilter && children.Count == 0)
+            {
+                return false;
+            }
+
+            objectCount++;
+            var compList = GetComponentTypes(go, ref componentCount);
+
+            var entry = new Dictionary<string, object>
             {
                 ["instanceId"] = go.GetInstanceID(),
                 ["name"] = go.name,
                 ["active"] = go.activeSelf,
                 ["tag"] = go.tag,
                 ["layer"] = go.layer,
-                ["position"] = new List<object> { (double)t.position.x, (double)t.position.y, (double)t.position.z },
-                ["rotation"] = new List<object> { (double)t.rotation.x, (double)t.rotation.y, (double)t.rotation.z, (double)t.rotation.w },
-                ["scale"] = new List<object> { (double)t.localScale.x, (double)t.localScale.y, (double)t.localScale.z },
+                ["layerName"] = LayerMask.LayerToName(go.layer),
+                ["depth"] = depth,
+                ["childCount"] = go.transform.childCount,
                 ["components"] = compList,
-                ["children"] = children
-            });
+            };
+
+            if (children.Count > 0)
+                entry["children"] = children;
+
+            list.Add(entry);
+            return true;
         }
 
         private static object HandleListObjects(string paramsJson)
         {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            var maxDepth = 0;
+            if (p != null && p.TryGetValue("depth", out var d))
+                maxDepth = Convert.ToInt32(d);
+
             var scene = SceneManager.GetActiveScene();
             var roots = scene.GetRootGameObjects();
             var objects = new List<object>();
 
             foreach (var root in roots)
             {
-                ListObjectsRecursive(root, objects, 0, 1);
+                ListObjectsRecursive(root, objects, 0, maxDepth);
             }
 
             return new Dictionary<string, object> { ["objects"] = objects };
@@ -123,7 +127,11 @@ namespace UCP.Bridge
                 ["instanceId"] = go.GetInstanceID(),
                 ["name"] = go.name,
                 ["active"] = go.activeSelf,
+                ["tag"] = go.tag,
+                ["layer"] = go.layer,
+                ["layerName"] = LayerMask.LayerToName(go.layer),
                 ["childCount"] = go.transform.childCount,
+                ["components"] = GetComponentTypes(go),
                 ["depth"] = depth
             });
 
@@ -196,6 +204,24 @@ namespace UCP.Bridge
         {
             var obj = UnityEditor.EditorUtility.InstanceIDToObject(id);
             return obj as GameObject;
+        }
+
+        private static List<object> GetComponentTypes(GameObject go)
+        {
+            int ignored = 0;
+            return GetComponentTypes(go, ref ignored);
+        }
+
+        private static List<object> GetComponentTypes(GameObject go, ref int componentCount)
+        {
+            var componentTypes = new List<object>();
+            foreach (var component in go.GetComponents<Component>())
+            {
+                if (component == null) continue;
+                componentCount++;
+                componentTypes.Add(component.GetType().Name);
+            }
+            return componentTypes;
         }
     }
 }

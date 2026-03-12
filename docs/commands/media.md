@@ -1,6 +1,6 @@
 # Screenshots & Logs
 
-Capture visual output and stream console logs from Unity.
+Capture visual output and inspect Unity console logs.
 
 ## Commands
 
@@ -31,23 +31,42 @@ ucp screenshot
 
 ### `ucp logs`
 
-Stream Unity console logs in real time, or fetch recent logs.
+Use the logs command in two modes:
+
+- live follow mode for incoming logs
+- buffered history mode for tail/search/get operations against logs captured since the bridge started
 
 ```bash
-# Stream all logs
-ucp logs
+# Stream all new logs
+ucp logs --follow
 
-# Filter by level
-ucp logs --level error
+# Stream only new errors
+ucp logs --follow --level error
 
-# Get last 20 logs and exit
-ucp logs --count 20
+# Read the latest buffered logs
+ucp logs --count 10
+
+# Regex search across buffered logs
+ucp logs --pattern "NullReference|Exception" --count 100
+
+# Narrow a search window using ids
+ucp logs --pattern "failed" --before-id 200 --after-id 100
+
+# Inspect one buffered log entry in full
+ucp logs --id 42
 
 # JSON output
-ucp logs --level warn --json
+ucp logs --pattern "warning|error" --json
 ```
 
-| Flag                          | Description               |
-| ----------------------------- | ------------------------- |
-| `--level <info\|warn\|error>` | Filter by log level       |
-| `--count <n>`                 | Get last N logs then exit |
+| Flag                          | Description                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| `--follow`                    | Follow live incoming logs instead of querying buffered history                             |
+| `--level <info\|warn\|error>` | Filter by log severity threshold                                                           |
+| `--count <n>`                 | History window size for tail/search, or number of live logs before stopping in follow mode |
+| `--pattern <regex>`           | Regex search against buffered message and stack trace text                                 |
+| `--id <logId>`                | Read a single buffered log entry in full                                                   |
+| `--before-id <logId>`         | Restrict buffered reads to ids lower than this value                                       |
+| `--after-id <logId>`          | Restrict buffered reads to ids higher than this value                                      |
+
+Bulk history reads are intentionally capped to `10` returned entries even if more logs match. Use the returned ids with `ucp logs --id <logId>` or narrow the search space further.

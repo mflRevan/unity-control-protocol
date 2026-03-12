@@ -25,7 +25,7 @@ Open the project in Unity Editor. The bridge starts automatically.
 # Verify connection
 ucp connect
 
-# Capture scene hierarchy
+# Capture root hierarchy overview
 ucp snapshot
 
 # Enter play mode
@@ -40,8 +40,11 @@ ucp read-file Assets/Scripts/Player.cs
 # Write a file
 ucp write-file Assets/Scripts/Config.cs --content "public class Config {}"
 
-# Stream console logs
-ucp logs --level error
+# Read recent logs
+ucp logs --count 10
+
+# Or follow new error logs live
+ucp logs --follow --level error
 
 # Run tests
 ucp run-tests --mode edit

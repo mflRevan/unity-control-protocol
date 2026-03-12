@@ -39,6 +39,9 @@ namespace UCP.Bridge
             if (s_api == null)
                 s_api = ScriptableObject.CreateInstance<TestRunnerApi>();
 
+            if (s_collector != null)
+                s_api.UnregisterCallbacks(s_collector);
+
             s_collector = new TestResultCollector();
             s_api.RegisterCallbacks(s_collector);
 
@@ -68,18 +71,24 @@ namespace UCP.Bridge
         {
             private readonly List<object> _results = new();
             private int _passed, _failed, _skipped;
-            private float _startTime;
+            private double _startTime;
 
             public TestResultCollector()
             {
-                _startTime = Time.realtimeSinceStartup;
+                _startTime = EditorApplication.timeSinceStartup;
             }
 
             public void RunStarted(ITestAdaptor testsToRun) { }
 
             public void RunFinished(ITestResultAdaptor result)
             {
-                var duration = Time.realtimeSinceStartup - _startTime;
+                _results.Clear();
+                _passed = 0;
+                _failed = 0;
+                _skipped = 0;
+                CollectLeafResults(result);
+
+                var duration = EditorApplication.timeSinceStartup - _startTime;
 
                 var summary = new Dictionary<string, object>
                 {
@@ -102,9 +111,19 @@ namespace UCP.Bridge
 
             public void TestStarted(ITestAdaptor test) { }
 
-            public void TestFinished(ITestResultAdaptor result)
+            public void TestFinished(ITestResultAdaptor result) { }
+
+            private void CollectLeafResults(ITestResultAdaptor result)
             {
-                if (result.HasChildren) return; // Skip suite-level results
+                if (result == null)
+                    return;
+
+                if (result.HasChildren)
+                {
+                    foreach (var child in result.Children)
+                        CollectLeafResults(child);
+                    return;
+                }
 
                 string status;
                 switch (result.TestStatus)
@@ -128,7 +147,7 @@ namespace UCP.Bridge
 
                 var entry = new Dictionary<string, object>
                 {
-                    ["name"] = result.FullName,
+                    ["name"] = ResolveTestName(result),
                     ["status"] = status,
                     ["duration"] = result.Duration
                 };
@@ -139,6 +158,22 @@ namespace UCP.Bridge
                     entry["stackTrace"] = result.StackTrace;
 
                 _results.Add(entry);
+            }
+
+            private static string ResolveTestName(ITestResultAdaptor result)
+            {
+                if (!string.IsNullOrEmpty(result.FullName))
+                    return result.FullName;
+
+                if (result.Test != null)
+                {
+                    if (!string.IsNullOrEmpty(result.Test.FullName))
+                        return result.Test.FullName;
+                    if (!string.IsNullOrEmpty(result.Test.Name))
+                        return result.Test.Name;
+                }
+
+                return result.Name;
             }
         }
     }

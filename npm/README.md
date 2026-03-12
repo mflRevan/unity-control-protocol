@@ -1,6 +1,6 @@
 # @mflrevan/ucp
 
-Version `0.2.0` of the Unity Control Protocol CLI.
+Version `0.2.1` of the Unity Control Protocol CLI.
 
 This package installs the `ucp` command and downloads the matching published binary for your platform during `postinstall`.
 
@@ -47,7 +47,7 @@ Or add this to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.1"
   }
 }
 ```

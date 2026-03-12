@@ -1,6 +1,6 @@
 # Objects & Components
 
-Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an `--id` flag with the instance ID of the target GameObject (use `ucp snapshot` to discover IDs).
+Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an `--id` flag with the instance ID of the target GameObject (use `ucp snapshot` to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
 
 ## Commands
 
@@ -140,3 +140,5 @@ ucp object remove-component --id -15774 --component BoxCollider
 - Instance IDs for newly created objects are negative numbers. UCP handles these correctly.
 - All modifications are registered with Unity's Undo system.
 - Use `ucp snapshot` to discover instance IDs for existing scene objects.
+- Treat instance IDs as short-lived editor handles. Re-run `ucp snapshot` after compilation, domain reloads, package refreshes, scene loads, or test runs before issuing object-level commands.
+- `ucp object get-fields` in human mode intentionally prints only a bounded field list. Use `ucp object get-property` or `--json` when you need deeper inspection.

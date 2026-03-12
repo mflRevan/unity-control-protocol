@@ -15,17 +15,20 @@ ucp run-tests
 # Run in play mode
 ucp run-tests --mode play
 
-# Filter by test name
+# Filter using a Unity Test Runner test name or fully qualified name
 ucp run-tests --filter "PlayerMovement"
+ucp run-tests --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTail_TruncatesBulkResultsToTenEntries"
 
 # JSON output for CI integration
 ucp run-tests --json
 ```
 
-| Flag                  | Description                  |
-| --------------------- | ---------------------------- |
-| `--mode <edit\|play>` | Test mode (default: edit)    |
-| `--filter <pattern>`  | Filter tests by name pattern |
+| Flag                  | Description                                       |
+| --------------------- | ------------------------------------------------- |
+| `--mode <edit\|play>` | Test mode (default: edit)                         |
+| `--filter <pattern>`  | Filter string passed through to Unity Test Runner |
+
+`--filter` uses Unity Test Runner semantics rather than a UCP-defined regex engine. Prefer fully qualified test names when you need precise selection.
 
 ## CI/CD Integration
 
