@@ -2,21 +2,17 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FadeIn, GlowCard } from '@/components/animations';
-import { Prism } from '@/components/prism';
 import { TextType } from '@/components/text-type';
 
 export function CTA() {
   return (
-    <section className="py-24 relative overflow-hidden">
-      {/* Prism background behind the whole CTA section */}
-      <div className="absolute inset-0 -z-10">
-        <Prism />
-      </div>
-
-      <div className="mx-auto max-w-3xl px-6">
+    <section className="px-6 py-20 md:py-24">
+      <div className="relative z-10 mx-auto max-w-3xl">
         <FadeIn>
-          <GlowCard className="rounded-2xl">
-            <div className="relative text-center px-8 py-16 md:px-16 overflow-hidden">
+          <GlowCard className="rounded-[28px] border-border/50 bg-card/88 shadow-[0_30px_80px_rgba(0,0,0,0.26)] backdrop-blur-md">
+            <div className="relative overflow-hidden px-8 py-16 text-center md:px-16">
+              <div className="absolute inset-x-10 top-0 h-px bg-linear-to-r from-transparent via-primary/45 to-transparent" />
+              <div className="absolute inset-x-0 top-0 h-28 bg-linear-to-b from-primary/8 to-transparent" />
               <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
                 Ready to automate your <br />
                 <span className="bg-linear-to-r from-primary to-purple-400 bg-clip-text text-transparent">
