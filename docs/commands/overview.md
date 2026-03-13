@@ -24,9 +24,9 @@ Without `--json`, commands use human mode: terminal-friendly summaries optimized
 | `ucp doctor`         | Check CLI and bridge health                     |
 | `ucp connect`        | Test connection to the running bridge           |
 
-`ucp install` prefers a local-only embedded package mount when a local bridge payload is available. Use `ucp install --manifest` only when you explicitly want the bridge recorded as a tracked dependency.
+`ucp install` is manifest-first by default and writes a tracked dependency in `Packages/manifest.json`.
 
-`ucp install --dev` mounts the repo-local bridge package into `Packages/com.ucp.bridge` as a local-only embedded package for live development and smoke testing.
+`ucp install --dev`, `ucp install --embedded`, and `ucp install --bridge-path <path>` mount local embedded bridge packages for live development and smoke testing.
 
 ### Editor Control
 

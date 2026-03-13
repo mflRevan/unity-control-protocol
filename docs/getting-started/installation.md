@@ -34,13 +34,13 @@ cd /path/to/MyUnityProject
 ucp install
 ```
 
-By default, `ucp install` prefers a local-only embedded bridge mount when the CLI can find a matching bridge payload locally. That keeps the bridge out of tracked project dependencies while still making it available to the local Unity Editor.
+By default, `ucp install` writes a tracked manifest dependency to `Packages/manifest.json`, pinned to the CLI version.
 
-The published npm package and bundled GitHub release archives include that bridge payload. Use those distributions if you want local-first bridge installs without touching `Packages/manifest.json`.
+Default install does **not** add a local `file:` dependency.
 
 For local bridge development against this repository, use `ucp install --dev` instead. That mounts the repo-local bridge into `Packages/com.ucp.bridge` without changing `Packages/manifest.json`.
 
-If you explicitly want the bridge recorded as a tracked project dependency, use `ucp install --manifest` or edit `Packages/manifest.json` manually.
+Use `ucp install --embedded` or `ucp install --bridge-path <path>` for other explicit local embedded workflows.
 
 ### Manual Installation
 
@@ -49,7 +49,7 @@ Add the following to your `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.3"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.0"
   }
 }
 ```

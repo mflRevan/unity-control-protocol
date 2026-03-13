@@ -10,7 +10,15 @@ pub enum SceneAction {
     /// List all scenes in build settings
     List,
     /// Load a scene by path
-    Load { path: String },
+    Load {
+        path: String,
+        /// Do not auto-save dirty scenes before loading
+        #[arg(long)]
+        no_save: bool,
+        /// Keep dirty untitled scenes instead of discarding them when auto-save runs
+        #[arg(long)]
+        keep_untitled: bool,
+    },
     /// Get active scene info
     Active,
 }
@@ -23,9 +31,20 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
 
     let result = match action {
         SceneAction::List => client.call("scene/list", serde_json::json!({})).await?,
-        SceneAction::Load { ref path } => {
+        SceneAction::Load {
+            ref path,
+            no_save,
+            keep_untitled,
+        } => {
             client
-                .call("scene/load", serde_json::json!({ "path": path }))
+                .call(
+                    "scene/load",
+                    serde_json::json!({
+                        "path": path,
+                        "saveDirtyScenes": !no_save,
+                        "discardUntitled": !keep_untitled,
+                    }),
+                )
                 .await?
         }
         SceneAction::Active => client.call("scene/active", serde_json::json!({})).await?,
@@ -56,7 +75,7 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
-            SceneAction::Load { path } => {
+            SceneAction::Load { path, .. } => {
                 output::print_success(&format!("Loaded scene: {path}"));
             }
             SceneAction::Active => {

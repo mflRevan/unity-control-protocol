@@ -27,7 +27,7 @@ ucp connect
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.2.3
+  | Protocol: 0.3.0
 ```
 
 ### `ucp install [path]`
@@ -41,13 +41,14 @@ ucp install
 # Install in a specific project
 ucp install /path/to/MyUnityProject
 
-# Force a tracked manifest dependency instead of a local-only mount
-ucp install --manifest
+# Explicit local embedded install modes
+ucp install --dev
+ucp install --embedded
 ```
 
-By default, `ucp install` prefers a local embedded bridge mount when the CLI has a local bridge payload available. This keeps the bridge local to the developer machine and out of tracked project dependencies.
+By default, `ucp install` writes a tracked git dependency into `Packages/manifest.json`, pinned to the CLI version.
 
-The published npm package and bundled GitHub release archives provide that bridge payload by default.
+Default install does not add a local `file:` dependency. Use `--dev`, `--embedded`, or `--bridge-path` for explicit local embedded workflows.
 
 ### `ucp uninstall`
 

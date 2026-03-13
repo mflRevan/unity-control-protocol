@@ -40,6 +40,8 @@ namespace UCP.Bridge
                 throw new System.ArgumentException("Missing 'path' parameter");
 
             var path = pathObj.ToString();
+            var saveDirtyScenes = GetBoolParam(p, "saveDirtyScenes", true);
+            var discardUntitled = GetBoolParam(p, "discardUntitled", true);
 
             if (EditorApplication.isPlaying)
             {
@@ -47,10 +49,49 @@ namespace UCP.Bridge
             }
             else
             {
-                EditorSceneManager.OpenScene(path);
+                SaveDirtyScenesIfRequested(saveDirtyScenes, discardUntitled);
+                EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
             }
 
             return new { status = "ok", loaded = path };
+        }
+
+        private static bool GetBoolParam(Dictionary<string, object> parameters, string key, bool defaultValue)
+        {
+            if (parameters != null && parameters.TryGetValue(key, out var valueObj) && valueObj is bool value)
+                return value;
+
+            return defaultValue;
+        }
+
+        private static void SaveDirtyScenesIfRequested(bool saveDirtyScenes, bool discardUntitled)
+        {
+            if (!saveDirtyScenes)
+                return;
+
+            var requiresUntitledDiscard = false;
+
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var scene = SceneManager.GetSceneAt(index);
+                if (!scene.isLoaded || !scene.isDirty)
+                    continue;
+
+                if (string.IsNullOrEmpty(scene.path))
+                {
+                    if (!discardUntitled)
+                        throw new System.InvalidOperationException("Dirty untitled scene cannot be auto-saved. Retry with discardUntitled=true.");
+
+                    requiresUntitledDiscard = true;
+                    continue;
+                }
+
+                if (!EditorSceneManager.SaveScene(scene))
+                    throw new System.InvalidOperationException($"Failed to auto-save dirty scene: {scene.path}");
+            }
+
+            if (requiresUntitledDiscard)
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
 
         private static object HandleActive(string paramsJson)

@@ -22,6 +22,9 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Dev artifacts
+unity-project-dev
+
 # Test artifacts
 *.png
 test_*.py

@@ -18,7 +18,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.2.3
+  Version: 0.3.0
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 

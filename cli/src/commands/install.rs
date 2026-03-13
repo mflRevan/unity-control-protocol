@@ -27,6 +27,7 @@ pub struct InstallOptions {
     pub bridge_path: Option<String>,
     pub bridge_ref: Option<String>,
     pub no_wait: bool,
+    pub confirm: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,7 +80,14 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
     }
 
     if let Some(source_path) = desired_embedded_package_source(&options)? {
-        return run_embedded_local_install(&project_path, source_path, options.no_wait, ctx).await;
+        return run_embedded_local_install(
+            &project_path,
+            source_path,
+            options.no_wait,
+            options.confirm,
+            ctx,
+        )
+        .await;
     }
 
     remove_owned_embedded_mount_if_present(&project_path)?;
@@ -145,7 +153,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         return Ok(());
     }
 
-    if !ctx.json && !refresh_existing_custom_source {
+    if options.confirm && !ctx.json && !refresh_existing_custom_source {
         eprintln!();
         let bolt = if output::supports_unicode() { "⚡" } else { "*" };
         let bar = if output::supports_unicode() { "│" } else { "|" };
@@ -328,7 +336,7 @@ fn desired_embedded_package_source(options: &InstallOptions) -> anyhow::Result<O
         return Ok(Some(require_local_bridge_package()?));
     }
 
-    autodetect_local_bridge_package()
+    Ok(None)
 }
 
 fn desired_package_reference(options: &InstallOptions) -> anyhow::Result<String> {
@@ -476,13 +484,14 @@ async fn run_embedded_local_install(
     project_path: &Path,
     source_path: PathBuf,
     no_wait: bool,
+    confirm: bool,
     ctx: &Context,
 ) -> anyhow::Result<()> {
     let mount_path = embedded_package_mount(project_path);
     let manifest_path = project_path.join("Packages").join("manifest.json");
     let previous_lock = discovery::read_lock_file(project_path).ok();
 
-    if !ctx.json {
+    if confirm && !ctx.json {
         eprintln!();
         let bolt = if output::supports_unicode() { "⚡" } else { "*" };
         let bar = if output::supports_unicode() { "│" } else { "|" };

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] - 2026-03-13
+
+### Added
+
+- Dirty-scene automation controls in bridge scene/play handlers so unattended CLI workflows can avoid save-confirmation modal interruptions.
+
+### Changed
+
+- Scene load and play entry now auto-handle dirty scenes by default for non-interactive automation flows.
+
+### Fixed
+
+- Fixed edit-mode test execution when called during Play Mode by deferring run start until Play Mode exits.
+- Fixed workflow interruptions caused by Unity save-scene prompts during scene transitions and play mode entry.
+
 ## [0.2.3] - 2026-03-12
 
 ### Fixed

@@ -13,8 +13,8 @@ UCP exposes the Unity Editor as a local automation target through:
 
 The CLI talks to the bridge over localhost WebSocket using JSON-RPC 2.0.
 
-Current release target: `0.2.3`
-Current protocol version: `0.2.3`
+Current release target: `0.3.0`
+Current protocol version: `0.3.0`
 Canonical metadata source: `version.json`
 
 ## Repository layout
@@ -110,10 +110,10 @@ unity-control-protocol/
 
 ### Bridge/package alignment
 
-- `ucp install` should treat the bridge as a local CLI-managed payload first, not as a tracked project dependency.
+- `ucp install` is manifest-first by default and writes a tracked git dependency pinned to the CLI version.
 - Published npm packages bundle `bridge/com.ucp.bridge` alongside the CLI wrapper package.
 - GitHub releases publish bundled archives containing the CLI binary plus `bridge/com.ucp.bridge`.
-- The tracked manifest dependency path remains available via `ucp install --manifest`.
+- Local embedded bridge mounts are explicit via `ucp install --dev`, `ucp install --embedded`, or `ucp install --bridge-path`.
 - The default bridge dependency is:
   `https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v<cli-version>`
 - The npm wrapper downloads release binaries from the matching GitHub release tag.
@@ -130,23 +130,36 @@ cargo run --manifest-path cli/Cargo.toml -- --project <UnityProject> install --d
 
 Behavior:
 
-- `ucp install` prefers a local embedded bridge payload when one is available next to the CLI, in the repository checkout, or in the local cache.
+- `ucp install` writes the tracked git dependency to `Packages/manifest.json` by default.
+- Default install does not inject a local `file:` dependency.
 - `install --dev` mounts `unity-package/com.ucp.bridge/` into the target Unity project as `Packages/com.ucp.bridge`.
 - This keeps `Packages/manifest.json` unchanged, so the dev bridge stays local to that workspace instead of becoming a tracked project dependency.
 - When the target project is a git repo, the installer adds `Packages/com.ucp.bridge/` and `.ucp/` to `.git/info/exclude` instead of editing tracked ignore files.
 - On Windows, the CLI actively brings the Unity editor forward. It first tries the native window APIs and then falls back to `WScript.Shell.AppActivate`, which proved necessary in live testing.
 - If the same local embedded mount is already present, rerunning `install --dev` reuses it and still performs the bridge wait/reconnect flow.
 - If the bridge is already running, install/update also requests `refresh-assets` through the existing bridge before waiting.
+- Install flows are non-interactive by default (no terminal confirmation prompt). Use `ucp install --confirm` only when a human approval gate is desired.
 
 ### Local bridge source overrides
 
 Advanced options:
 
 - `ucp install --embedded` to force a local embedded install even if a tracked dependency path is available
-- `ucp install --manifest` to force a tracked manifest dependency pinned to the CLI release tag
+- `ucp install --manifest` to force tracked manifest mode explicitly (same behavior as default)
 - `ucp install --bridge-path <path>` to point at another local Unity package directory
 - `ucp install --bridge-ref <manifest-ref>` to inject an explicit dependency reference
+- `ucp install --confirm` to require interactive confirmation before install actions
 - `ucp install --no-wait` to skip the wait/reconnect step
+
+Tracked manifest dependency for Unity to pull directly from GitHub remains supported and explicit:
+
+```json
+{
+  "dependencies": {
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.3"
+  }
+}
+```
 
 ## Validation workflow
 
@@ -182,6 +195,37 @@ Optional focused reads:
 - `asset read <path>`
 - `material get-properties --path <material>`
 - `object get-fields --id <id> --component <type>`
+
+### Extensive QA report (2026-03-13)
+
+Playground target: `unity-project-dev/ucp-dev`
+
+- Full command-palette harness (`scripts/qa-playground.ps1`) achieved green status at `50/50` passing with process exit code `0`.
+- Embedded EditMode verification in the same run: `run-tests --mode edit` passed `11/11`.
+- Harness reliability fixes landed for bridge reconnect windows around `play/pause/stop`, screenshot assertions, prefab unpack flags, and cleanup idempotency.
+- Unity-side guard added so edit-mode test execution is deferred until Play Mode exits, preventing Test Runner invalid-operation failures.
+
+### Unattended workflow manual (no-click automation)
+
+Use this sequence for full-cycle agent runs without manual dialogs:
+
+1. `ucp install --dev --no-wait`
+2. `ucp connect`
+3. Perform object/asset/material/settings/build operations
+4. `ucp compile --no-wait`
+5. `ucp play` / `ucp pause` / `ucp stop`
+6. `ucp run-tests --mode edit`
+
+Dialog-avoidance defaults now active:
+
+- `ucp install` skips interactive confirmation unless `--confirm` is provided.
+- `ucp scene load` auto-saves dirty named scenes and discards dirty untitled scenes unless overridden.
+- `ucp play` applies the same dirty-scene handling before entering play mode.
+
+Safety override switches for both `scene load` and `play`:
+
+- `--no-save` to disable auto-save behavior
+- `--keep-untitled` to prevent auto-discard of untitled dirty scenes
 
 ### Persistent tests
 

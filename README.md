@@ -2,7 +2,7 @@
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.2.3`
+Release: `0.3.0`
 
 ## What ships
 
@@ -61,14 +61,18 @@ From your Unity project:
 ucp install
 ```
 
-By default, `ucp install` now prefers a local-only embedded bridge mount when the CLI can find a matching local bridge payload. Published npm packages ship that payload, and bundled GitHub release archives do too. Use `ucp install --manifest` if you explicitly want a tracked project dependency.
+By default, `ucp install` writes a tracked manifest dependency (`com.ucp.bridge` git URL pinned to the CLI version) into `Packages/manifest.json`.
+
+Default install does **not** add a local `file:` dependency. Local embedded installs are explicit via `ucp install --dev`, `ucp install --embedded`, or `ucp install --bridge-path <path>`.
+
+`ucp install` is non-interactive by default (no `y/n` prompt). Use `ucp install --confirm` if you want an explicit confirmation step.
 
 Or add this dependency manually:
 
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.3"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.0"
   }
 }
 ```
@@ -83,6 +87,16 @@ ucp snapshot
 ucp play
 ucp screenshot --output capture.png
 ucp stop
+```
+
+If you need fully unattended runs, keep scene/save prompts disabled by using defaults or explicit flags:
+
+```bash
+ucp scene load Assets/Scenes/SampleScene.unity
+ucp play
+# opt out of auto-save/discard behavior:
+ucp scene load Assets/Scenes/SampleScene.unity --no-save --keep-untitled
+ucp play --no-save --keep-untitled
 ```
 
 ## Command surface
@@ -108,7 +122,7 @@ ucp stop
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.2.3`
+### Advanced editor control in `0.3.0`
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -126,7 +140,7 @@ Example:
 
 ```bash
 ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.2.3"}}
+# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.0"}}
 ```
 
 ## Skills and docs
@@ -143,8 +157,8 @@ ucp connect --json
 - The same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
 - The npm package downloads the tagged release asset during `postinstall` and bundles the matching Unity bridge payload into the published package
 - GitHub releases publish bundled CLI archives that include the Unity bridge payload next to the binary
-- `ucp install` prefers a local-only embedded bridge mount when a local bridge payload is available
-- `ucp install --manifest` pins the Unity bridge package to the matching CLI tag as a tracked dependency
+- `ucp install` (default) pins the Unity bridge package to the matching CLI tag as a tracked dependency
+- `ucp install --dev` / `--embedded` / `--bridge-path` are explicit local embedded install modes
 
 ## Development
 
@@ -170,7 +184,7 @@ Or use the helper script:
 ./scripts/smoke-dev.ps1 -Project D:/Unity/Projects/MyGame
 ```
 
-`ucp install` prefers a local-only embedded bridge mount when the CLI can resolve a bridge payload locally. `install --dev` forces the repo-local package source, `install --bridge-path` forces another local package source, and `install --manifest` opts back into a tracked manifest dependency.
+`ucp install` is manifest-first by default. Use `install --dev` to mount the repo-local package source, `install --embedded` to force embedded local mount mode, and `install --bridge-path` to mount another local package source.
 
 The clean long-term packaging model for UCP is: ship or cache a versioned bridge payload with the CLI, then mount it locally into `Packages/com.ucp.bridge` on demand. That keeps the product centered on the CLI instead of treating the bridge as a repo dependency users have to commit.
 

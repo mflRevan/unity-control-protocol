@@ -55,6 +55,9 @@ pub enum Command {
         /// Skip waiting for Unity to import and restart the bridge
         #[arg(long)]
         no_wait: bool,
+        /// Ask for interactive confirmation before installation
+        #[arg(long)]
+        confirm: bool,
     },
     /// Uninstall the UCP bridge package
     Uninstall,
@@ -63,7 +66,14 @@ pub enum Command {
     /// Test connection to the bridge
     Connect,
     /// Enter play mode
-    Play,
+    Play {
+        /// Do not auto-save dirty scenes before entering play mode
+        #[arg(long)]
+        no_save: bool,
+        /// Keep dirty untitled scenes instead of discarding them when auto-save runs
+        #[arg(long)]
+        keep_untitled: bool,
+    },
     /// Exit play mode
     Stop,
     /// Toggle pause
@@ -229,6 +239,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             bridge_path,
             bridge_ref,
             no_wait,
+            confirm,
         } => {
             let options = install::InstallOptions {
                 embedded,
@@ -237,15 +248,25 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
                 bridge_path,
                 bridge_ref,
                 no_wait,
+                confirm,
             };
             install::run(path.or(ctx.project.clone()), options, &ctx).await
         }
         Command::Uninstall => install::uninstall(&ctx).await,
         Command::Doctor => doctor::run(&ctx).await,
         Command::Connect => connect::run(&ctx).await,
-        Command::Play => play::run("play", &ctx).await,
-        Command::Stop => play::run("stop", &ctx).await,
-        Command::Pause => play::run("pause", &ctx).await,
+        Command::Play {
+            no_save,
+            keep_untitled,
+        } => {
+            let payload = serde_json::json!({
+                "saveDirtyScenes": !no_save,
+                "discardUntitled": !keep_untitled,
+            });
+            play::run("play", payload, &ctx).await
+        }
+        Command::Stop => play::run("stop", serde_json::json!({}), &ctx).await,
+        Command::Pause => play::run("pause", serde_json::json!({}), &ctx).await,
         Command::Compile { no_wait } => compile::run(no_wait, &ctx).await,
         Command::Scene { action } => scene::run(action, &ctx).await,
         Command::Snapshot { filter, depth } => snapshot::run(filter, depth, &ctx).await,

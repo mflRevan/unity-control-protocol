@@ -55,7 +55,21 @@ namespace UCP.Bridge
                 executionSettings.filters[0].testNames = new[] { filter };
             }
 
-            s_api.Execute(executionSettings);
+            var shouldWaitForPlayModeExit =
+                testMode == TestMode.EditMode &&
+                (EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode);
+
+            if (shouldWaitForPlayModeExit)
+            {
+                if (EditorApplication.isPlaying)
+                    EditorApplication.isPlaying = false;
+
+                ExecuteWhenReady(executionSettings, testMode, EditorApplication.timeSinceStartup + 30.0);
+            }
+            else
+            {
+                s_api.Execute(executionSettings);
+            }
 
             // Tests run asynchronously in Unity. We return immediately with a pending status.
             // Results will be sent as notifications when complete.
@@ -63,7 +77,53 @@ namespace UCP.Bridge
             {
                 ["status"] = "started",
                 ["mode"] = mode,
-                ["message"] = "Tests started. Results will arrive as notifications."
+                ["message"] = shouldWaitForPlayModeExit
+                    ? "Edit-mode tests queued. Waiting for Unity to exit play mode before starting."
+                    : "Tests started. Results will arrive as notifications."
+            };
+        }
+
+        private static void ExecuteWhenReady(ExecutionSettings settings, TestMode mode, double deadline)
+        {
+            EditorApplication.delayCall += () =>
+            {
+                var stillInPlayMode = EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode;
+                if (mode == TestMode.EditMode && stillInPlayMode)
+                {
+                    if (EditorApplication.timeSinceStartup > deadline)
+                    {
+                        BridgeServer.BroadcastNotification("tests/result", new Dictionary<string, object>
+                        {
+                            ["summary"] = new Dictionary<string, object>
+                            {
+                                ["total"] = 1,
+                                ["passed"] = 0,
+                                ["failed"] = 1,
+                                ["skipped"] = 0,
+                                ["duration"] = 0.0
+                            },
+                            ["tests"] = new List<object>
+                            {
+                                new Dictionary<string, object>
+                                {
+                                    ["name"] = "UCP.Bridge.Tests.PlayModeExitGuard",
+                                    ["status"] = "failed",
+                                    ["duration"] = 0.0,
+                                    ["message"] = "Timed out waiting for Unity to exit play mode before running edit-mode tests."
+                                }
+                            }
+                        });
+
+                        if (s_api != null && s_collector != null)
+                            s_api.UnregisterCallbacks(s_collector);
+                        return;
+                    }
+
+                    ExecuteWhenReady(settings, mode, deadline);
+                    return;
+                }
+
+                s_api.Execute(settings);
             };
         }
 
