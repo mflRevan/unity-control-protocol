@@ -131,7 +131,7 @@ function CodeFence({ className, children }: { className?: string; children?: Rea
   );
 }
 
-const components: Components = {
+export const markdownComponents: Components = {
   code({ children, ...props }) {
     // Inline code only — block code is handled by `pre`
     return <code {...props}>{children}</code>;
@@ -183,7 +183,7 @@ export function MarkdownDoc({ docKey }: MarkdownDocProps) {
 
   return (
     <article className="prose-custom">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
         {content}
       </ReactMarkdown>
     </article>

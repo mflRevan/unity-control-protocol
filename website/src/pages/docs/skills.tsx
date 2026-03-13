@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { docsContent, skillFileRaw } from '@/lib/docs-content';
 import { Download } from 'lucide-react';
+import { markdownComponents } from '@/components/markdown-page';
 
 function stripFrontmatter(md: string): string {
   const match = md.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/);
@@ -25,7 +26,7 @@ export function SkillsPage() {
 
   return (
     <article className="prose-custom">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
         {introContent}
       </ReactMarkdown>
 
@@ -45,8 +46,8 @@ export function SkillsPage() {
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#1a1a1e] border-b border-white/5">
           <span className="text-xs text-white/40 font-mono">SKILL.md</span>
         </div>
-        <div className="p-6 max-h-[600px] overflow-y-auto prose-custom [&_h1]:text-2xl [&_h1]:text-white [&_h2]:text-lg [&_h2]:text-white/90 [&_h2]:border-white/10 [&_h3]:text-base [&_h3]:text-white/80 [&_p]:text-white/60 [&_li]:text-white/60 [&_strong]:text-white/80 [&_code]:bg-white/10 [&_code]:text-white/70 [&_a]:text-purple-400 [&_th]:text-white/80 [&_td]:text-white/60 [&_td]:border-white/10 [&_thead]:border-white/10">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+        <div className="terminal-prose p-6 max-h-[600px] overflow-y-auto">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={markdownComponents}>
             {skillBody}
           </ReactMarkdown>
         </div>

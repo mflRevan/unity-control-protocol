@@ -113,10 +113,23 @@
   @apply text-lg text-muted-foreground mb-8;
 }
 .prose-custom ul {
-  @apply list-disc list-inside space-y-2 mb-6 text-muted-foreground;
+  @apply mb-6 list-disc space-y-2 pl-6 text-muted-foreground;
+}
+.prose-custom ol {
+  @apply mb-6 list-decimal space-y-2 pl-6 text-muted-foreground;
 }
 .prose-custom li {
   @apply leading-relaxed;
+}
+.prose-custom li::marker {
+  @apply text-primary/70;
+}
+.prose-custom li > ul,
+.prose-custom li > ol {
+  @apply mb-2 mt-2;
+}
+.prose-custom li p {
+  @apply mb-0 text-inherit;
 }
 .prose-custom strong {
   @apply text-foreground font-semibold;
@@ -144,4 +157,56 @@
 }
 .prose-custom td {
   @apply py-2.5 px-4 text-muted-foreground border-b border-border/30;
+}
+.terminal-prose {
+  @apply max-w-none;
+}
+.terminal-prose h1 {
+  @apply mb-3 text-2xl font-bold tracking-tight text-white;
+}
+.terminal-prose h2 {
+  @apply mb-4 mt-10 border-t border-white/10 pt-6 text-lg font-semibold tracking-tight text-white/92 first:mt-0 first:border-0 first:pt-0;
+}
+.terminal-prose h3 {
+  @apply mb-3 mt-7 text-base font-semibold text-white/85;
+}
+.terminal-prose p,
+.terminal-prose li,
+.terminal-prose td {
+  @apply text-white/68;
+}
+.terminal-prose ul {
+  @apply mb-6 list-disc space-y-2 pl-6 text-white/68;
+}
+.terminal-prose ol {
+  @apply mb-6 list-decimal space-y-2 pl-6 text-white/68;
+}
+.terminal-prose li::marker {
+  @apply text-violet-300/90;
+}
+.terminal-prose li > ul,
+.terminal-prose li > ol {
+  @apply mb-2 mt-2;
+}
+.terminal-prose li p {
+  @apply mb-0 text-inherit;
+}
+.terminal-prose strong,
+.terminal-prose th {
+  @apply text-white/90;
+}
+.terminal-prose code {
+  @apply rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm text-white/90;
+}
+.terminal-prose pre code {
+  @apply bg-transparent p-0 text-inherit;
+}
+.terminal-prose a {
+  @apply text-violet-300 hover:underline;
+}
+.terminal-prose thead {
+  @apply border-b border-white/10;
+}
+.terminal-prose td {
+  @apply border-b border-white/10;
 }
