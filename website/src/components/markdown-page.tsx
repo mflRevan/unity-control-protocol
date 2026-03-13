@@ -12,7 +12,9 @@ function colorize(code: string, lang: string): ReactNode[] {
   if (lang === 'json') {
     return code.split('\n').flatMap((line, i, arr) => {
       const nodes: ReactNode[] = [];
-      const tokens = line.match(/("(?:\\.|[^"])*"\s*:|"(?:\\.|[^"])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:]+|\s+|[^\s]+)/g) ?? [line];
+      const tokens = line.match(
+        /("(?:\\.|[^"])*"\s*:|"(?:\\.|[^"])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:]+|\s+|[^\s]+)/g,
+      ) ?? [line];
 
       for (let t = 0; t < tokens.length; t++) {
         const tok = tokens[t];
@@ -67,7 +69,11 @@ function colorize(code: string, lang: string): ReactNode[] {
   }
 
   if (lang !== 'bash' && lang !== 'shell' && lang !== 'sh') {
-    return [<span key="plain" className="text-white/88">{code}</span>];
+    return [
+      <span key="plain" className="text-white/88">
+        {code}
+      </span>,
+    ];
   }
 
   return code.split('\n').flatMap((line, i, arr) => {

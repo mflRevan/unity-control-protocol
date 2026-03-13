@@ -9,7 +9,7 @@ UCP exposes the Unity Editor as a local automation target through:
 - a Rust CLI in `cli/`
 - a Unity Editor bridge package in `unity-package/com.ucp.bridge/`
 - an npm wrapper in `npm/`
-- a docs site in `website/` sourced from `docs/`, deployed on Vercel
+- a docs site in `website/` sourced from `docs/`, bundled for deployment, and deployed on Vercel
 
 The CLI talks to the bridge over localhost WebSocket using JSON-RPC 2.0.
 
@@ -45,6 +45,9 @@ unity-control-protocol/
 │       └── Tests/Editor/             package EditMode tests
 ├── npm/                              npm distribution wrapper
 ├── website/                          Vite/React docs site
+│   ├── .generated/                   bundled docs/skills content for deploy builds
+│   ├── scripts/sync-content.mjs      copies repo docs/skills into `.generated/`
+│   └── vercel.json                   SPA rewrites for Vercel hosting
 ├── docs/                             markdown docs rendered by the site
 ├── skills/                           canonical agent skill content
 ├── scripts/
@@ -118,6 +121,15 @@ unity-control-protocol/
   `https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v<cli-version>`
 - The npm wrapper downloads release binaries from the matching GitHub release tag.
 
+### Website deployment
+
+- GitHub Pages is no longer used.
+- The docs site is deployed on Vercel under `unityctl.dev`.
+- Vercel is configured to build from the `website/` directory.
+- Automatic production deployments from `main` are now working through the connected Vercel Git integration.
+- `website/scripts/sync-content.mjs` copies `docs/` and `skills/` into `website/.generated/` so Vercel builds remain self-contained even when only the `website/` app directory is used as the project root.
+- `website/vercel.json` provides SPA rewrites so React Router routes resolve correctly on direct navigation.
+
 ## Local development workflow
 
 ### Local bridge injection
@@ -156,7 +168,7 @@ Tracked manifest dependency for Unity to pull directly from GitHub remains suppo
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.2.3"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.0"
   }
 }
 ```
@@ -268,3 +280,9 @@ If command behavior changes, update all relevant surfaces:
 - website pages that mirror those docs
 - skill content in `skills/unity-control-protocol/`
 - changelog entries when behavior is user-visible
+
+If docs or skills content changes, keep the deploy bundle in sync too:
+
+- `website/.generated/docs/`
+- `website/.generated/skills/`
+- regenerate via `cd website && npm run sync-content`

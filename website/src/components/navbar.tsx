@@ -33,7 +33,9 @@ export function Navbar() {
     <header
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
-        scrolled ? 'bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.55)]' : 'bg-transparent',
+        scrolled
+          ? 'bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.55)]'
+          : 'bg-transparent',
       )}
     >
       <nav className="mx-auto max-w-7xl flex items-center justify-between px-6 py-4">
@@ -43,7 +45,9 @@ export function Navbar() {
             <div className="absolute -left-2 top-1/2 hidden -translate-y-1/2 text-primary/70 md:block">&gt;</div>
           </div>
           <div className="leading-none">
-            <div className="font-semibold text-[0.72rem] uppercase tracking-[0.34em] text-primary/70">Unity Control</div>
+            <div className="font-semibold text-[0.72rem] uppercase tracking-[0.34em] text-primary/70">
+              Unity Control
+            </div>
             <span className="font-bold text-lg tracking-tight">UCP</span>
           </div>
         </Link>
@@ -76,7 +80,11 @@ export function Navbar() {
             {resolved === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <a href="https://github.com/mflRevan/unity-control-protocol" target="_blank" rel="noopener noreferrer">
-            <Button variant="ghost" size="icon" className="rounded-full border border-border/60 bg-background/72 backdrop-blur-xl hover:border-primary/30 hover:bg-primary/8">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full border border-border/60 bg-background/72 backdrop-blur-xl hover:border-primary/30 hover:bg-primary/8"
+            >
               <Github className="h-4 w-4" />
             </Button>
           </a>
