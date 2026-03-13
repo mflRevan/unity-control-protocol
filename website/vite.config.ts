@@ -8,13 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@docs': path.resolve(__dirname, '../docs'),
-      '@skills': path.resolve(__dirname, '../skills'),
-    },
-  },
-  server: {
-    fs: {
-      allow: ['..'],
+      '@docs': path.resolve(__dirname, './.generated/docs'),
+      '@skills': path.resolve(__dirname, './.generated/skills'),
     },
   },
   base: '/',

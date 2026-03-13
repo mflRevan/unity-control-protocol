@@ -9,7 +9,7 @@ UCP exposes the Unity Editor as a local automation target through:
 - a Rust CLI in `cli/`
 - a Unity Editor bridge package in `unity-package/com.ucp.bridge/`
 - an npm wrapper in `npm/`
-- a docs site in `website/` sourced from `docs/`
+- a docs site in `website/` sourced from `docs/`, deployed on Vercel
 
 The CLI talks to the bridge over localhost WebSocket using JSON-RPC 2.0.
 

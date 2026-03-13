@@ -28,3 +28,5 @@ unity-project-dev
 # Test artifacts
 *.png
 test_*.py
+.vercel
+.env*.local

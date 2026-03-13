@@ -5,8 +5,8 @@
 ### Added
 
 - Added unattended workflow controls for dirty-scene handling in `ucp play` and `ucp scene load`:
-	- `--no-save`
-	- `--keep-untitled`
+  - `--no-save`
+  - `--keep-untitled`
 - Added optional installer confirmation gate via `ucp install --confirm` (installer remains non-interactive by default).
 - Added extensive playground QA harness coverage and reporting for full command-surface lifecycle validation.
 
@@ -15,6 +15,7 @@
 - `ucp install` is now **manifest-first by default** when no source flags are provided.
 - Local embedded bridge install modes are now explicit (`--dev`, `--embedded`, `--bridge-path`).
 - Updated docs (`README`, `PROJECT.md`, commands/install docs) to reflect manifest-first defaults and unattended automation guidance.
+- Website deployment now targets Vercel instead of GitHub Pages, with the `website/` app made self-contained for deployment.
 
 ### Fixed
 
@@ -22,6 +23,7 @@
 - Fixed automation interruptions from Unity save-scene dialogs during scene load/play transitions by adding deterministic dirty-scene handling.
 - Fixed install flow friction by removing default `y/n` prompt requirement (now opt-in via `--confirm`).
 - Fixed QA harness false negatives around bridge reconnect windows (`play/pause/stop`), prefab unpack CLI args, screenshot assertions, and cleanup idempotency.
+- Fixed website deployment structure by tracking the full `website/` app in the main repository and adding SPA rewrites for runtime routing.
 
 ### Validation
 

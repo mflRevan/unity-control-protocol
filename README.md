@@ -9,7 +9,7 @@ Release: `0.3.0`
 - `cli/`: Rust CLI exposed as `ucp`
 - `unity-package/com.ucp.bridge/`: Unity Editor bridge package (`com.ucp.bridge`)
 - `npm/`: npm wrapper that downloads the correct released binary at install time
-- `website/`: Vite/React docs site deployed to GitHub Pages
+- `website/`: Vite/React docs site deployed on Vercel
 - `docs/`: markdown source for the docs site
 - `skills/unity-control-protocol/SKILL.md`: Agent Skills-compatible skill file
 
@@ -151,7 +151,7 @@ ucp connect --json
 
 ## Release flow
 
-- Pushes to `main` touching `website/**`, `docs/**`, or `skills/**` deploy GitHub Pages via `.github/workflows/pages.yml`
+- The docs website is deployed on Vercel from the `website/` app, with build-time content sync from `docs/` and `skills/`
 - Pushing a tag matching `v*` runs `.github/workflows/release.yml`
 - The tag workflow builds binaries for Linux, macOS, and Windows
 - The same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
