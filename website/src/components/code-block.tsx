@@ -36,8 +36,8 @@ export function CodeBlock({ code, title, className }: CodeBlockProps) {
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       )}
-      <pre className="p-4 overflow-x-auto">
-        <code className="text-sm font-mono text-white/80 leading-relaxed whitespace-pre">{code}</code>
+      <pre className="p-4 overflow-x-auto text-white/88">
+        <code className="text-sm font-mono text-white/88 leading-relaxed whitespace-pre">{code}</code>
       </pre>
     </div>
   );

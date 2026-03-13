@@ -9,8 +9,65 @@ import { Copy, Check } from 'lucide-react';
 
 // Simple syntax colorizer for bash/shell code blocks
 function colorize(code: string, lang: string): ReactNode[] {
+  if (lang === 'json') {
+    return code.split('\n').flatMap((line, i, arr) => {
+      const nodes: ReactNode[] = [];
+      const tokens = line.match(/("(?:\\.|[^"])*"\s*:|"(?:\\.|[^"])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null|[{}\[\],:]+|\s+|[^\s]+)/g) ?? [line];
+
+      for (let t = 0; t < tokens.length; t++) {
+        const tok = tokens[t];
+        const key = `${i}-${t}`;
+
+        if (/^\s+$/.test(tok)) {
+          nodes.push(tok);
+        } else if (/^"(?:\\.|[^"])*"\s*:$/.test(tok)) {
+          nodes.push(
+            <span key={key} className="text-sky-300">
+              {tok}
+            </span>,
+          );
+        } else if (/^"(?:\\.|[^"])*"$/.test(tok)) {
+          nodes.push(
+            <span key={key} className="text-emerald-300">
+              {tok}
+            </span>,
+          );
+        } else if (/^-?\d/.test(tok)) {
+          nodes.push(
+            <span key={key} className="text-amber-300">
+              {tok}
+            </span>,
+          );
+        } else if (/^(true|false|null)$/.test(tok)) {
+          nodes.push(
+            <span key={key} className="text-fuchsia-300">
+              {tok}
+            </span>,
+          );
+        } else if (/^[{}\[\],:]+$/.test(tok)) {
+          nodes.push(
+            <span key={key} className="text-white/45">
+              {tok}
+            </span>,
+          );
+        } else {
+          nodes.push(
+            <span key={key} className="text-white/88">
+              {tok}
+            </span>,
+          );
+        }
+      }
+
+      if (i < arr.length - 1) {
+        nodes.push('\n');
+      }
+      return nodes;
+    });
+  }
+
   if (lang !== 'bash' && lang !== 'shell' && lang !== 'sh') {
-    return [code];
+    return [<span key="plain" className="text-white/88">{code}</span>];
   }
 
   return code.split('\n').flatMap((line, i, arr) => {
@@ -125,7 +182,7 @@ function CodeFence({ className, children }: { className?: string; children?: Rea
         </button>
       </div>
       <pre className="p-4 overflow-x-auto">
-        <code className="text-sm font-mono leading-relaxed whitespace-pre">{highlighted}</code>
+        <code className="text-sm font-mono leading-relaxed whitespace-pre text-white/88">{highlighted}</code>
       </pre>
     </div>
   );
