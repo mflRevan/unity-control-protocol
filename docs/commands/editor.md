@@ -65,10 +65,44 @@ UCP resolves the Unity executable in this order:
 1. `--unity <path>`
 2. `UCP_UNITY`
 3. Persistent CLI settings at the platform config path
-4. Standard Unity Hub install locations derived from `ProjectSettings/ProjectVersion.txt`
-5. `Unity.exe` on `PATH`
+4. `--force-unity-version <version>` when supplied
+5. `ProjectSettings/ProjectVersion.txt`
+6. Unity Hub `projects-v1.json` project metadata
+7. Installed editor roots from standard Hub locations plus Unity Hub secondary install paths
+8. `Unity.exe` on `PATH`
 
-If no executable is found, `ucp start`, `ucp connect`, and other bridge-backed commands fail with a resolution error that includes the searched paths.
+If the project's configured Unity version is known but not installed, UCP now fails instead of silently falling back to a different editor. The error includes the installed versions it found and points to `--force-unity-version` as an explicit override.
+
+### Forcing a different Unity version
+
+```bash
+ucp --force-unity-version 6000.3.1f1 start
+ucp --force-unity-version 2023.1.7f1 editor status
+```
+
+This is a dangerous escape hatch. Opening a project in a different Unity version can upgrade project metadata or assets. Make a backup or commit your work before using it.
+
+### Startup dialog policy
+
+Use `--dialog-policy` when Unity shows startup prompts such as Safe Mode or recovery dialogs.
+
+```bash
+ucp --dialog-policy auto start
+ucp --dialog-policy recover start
+ucp --dialog-policy safe-mode start
+ucp --dialog-policy manual start
+```
+
+Policies:
+
+- `auto`: best-effort automatic choice based on detected button labels
+- `manual`: do not auto-click dialogs; wait for the operator
+- `ignore`: prefer buttons like `Ignore` when available
+- `recover`: prefer recovery / continue options when available
+- `safe-mode`: prefer Safe Mode when available
+- `cancel`: prefer cancel / close options when available
+
+Unity does not document a general command-line flag to skip these prompts, so UCP handles them as a best-effort runtime policy during startup.
 
 ## Bridge package drift handling
 

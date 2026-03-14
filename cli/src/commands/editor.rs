@@ -57,6 +57,7 @@ async fn start(ctx: &Context) -> anyhow::Result<()> {
         &project,
         previous_lock.as_ref(),
         ctx.timeout.max(90),
+        ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional
         } else {
@@ -87,6 +88,9 @@ async fn start(ctx: &Context) -> anyhow::Result<()> {
         eprintln!("  PID: {pid}");
     }
     eprintln!("  Log: {}", outcome.log_path);
+    for handled in wait_outcome.handled_dialogs {
+        eprintln!("  Dialog: {handled}");
+    }
     Ok(())
 }
 
@@ -143,7 +147,16 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
     if let Some(version) = status.project_version.as_deref() {
         eprintln!("  Project Unity version: {version}");
     }
+    if let Some(version) = status.requested_version.as_deref() {
+        eprintln!("  Requested Unity version: {version}");
+    }
+    if !status.installed_versions.is_empty() {
+        eprintln!("  Installed Unity versions: {}", status.installed_versions.join(", "));
+    }
     eprintln!("  Log: {}", status.log_path);
+    if let Some(warning) = status.resolution_warning.as_deref() {
+        eprintln!("  Warning: {warning}");
+    }
     if let Some(error) = status.resolution_error.as_deref() {
         eprintln!("  Resolution: {error}");
     }

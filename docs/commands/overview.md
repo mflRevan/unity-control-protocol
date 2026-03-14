@@ -6,26 +6,28 @@ Without `--json`, commands use human mode: terminal-friendly summaries optimized
 
 ## Global Flags
 
-| Flag               | Description                                           |
-| ------------------ | ----------------------------------------------------- |
-| `--json`           | Output results as JSON                                |
-| `--project <path>` | Path to Unity project (defaults to current directory) |
-| `--unity <path>`   | Override the Unity Editor executable UCP should launch |
+| Flag                            | Description                                               |
+| ------------------------------- | --------------------------------------------------------- |
+| `--json`                        | Output results as JSON                                    |
+| `--project <path>`              | Path to Unity project (defaults to current directory)     |
+| `--unity <path>`                | Override the Unity Editor executable UCP should launch    |
+| `--force-unity-version <ver>`   | Force a specific installed Unity editor version           |
 | `--bridge-update-policy <mode>` | Handle outdated bridge refs with `auto`, `warn`, or `off` |
-| `--timeout <s>`    | Request timeout in seconds (default: 30)              |
-| `--verbose`        | Enable verbose output                                 |
+| `--dialog-policy <mode>`        | Handle Unity startup dialogs during launch waits          |
+| `--timeout <s>`                 | Request timeout in seconds (default: 30)                  |
+| `--verbose`                     | Enable verbose output                                     |
 
 ## Command Groups
 
 ### Connection & Setup
 
-| Command              | Description                                                |
-| -------------------- | ---------------------------------------------------------- |
-| `ucp install [path]` | Install the bridge package into a Unity project            |
-| `ucp uninstall`      | Remove the bridge package                                  |
-| `ucp doctor`         | Check CLI, bridge package, editor runtime, and connection  |
-| `ucp connect`        | Ensure Unity is running and test the live bridge           |
-| `ucp bridge status`  | Show bridge dependency source, version, and drift status   |
+| Command              | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `ucp install [path]` | Install the bridge package into a Unity project                      |
+| `ucp uninstall`      | Remove the bridge package                                            |
+| `ucp doctor`         | Check CLI, bridge package, editor runtime, and connection            |
+| `ucp connect`        | Ensure Unity is running and test the live bridge                     |
+| `ucp bridge status`  | Show bridge dependency source, version, and drift status             |
 | `ucp bridge update`  | Re-pin the project to the bridge git dependency for this CLI version |
 
 `ucp install` is manifest-first by default and writes a tracked dependency in `Packages/manifest.json`.
@@ -34,18 +36,20 @@ Without `--json`, commands use human mode: terminal-friendly summaries optimized
 
 `ucp connect` and other bridge-backed commands now auto-start Unity when the target project can be resolved and a Unity executable is available. By default, UCP also auto-updates stale tracked bridge refs before connecting; use `--bridge-update-policy warn` to downgrade that to warnings only.
 
+When a project declares a Unity version that is not installed, UCP reports the installed versions it found and requires an explicit `--force-unity-version <ver>` override before launching a different editor.
+
 ### Editor Lifecycle
 
-| Command               | Description                                      |
-| --------------------- | ------------------------------------------------ |
-| `ucp start`           | Alias for `ucp editor start`                     |
-| `ucp close`           | Alias for `ucp editor close`                     |
-| `ucp editor start`    | Launch Unity for the target project and wait for the bridge |
-| `ucp editor close`    | Gracefully close the editor, with optional force fallback |
-| `ucp editor restart`  | Restart the editor for the target project        |
-| `ucp editor status`   | Show runtime state, resolved Unity path, and log location |
-| `ucp editor logs`     | Read the editor log captured under `.ucp/logs/`  |
-| `ucp editor ps`       | List Unity editor processes discovered by UCP    |
+| Command              | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| `ucp start`          | Alias for `ucp editor start`                                |
+| `ucp close`          | Alias for `ucp editor close`                                |
+| `ucp editor start`   | Launch Unity for the target project and wait for the bridge |
+| `ucp editor close`   | Gracefully close the editor, with optional force fallback   |
+| `ucp editor restart` | Restart the editor for the target project                   |
+| `ucp editor status`  | Show runtime state, resolved Unity path, version diagnostics, and log location |
+| `ucp editor logs`    | Read the editor log captured under `.ucp/logs/`             |
+| `ucp editor ps`      | List Unity editor processes discovered by UCP               |
 
 ### Editor Control
 

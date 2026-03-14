@@ -3,7 +3,7 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const PROTOCOL_VERSION: &str = "0.3.2";
+pub const PROTOCOL_VERSION: &str = "0.3.3";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "lowercase")]
@@ -20,6 +20,33 @@ impl std::fmt::Display for BridgeUpdatePolicy {
             BridgeUpdatePolicy::Auto => "auto",
             BridgeUpdatePolicy::Warn => "warn",
             BridgeUpdatePolicy::Off => "off",
+        };
+
+        write!(f, "{value}")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum StartupDialogPolicy {
+    #[default]
+    Auto,
+    Manual,
+    Ignore,
+    Recover,
+    SafeMode,
+    Cancel,
+}
+
+impl std::fmt::Display for StartupDialogPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            StartupDialogPolicy::Auto => "auto",
+            StartupDialogPolicy::Manual => "manual",
+            StartupDialogPolicy::Ignore => "ignore",
+            StartupDialogPolicy::Recover => "recover",
+            StartupDialogPolicy::SafeMode => "safe-mode",
+            StartupDialogPolicy::Cancel => "cancel",
         };
 
         write!(f, "{value}")

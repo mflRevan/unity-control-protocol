@@ -31,6 +31,14 @@ namespace UCP.Bridge
                 var result = handler(paramsJson);
                 return JsonRpcResponse.Success(id, result);
             }
+            catch (ArgumentException ex)
+            {
+                return JsonRpcResponse.Error(id, ErrorCodes.InvalidParams, ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return JsonRpcResponse.Error(id, ErrorCodes.FileAccessDenied, ex.Message);
+            }
             catch (Exception ex)
             {
                 Debug.LogError($"[UCP] Error handling '{method}': {ex}");

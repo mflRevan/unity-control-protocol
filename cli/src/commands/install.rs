@@ -275,6 +275,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         &project_path,
         previous_lock.as_ref(),
         ctx.timeout.max(90),
+        ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional
         } else {
@@ -600,6 +601,7 @@ async fn run_embedded_local_install(
         project_path,
         previous_lock.as_ref(),
         ctx.timeout.max(90),
+        ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional
         } else {

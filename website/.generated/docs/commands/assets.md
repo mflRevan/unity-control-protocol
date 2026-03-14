@@ -88,9 +88,9 @@ ucp asset write-batch "Assets/Configs/GameConfig.asset" --values '{"maxPlayers":
 ucp asset write-batch "Assets/Configs/GameConfig.asset" --values '{"icon":{"path":"Assets/UI/GameIcon.png"}}'
 ```
 
-| Flag              | Description                          |
-| ----------------- | ------------------------------------ |
-| `--values <json>` | JSON object of field/value pairs     |
+| Flag              | Description                      |
+| ----------------- | -------------------------------- |
+| `--values <json>` | JSON object of field/value pairs |
 
 ### `ucp asset create-so`
 

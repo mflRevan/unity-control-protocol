@@ -301,6 +301,7 @@ namespace UCP.Bridge.Tests
             );
 
             Assert.That(response.error, Is.Not.Null);
+            Assert.That(response.error.code, Is.EqualTo(ErrorCodes.InvalidParams));
         }
 
         [Test]
@@ -348,9 +349,9 @@ namespace UCP.Bridge.Tests
             var readResult = (Dictionary<string, object>)read.result;
             Assert.That(readResult["content"].ToString(), Is.EqualTo("hello patched"));
 
-            LogAssert.Expect(LogType.Error, new Regex("\\[UCP\\] Error handling 'file/read':"));
             var traversal = _router.Dispatch("file/read", 1, "{\"path\":\"../outside.txt\"}");
             Assert.That(traversal.error, Is.Not.Null);
+            Assert.That(traversal.error.code, Is.EqualTo(ErrorCodes.FileAccessDenied));
         }
 
         [Test]

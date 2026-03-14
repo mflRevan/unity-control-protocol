@@ -117,6 +117,21 @@ pub fn request_unity_editor_close(project: &Path) -> Result<bool, UcpError> {
     request_process_window_close(pid)
 }
 
+pub fn handle_unity_startup_dialogs(
+    project: &Path,
+    policy: config::StartupDialogPolicy,
+) -> Result<Vec<String>, UcpError> {
+    if matches!(policy, config::StartupDialogPolicy::Manual) {
+        return Ok(Vec::new());
+    }
+
+    let Some(pid) = unity_editor_pid_for_project(project) else {
+        return Ok(Vec::new());
+    };
+
+    handle_process_startup_dialogs(pid, policy)
+}
+
 pub fn is_process_running(pid: u32) -> bool {
     let system = System::new_all();
     system.process(sysinfo::Pid::from_u32(pid)).is_some()
@@ -131,6 +146,67 @@ pub fn terminate_process(pid: u32) -> Result<bool, UcpError> {
     };
 
     Ok(process.kill())
+}
+
+fn preferred_dialog_button_label(
+    labels: &[String],
+    policy: config::StartupDialogPolicy,
+) -> Option<String> {
+    let preferences: &[&str] = match policy {
+        config::StartupDialogPolicy::Auto => &[
+            "ignore",
+            "continue",
+            "skiprecovery",
+            "skip",
+            "openproject",
+            "openanyway",
+            "ok",
+            "loadrecovery",
+            "recover",
+            "restore",
+            "entersafemode",
+            "safemode",
+        ],
+        config::StartupDialogPolicy::Ignore => &[
+            "ignore",
+            "continue",
+            "skiprecovery",
+            "skip",
+            "openproject",
+            "openanyway",
+            "ok",
+        ],
+        config::StartupDialogPolicy::Recover => {
+            &["loadrecovery", "recover", "restore", "openproject"]
+        }
+        config::StartupDialogPolicy::SafeMode => &["entersafemode", "safemode"],
+        config::StartupDialogPolicy::Cancel => &["cancel", "quit", "close", "no"],
+        config::StartupDialogPolicy::Manual => &[],
+    };
+
+    let normalized: Vec<(String, &String)> = labels
+        .iter()
+        .map(|label| (normalize_dialog_label(label), label))
+        .collect();
+
+    for preferred in preferences {
+        if let Some((_, label)) = normalized
+            .iter()
+            .find(|(candidate, _)| candidate.contains(preferred))
+        {
+            return Some((*label).clone());
+        }
+    }
+
+    None
+}
+
+fn normalize_dialog_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(|ch| ch.to_lowercase())
+        .collect()
 }
 
 fn normalize_path(path: &Path) -> String {
@@ -249,6 +325,158 @@ fn focus_process_window(pid: u32) -> Result<bool, UcpError> {
 }
 
 #[cfg(windows)]
+fn handle_process_startup_dialogs(
+    pid: u32,
+    policy: config::StartupDialogPolicy,
+) -> Result<Vec<String>, UcpError> {
+    use std::ffi::c_void;
+
+    type Bool = i32;
+    type Hwnd = *mut c_void;
+    type Lparam = isize;
+
+    #[derive(Clone)]
+    struct WindowInfo {
+        hwnd: Hwnd,
+        title: String,
+    }
+
+    #[repr(C)]
+    struct EnumWindowsState {
+        target_pid: u32,
+        windows: Vec<WindowInfo>,
+    }
+
+    #[derive(Clone)]
+    struct ButtonInfo {
+        hwnd: Hwnd,
+        label: String,
+    }
+
+    unsafe extern "system" {
+        fn EnumWindows(lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn EnumChildWindows(hwnd: Hwnd, lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
+        fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
+        fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max_count: i32) -> i32;
+        fn GetClassNameW(hwnd: Hwnd, class_name: *mut u16, max_count: i32) -> i32;
+        fn IsWindowVisible(hwnd: Hwnd) -> Bool;
+        fn SendMessageW(hwnd: Hwnd, msg: u32, w_param: usize, l_param: isize) -> isize;
+    }
+
+    extern "system" fn enum_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
+        let state = unsafe { &mut *(l_param as *mut EnumWindowsState) };
+        let mut process_id = 0;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut process_id);
+        }
+
+        const GW_OWNER: u32 = 4;
+        let owner = unsafe { GetWindow(hwnd, GW_OWNER) };
+        if process_id != 0
+            && process_id == state.target_pid
+            && !owner.is_null()
+            && unsafe { IsWindowVisible(hwnd) } != 0
+        {
+            state.windows.push(WindowInfo {
+                hwnd,
+                title: read_window_text(hwnd),
+            });
+        }
+
+        1
+    }
+
+    extern "system" fn enum_child_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
+        let buttons = unsafe { &mut *(l_param as *mut Vec<ButtonInfo>) };
+        let class_name = read_class_name(hwnd).to_ascii_lowercase();
+        let label = read_window_text(hwnd);
+        if class_name.contains("button") && !label.trim().is_empty() {
+            buttons.push(ButtonInfo { hwnd, label });
+        }
+        1
+    }
+
+    fn read_window_text(hwnd: Hwnd) -> String {
+        unsafe {
+            let length = GetWindowTextLengthW(hwnd);
+            if length <= 0 {
+                return String::new();
+            }
+            let mut buffer = vec![0u16; (length as usize) + 1];
+            let written = GetWindowTextW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32);
+            String::from_utf16_lossy(&buffer[..written as usize])
+                .trim()
+                .to_string()
+        }
+    }
+
+    fn read_class_name(hwnd: Hwnd) -> String {
+        unsafe {
+            let mut buffer = vec![0u16; 256];
+            let written = GetClassNameW(hwnd, buffer.as_mut_ptr(), buffer.len() as i32);
+            String::from_utf16_lossy(&buffer[..written as usize])
+        }
+    }
+
+    let mut state = EnumWindowsState {
+        target_pid: pid,
+        windows: Vec::new(),
+    };
+    let l_param = &mut state as *mut EnumWindowsState as isize;
+
+    unsafe {
+        EnumWindows(enum_windows, l_param);
+    }
+
+    let mut handled = Vec::new();
+    for window in state.windows {
+        let mut process_id = 0;
+        unsafe {
+            GetWindowThreadProcessId(window.hwnd, &mut process_id);
+        }
+        if process_id != pid {
+            continue;
+        }
+
+        let mut buttons = Vec::<ButtonInfo>::new();
+        let child_l_param = &mut buttons as *mut Vec<ButtonInfo> as isize;
+        unsafe {
+            EnumChildWindows(window.hwnd, enum_child_windows, child_l_param);
+        }
+
+        let labels = buttons
+            .iter()
+            .map(|button| button.label.clone())
+            .collect::<Vec<_>>();
+        let Some(selected_label) = preferred_dialog_button_label(&labels, policy) else {
+            continue;
+        };
+
+        let Some(button) = buttons.into_iter().find(|button| {
+            normalize_dialog_label(&button.label) == normalize_dialog_label(&selected_label)
+        }) else {
+            continue;
+        };
+
+        const BM_CLICK: u32 = 0x00F5;
+        unsafe {
+            SendMessageW(button.hwnd, BM_CLICK, 0, 0);
+        }
+
+        let title = if window.title.is_empty() {
+            "Unity startup dialog".to_string()
+        } else {
+            window.title
+        };
+        handled.push(format!("{title}: {}", button.label));
+    }
+
+    Ok(handled)
+}
+
+#[cfg(windows)]
 fn request_process_window_close(pid: u32) -> Result<bool, UcpError> {
     use std::ffi::c_void;
 
@@ -302,6 +530,14 @@ fn request_process_window_close(pid: u32) -> Result<bool, UcpError> {
 }
 
 #[cfg(not(windows))]
+fn handle_process_startup_dialogs(
+    _pid: u32,
+    _policy: config::StartupDialogPolicy,
+) -> Result<Vec<String>, UcpError> {
+    Ok(Vec::new())
+}
+
+#[cfg(not(windows))]
 fn focus_process_window(_pid: u32) -> Result<bool, UcpError> {
     Ok(false)
 }
@@ -313,7 +549,8 @@ fn request_process_window_close(_pid: u32) -> Result<bool, UcpError> {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_project_path_from_args;
+    use super::{extract_project_path_from_args, normalize_dialog_label, preferred_dialog_button_label};
+    use crate::config::StartupDialogPolicy;
     use std::path::PathBuf;
 
     #[test]
@@ -340,6 +577,36 @@ mod tests {
         assert_eq!(
             extract_project_path_from_args(&args),
             Some(PathBuf::from("D:/Unity/Projects/HijraVR"))
+        );
+    }
+
+    #[test]
+    fn normalizes_dialog_labels() {
+        assert_eq!(normalize_dialog_label("Enter Safe Mode"), "entersafemode");
+        assert_eq!(normalize_dialog_label("Load Recovery..."), "loadrecovery");
+    }
+
+    #[test]
+    fn chooses_dialog_button_for_ignore_policy() {
+        let labels = vec![
+            "Cancel".to_string(),
+            "Ignore".to_string(),
+            "Enter Safe Mode".to_string(),
+        ];
+
+        assert_eq!(
+            preferred_dialog_button_label(&labels, StartupDialogPolicy::Ignore),
+            Some("Ignore".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_dialog_button_for_recovery_policy() {
+        let labels = vec!["Skip Recovery".to_string(), "Load Recovery".to_string()];
+
+        assert_eq!(
+            preferred_dialog_button_label(&labels, StartupDialogPolicy::Recover),
+            Some("Load Recovery".to_string())
         );
     }
 }

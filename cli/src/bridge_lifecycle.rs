@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::client::BridgeClient;
 use crate::config::LockFile;
+use crate::config::StartupDialogPolicy;
 use crate::discovery;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,18 +24,21 @@ pub enum WaitStatus {
 pub struct BridgeWaitOutcome {
     pub status: WaitStatus,
     pub nudged_editor: bool,
+    pub handled_dialogs: Vec<String>,
 }
 
 pub async fn wait_for_bridge(
     project: &Path,
     previous_lock: Option<&LockFile>,
     timeout_secs: u64,
+    dialog_policy: StartupDialogPolicy,
     mode: WaitMode,
 ) -> anyhow::Result<BridgeWaitOutcome> {
     if !discovery::is_unity_editor_running_for_project(project) {
         return Ok(BridgeWaitOutcome {
             status: WaitStatus::EditorNotRunning,
             nudged_editor: false,
+            handled_dialogs: Vec::new(),
         });
     }
 
@@ -45,6 +49,7 @@ pub async fn wait_for_bridge(
     let mut bridge_went_down = false;
     let mut nudged_editor = discovery::focus_unity_editor(project).unwrap_or(false);
     let mut last_nudge = start;
+    let mut handled_dialogs = Vec::new();
 
     tokio::time::sleep(Duration::from_secs(2)).await;
 
@@ -84,6 +89,7 @@ pub async fn wait_for_bridge(
                             return Ok(BridgeWaitOutcome {
                                 status,
                                 nudged_editor,
+                                handled_dialogs,
                             });
                         }
                     } else {
@@ -96,6 +102,14 @@ pub async fn wait_for_bridge(
             },
             Err(_) => {
                 bridge_went_down = true;
+            }
+        }
+
+        if let Ok(newly_handled) = discovery::handle_unity_startup_dialogs(project, dialog_policy) {
+            for handled in newly_handled {
+                if !handled_dialogs.contains(&handled) {
+                    handled_dialogs.push(handled);
+                }
             }
         }
 

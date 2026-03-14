@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.3.3] - 2026-03-14
+
+### Added
+
+- Added `--force-unity-version <version>` so lifecycle commands can target a specific installed Unity editor version when the project's configured version is unavailable.
+- Added `--dialog-policy <auto|manual|ignore|recover|safe-mode|cancel>` for startup-dialog handling during bridge waits.
+- Added Unity Hub metadata probing for `projects-v1.json` and `secondaryInstallPath.json` so version and install discovery work with non-default Hub install roots.
+
+### Changed
+
+- `ucp editor status` now reports the project Unity version, requested Unity version, installed Unity versions, and any resolution warning.
+- The dev smoke script now validates install, start, doctor, connect, edit-mode test execution, command smoke, and editor close in one pass.
+- Bridge router validation errors now map cleanly to protocol error codes instead of logging internal-error noise for expected bad input.
+
+### Fixed
+
+- Fixed Unity executable auto-detection for editors installed under Unity Hub secondary install roots.
+- Fixed the bridge package import gap by adding missing Unity `.meta` files for `EditorController.cs` and `ObjectReferenceResolver.cs`.
+- Fixed negative object-reference and file path traversal test cases so they return protocol validation errors instead of spurious internal failures.
+
+### Validation
+
+- `cargo check --manifest-path cli/Cargo.toml`
+- `cargo test --manifest-path cli/Cargo.toml`
+- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev run-tests --json`
+- `./scripts/smoke-dev.ps1 -Project unity-project-dev/ucp-dev`
+
 ## [0.3.2] - 2026-03-14
 
 ### Added

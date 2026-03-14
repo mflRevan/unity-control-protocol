@@ -36,11 +36,13 @@ pub struct Context {
     #[allow(dead_code)]
     pub port: Option<u16>,
     pub unity: Option<String>,
+    pub force_unity_version: Option<String>,
     pub json: bool,
     pub timeout: u64,
     #[allow(dead_code)]
     pub verbose: bool,
     pub bridge_update_policy: config::BridgeUpdatePolicy,
+    pub dialog_policy: config::StartupDialogPolicy,
 }
 
 #[derive(Subcommand)]
@@ -276,6 +278,7 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
             &project,
             previous_lock.as_ref(),
             ctx.timeout.max(90),
+            ctx.dialog_policy,
             if previous_lock.is_some() {
                 WaitMode::RestartOptional
             } else {
@@ -316,6 +319,7 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
         &project,
         Some(&lock),
         ctx.timeout.max(90),
+        ctx.dialog_policy,
         WaitMode::RestartOptional,
     )
     .await?;

@@ -29,16 +29,24 @@ if (-not $SkipInstall) {
     Invoke-Ucp --timeout 120 install --dev
 }
 
-Invoke-Ucp doctor
-Invoke-Ucp connect
+try {
+    Invoke-Ucp editor status
+    Invoke-Ucp --timeout 180 start
+    Invoke-Ucp doctor
+    Invoke-Ucp connect
+    Invoke-Ucp --json run-tests
 
-if (-not $SkipSnapshot) {
-    Invoke-Ucp --json snapshot
+    if (-not $SkipSnapshot) {
+        Invoke-Ucp --json snapshot
+    }
+
+    Invoke-Ucp scene active
+    Invoke-Ucp --json asset search -t Material --max 5
+    Invoke-Ucp build active-target
+    Invoke-Ucp settings player
+
+    Write-Host "`nSmoke suite completed for $Project" -ForegroundColor Green
 }
-
-Invoke-Ucp scene active
-Invoke-Ucp --json asset search -t Material --max 5
-Invoke-Ucp build active-target
-Invoke-Ucp settings player
-
-Write-Host "`nSmoke suite completed for $Project" -ForegroundColor Green
+finally {
+    Invoke-Ucp close
+}

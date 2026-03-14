@@ -10,6 +10,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone)]
+struct UnityLaunchTarget {
+    path: PathBuf,
+    requested_version: Option<String>,
+    warning: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorSession {
@@ -49,6 +56,9 @@ pub struct EditorStatus {
     pub resolved_unity_path: Option<String>,
     pub resolution_error: Option<String>,
     pub project_version: Option<String>,
+    pub requested_version: Option<String>,
+    pub installed_versions: Vec<String>,
+    pub resolution_warning: Option<String>,
     pub log_path: String,
     pub session: Option<EditorSession>,
 }
@@ -83,9 +93,16 @@ pub async fn start_editor(
     project: &Path,
     ctx: &commands::Context,
 ) -> anyhow::Result<EditorStartOutcome> {
-    let unity_path = resolve_unity_executable(project, ctx)?;
+    let launch_target = resolve_unity_launch_target(project, ctx)?;
+    let unity_path = launch_target.path.clone();
     let log_path = config::editor_log_path(project);
     ensure_log_dir(project)?;
+
+    if let Some(warning) = launch_target.warning.as_deref() {
+        if !ctx.json {
+            output::print_warn(warning);
+        }
+    }
 
     if !ctx.json {
         output::print_info(&format!(
@@ -229,9 +246,23 @@ pub fn status(project: &Path, ctx: &commands::Context) -> EditorStatus {
             .find(|process| process.pid == pid)
     });
 
-    let (resolved_unity_path, resolution_error) = match resolve_unity_executable(project, ctx) {
-        Ok(path) => (Some(path.display().to_string()), None),
-        Err(error) => (None, Some(format!("{error:#}"))),
+    let roots = unity_install_roots();
+    let installed_versions = installed_unity_versions(&roots);
+
+    let (resolved_unity_path, resolution_error, requested_version, resolution_warning) =
+        match resolve_unity_launch_target(project, ctx) {
+            Ok(target) => (
+                Some(target.path.display().to_string()),
+                None,
+                target.requested_version,
+                target.warning,
+            ),
+            Err(error) => (
+                None,
+                Some(format!("{error:#}")),
+                resolve_requested_unity_version(project, ctx),
+                None,
+            ),
     };
 
     EditorStatus {
@@ -243,29 +274,73 @@ pub fn status(project: &Path, ctx: &commands::Context) -> EditorStatus {
             .map(|path| path.display().to_string()),
         resolved_unity_path,
         resolution_error,
-        project_version: read_project_version(project).ok().flatten(),
+        project_version: resolve_project_unity_version(project),
+        requested_version,
+        installed_versions,
+        resolution_warning,
         log_path: config::editor_log_path(project).display().to_string(),
         session: read_session(project).ok().flatten(),
     }
 }
 
-pub fn resolve_unity_executable(
+fn resolve_unity_launch_target(
     project: &Path,
     ctx: &commands::Context,
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<UnityLaunchTarget> {
+    let project_version = resolve_project_unity_version(project);
+    let requested_version = ctx
+        .force_unity_version
+        .clone()
+        .or(project_version.clone());
+    let warning = forced_version_warning(project_version.as_deref(), ctx.force_unity_version.as_deref());
+    let roots = unity_install_roots();
+    let installed_versions = installed_unity_versions(&roots);
+
     if let Some(path) = ctx.unity.as_ref() {
         let candidate = PathBuf::from(path);
         if candidate.is_file() {
-            return Ok(candidate);
+            return Ok(UnityLaunchTarget {
+                path: candidate,
+                requested_version,
+                warning,
+            });
         }
 
         anyhow::bail!("Configured Unity executable was not found at {}", candidate.display());
     }
 
-    let project_version = read_project_version(project).ok().flatten();
-    let candidates = unity_candidate_paths(project_version.as_deref());
+    if let Some(version) = requested_version.as_deref() {
+        let candidates = unity_candidate_paths(version, &roots);
+        if let Some(path) = candidates.iter().find(|path| path.is_file()) {
+            return Ok(UnityLaunchTarget {
+                path: path.clone(),
+                requested_version,
+                warning,
+            });
+        }
+
+        let installed_display = format_installed_versions(&installed_versions);
+        if ctx.force_unity_version.is_some() {
+            anyhow::bail!(
+                "Forced Unity editor version {version} is not installed. Project expects {}. Installed versions: {}. Forcing a different editor version can upgrade project metadata or assets; create a backup or commit your work first.",
+                project_version.as_deref().unwrap_or("unknown"),
+                installed_display,
+            );
+        }
+
+        anyhow::bail!(
+            "Project expects Unity {version}, but that editor is not installed. Installed versions: {}. Use --force-unity-version <version> to override. Opening a project with a different Unity editor can upgrade project metadata or assets; create a backup or commit your work first.",
+            installed_display,
+        );
+    }
+
+    let candidates = unity_path_fallbacks();
     if let Some(path) = candidates.iter().find(|path| path.is_file()) {
-        return Ok(path.clone());
+        return Ok(UnityLaunchTarget {
+            path: path.clone(),
+            requested_version,
+            warning,
+        });
     }
 
     let checked = candidates
@@ -273,11 +348,26 @@ pub fn resolve_unity_executable(
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>()
         .join(", ");
+    let installed_display = format_installed_versions(&installed_versions);
 
     anyhow::bail!(
-        "Unable to locate a Unity editor executable for this project. Checked: {}. Set --unity or UCP_UNITY to override.",
-        checked
+        "Unable to locate a Unity editor executable for this project. Checked: {}. Installed versions: {}. Set --unity or --force-unity-version to override.",
+        checked,
+        installed_display,
     );
+}
+
+fn resolve_requested_unity_version(project: &Path, ctx: &commands::Context) -> Option<String> {
+    ctx.force_unity_version
+        .clone()
+        .or_else(|| resolve_project_unity_version(project))
+}
+
+fn resolve_project_unity_version(project: &Path) -> Option<String> {
+    read_project_version(project)
+        .ok()
+        .flatten()
+        .or_else(|| read_hub_project_version(project))
 }
 
 pub fn read_project_version(project: &Path) -> anyhow::Result<Option<String>> {
@@ -293,20 +383,17 @@ pub fn read_project_version(project: &Path) -> anyhow::Result<Option<String>> {
     }))
 }
 
-fn unity_candidate_paths(project_version: Option<&str>) -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
+fn unity_candidate_paths(version: &str, roots: &[PathBuf]) -> Vec<PathBuf> {
+    dedupe_paths(
+        roots
+            .iter()
+            .map(|root| root.join(version).join("Editor").join(unity_executable_name()))
+            .collect(),
+    )
+}
 
-    if let Some(version) = project_version {
-        for root in [std::env::var_os("ProgramFiles"), std::env::var_os("ProgramFiles(x86)")] {
-            let Some(root) = root else {
-                continue;
-            };
-            let root = PathBuf::from(root);
-            candidates.push(root.join("Unity").join("Hub").join("Editor").join(version).join("Editor").join(unity_executable_name()));
-            candidates.push(root.join("Unity Hub").join("Editor").join(version).join("Editor").join(unity_executable_name()));
-            candidates.push(root.join("Unity").join(version).join("Editor").join(unity_executable_name()));
-        }
-    }
+fn unity_path_fallbacks() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
 
     if cfg!(windows) {
         if let Ok(output) = Command::new("where").arg("Unity.exe").output() {
@@ -323,6 +410,114 @@ fn unity_candidate_paths(project_version: Option<&str>) -> Vec<PathBuf> {
 
     candidates.push(PathBuf::from(unity_executable_name()));
     dedupe_paths(candidates)
+}
+
+fn unity_install_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+
+    #[cfg(windows)]
+    {
+        if let Some(app_data) = std::env::var_os("APPDATA") {
+            let hub_dir = PathBuf::from(app_data).join("UnityHub");
+
+            if let Some(path) = read_hub_path_string(&hub_dir.join("secondaryInstallPath.json")) {
+                roots.push(path);
+            }
+        }
+
+        for root in [std::env::var_os("ProgramFiles"), std::env::var_os("ProgramFiles(x86)")] {
+            let Some(root) = root else {
+                continue;
+            };
+            let root = PathBuf::from(root);
+            roots.push(root.join("Unity").join("Hub").join("Editor"));
+            roots.push(root.join("Unity Hub").join("Editor"));
+            roots.push(root.join("Unity"));
+        }
+    }
+
+    dedupe_paths(roots)
+}
+
+fn read_hub_path_string(path: &Path) -> Option<PathBuf> {
+    let content = fs::read_to_string(path).ok()?;
+    let value: String = serde_json::from_str(&content).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(PathBuf::from(trimmed))
+}
+
+fn read_hub_project_version(project: &Path) -> Option<String> {
+    let app_data = std::env::var_os("APPDATA")?;
+    let path = PathBuf::from(app_data)
+        .join("UnityHub")
+        .join("projects-v1.json");
+    let content = fs::read_to_string(path).ok()?;
+    let json_start = content.find('{')?;
+    let value: serde_json::Value = serde_json::from_str(&content[json_start..]).ok()?;
+    let project_key = project.display().to_string().replace('/', "\\");
+    value
+        .get("data")?
+        .get(&project_key)?
+        .get("version")?
+        .as_str()
+        .map(ToOwned::to_owned)
+}
+
+fn installed_unity_versions(roots: &[PathBuf]) -> Vec<String> {
+    let mut versions = Vec::new();
+
+    for root in roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+
+            if path.join("Editor").join(unity_executable_name()).is_file()
+                && !versions.iter().any(|existing| existing == name)
+            {
+                versions.push(name.to_string());
+            }
+        }
+    }
+
+    versions.sort();
+    versions
+}
+
+fn format_installed_versions(versions: &[String]) -> String {
+    if versions.is_empty() {
+        "none detected".to_string()
+    } else {
+        versions.join(", ")
+    }
+}
+
+fn forced_version_warning(
+    project_version: Option<&str>,
+    forced_version: Option<&str>,
+) -> Option<String> {
+    let forced_version = forced_version?;
+    let project_version = project_version?;
+    if forced_version == project_version {
+        return None;
+    }
+
+    Some(format!(
+        "Project is configured for Unity {project_version}, but UCP will launch Unity {forced_version} because --force-unity-version was set. This can upgrade project metadata or assets; create a backup or commit your work first."
+    ))
 }
 
 fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -389,4 +584,67 @@ fn clear_session(project: &Path) -> anyhow::Result<()> {
         fs::remove_file(path)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{forced_version_warning, installed_unity_versions, read_hub_path_string};
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn reads_hub_path_json_string() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-hub-path-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(&temp_root).unwrap();
+        let path = temp_root.join("secondaryInstallPath.json");
+        fs::write(&path, "\"D:\\\\Unity\\\\Installs\"").unwrap();
+
+        assert_eq!(
+            read_hub_path_string(&path),
+            Some(PathBuf::from("D:\\Unity\\Installs"))
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn discovers_installed_versions_from_roots() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-installed-versions-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+        let root = temp_root.join("Installs");
+        fs::create_dir_all(root.join("6000.3.1f1").join("Editor")).unwrap();
+        fs::create_dir_all(root.join("2023.1.7f1").join("Editor")).unwrap();
+        fs::write(
+            root.join("6000.3.1f1").join("Editor").join("Unity.exe"),
+            b"",
+        )
+        .unwrap();
+        fs::write(
+            root.join("2023.1.7f1").join("Editor").join("Unity.exe"),
+            b"",
+        )
+        .unwrap();
+
+        let versions = installed_unity_versions(&[root]);
+        assert_eq!(versions, vec!["2023.1.7f1", "6000.3.1f1"]);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn warns_on_forced_version_mismatch() {
+        let warning = forced_version_warning(Some("6000.3.1f1"), Some("2023.1.7f1"))
+            .expect("warning expected");
+
+        assert!(warning.contains("6000.3.1f1"));
+        assert!(warning.contains("2023.1.7f1"));
+        assert!(warning.contains("backup"));
+    }
 }

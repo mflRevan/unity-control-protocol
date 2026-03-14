@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.3.2'
+  version: '0.3.3'
 ---
 
 # Unity Control Protocol (UCP)
@@ -48,6 +48,10 @@ ucp uninstall               # Remove bridge
 
 `ucp connect` and other bridge-backed commands now auto-start Unity when the project can be resolved and a Unity executable is available. If auto-start fails, pass `--unity <path>` or set `UCP_UNITY`.
 
+When the project's configured Unity version is not installed, inspect `ucp editor status` and only use `--force-unity-version <version>` if you accept the risk of Unity upgrading project metadata or assets. Back up the project or commit your work first.
+
+If startup prompts block launch, use `--dialog-policy <mode>` to steer UCP's best-effort response to Safe Mode or recovery dialogs.
+
 If `ucp connect` fails after startup, either Unity is still importing/compiling or the bridge is not installed. Run `ucp install` from the project root and retry.
 
 `ucp install` is manifest-first by default and writes a tracked git dependency pinned to the CLI version. Default install does not add a local `file:` dependency. `ucp install --dev` leaves the target project's manifest alone and forces the repo-local bridge source.
@@ -60,14 +64,16 @@ Without `--json`, commands use human mode: concise terminal-oriented summaries m
 
 ## Global flags
 
-| Flag               | Purpose                                           |
-| ------------------ | ------------------------------------------------- |
-| `--json`           | Machine-readable JSON output                      |
-| `--project <path>` | Target a specific Unity project (defaults to cwd) |
-| `--unity <path>`   | Explicit Unity executable for lifecycle commands  |
-| `--bridge-update-policy <mode>` | Outdated bridge handling: `auto`, `warn`, `off` |
-| `--timeout <s>`    | Timeout in seconds (default 30)                   |
-| `--verbose`        | Extra diagnostic output                           |
+| Flag                            | Purpose                                           |
+| ------------------------------- | ------------------------------------------------- |
+| `--json`                        | Machine-readable JSON output                      |
+| `--project <path>`              | Target a specific Unity project (defaults to cwd) |
+| `--unity <path>`                | Explicit Unity executable for lifecycle commands  |
+| `--force-unity-version <ver>`   | Force a specific installed Unity editor version   |
+| `--bridge-update-policy <mode>` | Outdated bridge handling: `auto`, `warn`, `off`   |
+| `--dialog-policy <mode>`        | Startup dialog handling: `auto`, `manual`, `ignore`, `recover`, `safe-mode`, `cancel` |
+| `--timeout <s>`                 | Timeout in seconds (default 30)                   |
+| `--verbose`                     | Extra diagnostic output                           |
 
 ## Scene management
 

@@ -46,7 +46,16 @@ pub fn inspect(project: &Path) -> anyhow::Result<BridgePackageStatus> {
     let target_reference = target_reference();
 
     let (installed, source_kind, dependency, installed_version, managed_git_dependency, local_source) =
-        if let Some(reference) = manifest_dependency.clone() {
+        if embedded_exists {
+            (
+                true,
+                "embedded-local".to_string(),
+                Some(embedded_package_path.display().to_string()),
+                read_package_json_version(&embedded_package_path.join("package.json")),
+                false,
+                true,
+            )
+        } else if let Some(reference) = manifest_dependency.clone() {
             let source_kind = if reference.starts_with(PACKAGE_GIT_URL_BASE) {
                 "git"
             } else if reference.starts_with("file:") {
@@ -70,15 +79,6 @@ pub fn inspect(project: &Path) -> anyhow::Result<BridgePackageStatus> {
                 version,
                 source_kind == "git",
                 source_kind == "file",
-            )
-        } else if embedded_exists {
-            (
-                true,
-                "embedded-local".to_string(),
-                Some(embedded_package_path.display().to_string()),
-                read_package_json_version(&embedded_package_path.join("package.json")),
-                false,
-                true,
             )
         } else {
             (false, "missing".to_string(), None, None, false, false)
@@ -210,4 +210,46 @@ fn read_package_json_version(path: &Path) -> Option<String> {
 
 fn parse_version(value: &str) -> Option<Version> {
     Version::parse(value.trim()).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inspect;
+    use std::fs;
+
+    #[test]
+    fn inspect_prefers_embedded_local_mount_over_manifest_dependency() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-bridge-inspect-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+
+        fs::create_dir_all(temp_root.join("Packages").join("com.ucp.bridge")).unwrap();
+        fs::write(
+            temp_root.join("Packages").join("manifest.json"),
+            r#"{
+  "dependencies": {
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.2"
+  }
+}"#,
+        )
+        .unwrap();
+        fs::write(
+            temp_root
+                .join("Packages")
+                .join("com.ucp.bridge")
+                .join("package.json"),
+            r#"{ "name": "com.ucp.bridge", "version": "0.3.3" }"#,
+        )
+        .unwrap();
+
+        let status = inspect(&temp_root).expect("inspect status");
+        assert_eq!(status.source_kind, "embedded-local");
+        assert!(status.local_source);
+        assert!(!status.managed_git_dependency);
+        assert!(!status.outdated);
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
 }

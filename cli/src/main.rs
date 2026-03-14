@@ -35,6 +35,10 @@ struct Cli {
     #[arg(long, global = true, env = "UCP_UNITY")]
     unity: Option<String>,
 
+    /// Force UCP to launch the project with a specific installed Unity editor version
+    #[arg(long, global = true, env = "UCP_FORCE_UNITY_VERSION")]
+    force_unity_version: Option<String>,
+
     /// Output as JSON
     #[arg(long, global = true)]
     json: bool,
@@ -50,6 +54,10 @@ struct Cli {
     /// Policy for handling outdated bridge package references
     #[arg(long, global = true, env = "UCP_BRIDGE_UPDATE_POLICY", value_enum)]
     bridge_update_policy: Option<config::BridgeUpdatePolicy>,
+
+    /// Policy for handling Unity startup dialogs such as Safe Mode or recovery prompts
+    #[arg(long, global = true, env = "UCP_DIALOG_POLICY", value_enum)]
+    dialog_policy: Option<config::StartupDialogPolicy>,
 }
 
 #[tokio::main]
@@ -100,6 +108,7 @@ async fn main() -> anyhow::Result<()> {
         project: cli.project,
         port: cli.port,
         unity: cli.unity.or(cli_settings.unity_path),
+        force_unity_version: cli.force_unity_version,
         json: cli.json,
         timeout: cli.timeout,
         verbose: cli.verbose,
@@ -107,6 +116,7 @@ async fn main() -> anyhow::Result<()> {
             .bridge_update_policy
             .or(cli_settings.bridge_update_policy)
             .unwrap_or_default(),
+        dialog_policy: cli.dialog_policy.unwrap_or_default(),
     };
 
     let json_output = ctx.json;

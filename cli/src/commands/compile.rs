@@ -31,6 +31,7 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
         &project,
         Some(&lock),
         ctx.timeout.max(60),
+        ctx.dialog_policy,
         WaitMode::RestartOptional,
     )
     .await?;

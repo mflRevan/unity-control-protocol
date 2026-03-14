@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.3] - 2026-03-14
+
+### Added
+
+- Added missing Unity metadata for `EditorController.cs` and `ObjectReferenceResolver.cs` so both controllers import reliably in embedded and tracked package installs.
+
+### Changed
+
+- `CommandRouter` now maps `ArgumentException` to `InvalidParams` and `UnauthorizedAccessException` to `FileAccessDenied` without emitting misleading internal-error logs.
+
+### Fixed
+
+- Fixed negative smoke tests around unresolved object references and project-root path traversal.
+
 ## [0.3.2] - 2026-03-14
 
 ### Added
