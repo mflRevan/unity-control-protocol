@@ -1,6 +1,6 @@
 {
   "name": "com.ucp.bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "displayName": "Unity Control Protocol Bridge",
   "description": "WebSocket bridge for programmatic Unity Editor control via CLI and AI agents.",
   "unity": "2021.3",
@@ -21,7 +21,7 @@
     "url": "https://github.com/mflRevan/unity-control-protocol.git"
   },
   "type": "tool",
-  "documentationUrl": "https://github.com/mflRevan/unity-control-protocol/blob/main/PROJECT.md",
+  "documentationUrl": "https://github.com/mflRevan/unity-control-protocol/blob/main/README.md",
   "changelogUrl": "https://github.com/mflRevan/unity-control-protocol/blob/main/unity-package/com.ucp.bridge/CHANGELOG.md",
   "dependencies": {}
 }

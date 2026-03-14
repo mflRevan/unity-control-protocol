@@ -9,7 +9,6 @@ namespace UCP.Bridge
     public static class LogsController
     {
         private const int MaxHistoryEntries = 2000;
-        private const int MaxBulkResults = 10;
         private const int DefaultSearchWindow = 200;
         private const int MaxPreviewLength = 200;
 
@@ -145,8 +144,6 @@ namespace UCP.Bridge
                 if (!string.IsNullOrEmpty(query.Level))
                     candidates = candidates.Where(entry => PassesLevel(entry.Level, query.Level));
 
-                candidates = candidates.OrderByDescending(entry => entry.Id).Take(query.Count);
-
                 if (query.Regex != null)
                 {
                     candidates = candidates.Where(entry =>
@@ -155,14 +152,14 @@ namespace UCP.Bridge
                     );
                 }
 
-                var allMatches = candidates.ToList();
-                var returned = allMatches.Take(MaxBulkResults).Select(SerializeSummary).ToList();
+                var allMatches = candidates.OrderByDescending(entry => entry.Id).ToList();
+                var returned = allMatches.Take(query.Count).Select(SerializeSummary).ToList();
 
                 return new LogQueryResult
                 {
                     Total = allMatches.Count,
                     Returned = returned,
-                    Truncated = allMatches.Count > MaxBulkResults
+                    Truncated = allMatches.Count > returned.Count
                 };
             }
         }

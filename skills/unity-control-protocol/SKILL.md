@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.3.0'
+  version: '0.3.1'
 ---
 
 # Unity Control Protocol (UCP)
@@ -46,6 +46,8 @@ ucp uninstall               # Remove bridge
 If `ucp connect` fails, either Unity is not open or the bridge is not installed. Run `ucp install` from the project root and reopen Unity.
 
 `ucp install` is manifest-first by default and writes a tracked git dependency pinned to the CLI version. Default install does not add a local `file:` dependency. `ucp install --dev` leaves the target project's manifest alone and forces the repo-local bridge source.
+
+Install also enables automation-friendly PlayerSettings defaults by default: `runInBackground = true`, `defaultScreenWidth = 1920`, `defaultScreenHeight = 1080`, and `defaultIsNativeResolution = false`. Those defaults improve unattended capture and control.
 
 Without `--json`, commands use human mode: concise terminal-oriented summaries meant for people and agent review loops. Broad read commands intentionally truncate in human mode so scenes, settings, and log searches do not flood the terminal.
 
@@ -148,8 +150,12 @@ ucp asset read "Assets/Materials/Agent.mat"            # Full dump
 ucp asset read "Assets/Materials/Agent.mat" --field m_Shader  # Specific field
 
 ucp asset write "Assets/Configs/GameConfig.asset" --field maxPlayers --value "8"
+ucp asset write "Assets/Configs/GameConfig.asset" --field icon --value '{"path":"Assets/UI/GameIcon.png"}'
+ucp asset write-batch "Assets/Configs/GameConfig.asset" --values '{"maxPlayers":8,"spawnDelay":1.5}'
 ucp asset create-so -t GameConfig "Assets/Configs/NewConfig.asset"
 ```
+
+Object reference writes accept `instanceId`, asset `path`, or asset `guid`. Invalid references now fail explicitly instead of silently succeeding.
 
 ## Materials
 
@@ -187,6 +193,10 @@ ucp settings player                            # Read PlayerSettings
 ucp settings set-player --key companyName --value '"Studio"'
 ucp settings set-player --key productName --value '"Game"'
 ucp settings set-player --key bundleVersion --value '"1.0"'
+ucp settings set-player --key runInBackground --value true
+ucp settings set-player --key defaultScreenWidth --value 1920
+ucp settings set-player --key defaultScreenHeight --value 1080
+ucp settings set-player --key defaultIsNativeResolution --value false
 
 ucp settings quality                           # Read QualitySettings
 ucp settings set-quality --key vSyncCount --value 0
@@ -234,7 +244,7 @@ ucp logs --pattern "failed" --before-id 200 --after-id 100
 ucp logs --id 42                              # Inspect one buffered log entry in full
 ```
 
-Bulk history reads are intentionally capped to `10` returned entries in human mode. Use the returned IDs with `ucp logs --id <logId>` or narrow the search space further.
+Buffered searches filter first and then apply `--count`, so older matching entries are no longer missed just because newer non-matching noise filled the recent window.
 
 ## Testing
 
@@ -242,7 +252,7 @@ Bulk history reads are intentionally capped to `10` returned entries in human mo
 ucp run-tests --mode edit                      # Edit mode tests
 ucp run-tests --mode play                      # Play mode tests
 ucp run-tests --mode edit --filter "MyTest"    # Filter using a Unity Test Runner name or fully qualified name
-ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTail_TruncatesBulkResultsToTenEntries"
+ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTail_ReturnsRequestedBufferedCount"
 ```
 
 `--filter` uses Unity Test Runner semantics rather than a UCP-defined regex engine. Prefer fully qualified test names when you need precise selection.

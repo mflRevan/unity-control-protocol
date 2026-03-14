@@ -1,6 +1,6 @@
 # Agent Skills
 
-UCP ships with an [Agent Skills](https://agentskills.io)-compatible skill file that allows AI coding agents to understand and use the full UCP toolset automatically.
+UCP ships with [Agent Skills](https://agentskills.io)-compatible skill files that allow AI coding agents to understand and use the full UCP toolset automatically.
 
 ## What are Agent Skills?
 
@@ -29,6 +29,8 @@ curl -o skills/unity-control-protocol/SKILL.md \
 
 The agent will automatically discover and load the skill when it encounters Unity-related tasks.
 
-## Skill preview
+If you also want a release-validation workflow for the bundled dev project and bridge smoke suite, copy `skills/unity-control-protocol-qa/` as well.
 
-Below is the full content of the UCP Agent Skill. This is exactly what an AI agent sees when it activates the skill.
+## Primary skill preview
+
+Below is the full content of the primary UCP Agent Skill. This is exactly what an AI agent sees when it activates the skill.

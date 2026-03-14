@@ -218,14 +218,7 @@ namespace UCP.Bridge
                     var c = prop.colorValue;
                     return new List<object> { (double)c.r, (double)c.g, (double)c.b, (double)c.a };
                 case SerializedPropertyType.ObjectReference:
-                    if (prop.objectReferenceValue != null)
-                        return new Dictionary<string, object>
-                        {
-                            ["instanceId"] = prop.objectReferenceValue.GetInstanceID(),
-                            ["name"] = prop.objectReferenceValue.name,
-                            ["type"] = prop.objectReferenceValue.GetType().Name
-                        };
-                    return null;
+                    return ObjectReferenceResolver.Serialize(prop.objectReferenceValue);
                 case SerializedPropertyType.LayerMask:
                     return prop.intValue;
                 case SerializedPropertyType.Enum:
@@ -422,15 +415,9 @@ namespace UCP.Bridge
                     }
                     break;
                 case SerializedPropertyType.ObjectReference:
-                    if (value == null)
-                    {
-                        prop.objectReferenceValue = null;
-                    }
-                    else if (value is Dictionary<string, object> refDict && refDict.TryGetValue("instanceId", out var refId))
-                    {
-                        var obj = EditorUtility.InstanceIDToObject(Convert.ToInt32(refId));
-                        prop.objectReferenceValue = obj;
-                    }
+                    prop.objectReferenceValue = ObjectReferenceResolver.Resolve(value, prop.displayName);
+                    if (value != null && prop.objectReferenceValue == null)
+                        throw new ArgumentException($"Unable to assign object reference to '{prop.displayName}'");
                     break;
                 case SerializedPropertyType.LayerMask:
                     prop.intValue = Convert.ToInt32(value);
@@ -457,12 +444,7 @@ namespace UCP.Bridge
             if (value is Color c)
                 return new List<object> { (double)c.r, (double)c.g, (double)c.b, (double)c.a };
             if (value is UnityEngine.Object uObj)
-                return new Dictionary<string, object>
-                {
-                    ["instanceId"] = uObj.GetInstanceID(),
-                    ["name"] = uObj.name,
-                    ["type"] = uObj.GetType().Name
-                };
+                return ObjectReferenceResolver.Serialize(uObj);
             return value.ToString();
         }
 

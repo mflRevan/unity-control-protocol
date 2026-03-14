@@ -2,7 +2,7 @@
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.3.0`
+Release: `0.3.1`
 
 ## What ships
 
@@ -72,7 +72,7 @@ Or add this dependency manually:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.0"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.1"
   }
 }
 ```
@@ -122,7 +122,7 @@ ucp play --no-save --keep-untitled
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.3.0`
+### Advanced editor control in `0.3.1`
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -140,7 +140,7 @@ Example:
 
 ```bash
 ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.0"}}
+# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.1"}}
 ```
 
 ## Skills and docs

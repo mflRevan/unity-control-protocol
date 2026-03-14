@@ -18,7 +18,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.3.0
+  Version: 0.3.1
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 
@@ -30,6 +30,10 @@ Modify a single PlayerSettings field.
 ucp settings set-player --key companyName --value '"MyStudio"'
 ucp settings set-player --key productName --value '"MyGame"'
 ucp settings set-player --key bundleVersion --value '"1.0.0"'
+ucp settings set-player --key runInBackground --value true
+ucp settings set-player --key defaultScreenWidth --value 1920
+ucp settings set-player --key defaultScreenHeight --value 1080
+ucp settings set-player --key defaultIsNativeResolution --value false
 ```
 
 | Flag             | Description                  |
@@ -137,3 +141,4 @@ ucp settings add-layer "Gameplay" --index 12
 - `lighting` reads the active scene's render settings
 - Tags and layers are project-wide and persist across scenes
 - Changes made via `set-*` commands take effect immediately in the editor
+- `ucp install` enables `runInBackground`, `1920x1080` defaults, and `defaultIsNativeResolution = false` automatically for automation-friendly projects

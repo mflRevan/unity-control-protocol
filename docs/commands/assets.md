@@ -67,7 +67,30 @@ Modify a field on an asset.
 
 ```bash
 ucp asset write "Assets/Configs/GameConfig.asset" --field maxPlayers --value "8"
+ucp asset write "Assets/Configs/GameConfig.asset" --field icon --value '{"path":"Assets/UI/GameIcon.png"}'
 ```
+
+Object reference fields accept:
+
+- `null`
+- an `instanceId`
+- an asset `path`
+- an asset `guid`
+
+Invalid references now fail explicitly instead of silently no-oping.
+
+### `ucp asset write-batch <path>`
+
+Modify multiple serialized fields on an asset in one request.
+
+```bash
+ucp asset write-batch "Assets/Configs/GameConfig.asset" --values '{"maxPlayers":8,"spawnDelay":1.5}'
+ucp asset write-batch "Assets/Configs/GameConfig.asset" --values '{"icon":{"path":"Assets/UI/GameIcon.png"}}'
+```
+
+| Flag              | Description                          |
+| ----------------- | ------------------------------------ |
+| `--values <json>` | JSON object of field/value pairs     |
 
 ### `ucp asset create-so`
 

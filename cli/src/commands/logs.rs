@@ -5,7 +5,6 @@ use console::style;
 
 use super::Context;
 
-const MAX_BULK_RESULTS: usize = 10;
 const MAX_MESSAGE_PREVIEW: usize = 160;
 
 pub async fn run(
@@ -158,9 +157,9 @@ fn print_log_list(result: &serde_json::Value, used_pattern: bool) {
         eprintln!("{}", render_log_summary(&log));
     }
 
-    if truncated || total as usize > MAX_BULK_RESULTS {
+    if truncated {
         output::print_info(
-            "Bulk log reads are capped at 10 entries. Use `ucp logs --id <id>` or narrow the search with `--pattern`, `--before-id`, `--after-id`, or `--count`.",
+            "More buffered logs matched than were returned. Increase `--count`, narrow the filters, or inspect a specific entry with `ucp logs --id <id>`.",
         );
     }
 }

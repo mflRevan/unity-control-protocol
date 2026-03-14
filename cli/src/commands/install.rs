@@ -18,6 +18,9 @@ const PACKAGE_NAME: &str = "com.ucp.bridge";
 const PACKAGE_GIT_URL_BASE: &str =
     "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge";
 const INSTALL_STATE_FILE: &str = "install-state.json";
+const PROJECT_SETTINGS_FILE: &str = "ProjectSettings/ProjectSettings.asset";
+const AUTOMATION_SCREEN_WIDTH: i32 = 1920;
+const AUTOMATION_SCREEN_HEIGHT: i32 = 1080;
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
@@ -34,6 +37,15 @@ pub struct InstallOptions {
 struct InstallState {
     mode: String,
     source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+struct AutomationSettingsOutcome {
+    #[serde(rename = "updatedOnDisk")]
+    updated_on_disk: bool,
+    #[serde(rename = "liveApplied")]
+    live_applied: bool,
+    changed: Vec<String>,
 }
 
 pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -> anyhow::Result<()> {
@@ -216,6 +228,8 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         pb.finish_and_clear();
     }
 
+    let mut automation = apply_recommended_player_settings(&project_path)?;
+
     if let Some(lock) = previous_lock.as_ref() {
         let _ = request_asset_refresh(lock).await;
     }
@@ -243,6 +257,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
                 "project": project_path.display().to_string(),
                 "bridgeStatus": "skipped",
                 "nudgedEditor": false,
+                "automationSettings": automation,
             })));
         } else {
             eprintln!(
@@ -250,6 +265,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
                 style("ℹ").cyan(),
                 style("ucp connect").bold()
             );
+            print_automation_settings_note(&automation);
             eprintln!();
         }
         return Ok(());
@@ -267,6 +283,15 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
     )
     .await?;
 
+    if matches!(
+        wait_outcome.status,
+        WaitStatus::Available | WaitStatus::Restarted | WaitStatus::Stable
+    ) {
+        automation.live_applied = apply_recommended_player_settings_via_bridge(&project_path)
+            .await
+            .unwrap_or(false);
+    }
+
     if ctx.json {
         output::print_json(&output::success_json(serde_json::json!({
             "installed": true,
@@ -280,6 +305,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
                 WaitStatus::EditorNotRunning => "editor-not-running",
             },
             "nudgedEditor": wait_outcome.nudged_editor,
+            "automationSettings": automation,
         })));
     } else {
         match wait_outcome.status {
@@ -309,6 +335,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
             style("ℹ").cyan(),
             desired_package_url
         );
+        print_automation_settings_note(&automation);
         eprintln!();
     }
 
@@ -524,6 +551,7 @@ async fn run_embedded_local_install(
     ensure_ucp_state_dir(project_path)?;
     ensure_local_git_exclude(project_path, ".ucp/")?;
     ensure_local_git_exclude(project_path, "Packages/com.ucp.bridge/")?;
+    let mut automation = apply_recommended_player_settings(project_path)?;
     write_install_state(project_path, InstallState {
         mode: "embedded-local".to_string(),
         source: Some(source_path.display().to_string()),
@@ -543,6 +571,7 @@ async fn run_embedded_local_install(
                 "installationMode": "embedded-local",
                 "bridgeStatus": "skipped",
                 "nudgedEditor": false,
+                "automationSettings": automation,
             })));
         } else {
             output::print_success(if same_source {
@@ -561,6 +590,7 @@ async fn run_embedded_local_install(
                 style("ℹ").cyan(),
                 style("ucp connect").bold()
             );
+            print_automation_settings_note(&automation);
             eprintln!();
         }
         return Ok(());
@@ -578,6 +608,15 @@ async fn run_embedded_local_install(
     )
     .await?;
 
+    if matches!(
+        wait_outcome.status,
+        WaitStatus::Available | WaitStatus::Restarted | WaitStatus::Stable
+    ) {
+        automation.live_applied = apply_recommended_player_settings_via_bridge(project_path)
+            .await
+            .unwrap_or(false);
+    }
+
     if ctx.json {
         output::print_json(&output::success_json(serde_json::json!({
             "installed": true,
@@ -592,6 +631,7 @@ async fn run_embedded_local_install(
                 WaitStatus::EditorNotRunning => "editor-not-running",
             },
             "nudgedEditor": wait_outcome.nudged_editor,
+            "automationSettings": automation,
         })));
     } else {
         output::print_success(if same_source {
@@ -625,6 +665,7 @@ async fn run_embedded_local_install(
             "  {} This local mount is ignored via .git/info/exclude when available.",
             style("ℹ").cyan()
         );
+        print_automation_settings_note(&automation);
         eprintln!();
     }
 
@@ -882,6 +923,137 @@ async fn request_asset_refresh(lock: &crate::config::LockFile) -> anyhow::Result
         .await?;
     client.close().await;
     Ok(())
+}
+
+fn apply_recommended_player_settings(project_path: &Path) -> anyhow::Result<AutomationSettingsOutcome> {
+    let settings_path = project_path.join(PROJECT_SETTINGS_FILE);
+    let content = fs::read_to_string(&settings_path).map_err(|error| {
+        anyhow::anyhow!(
+            "Failed to read Unity project settings at {}: {error}",
+            settings_path.display()
+        )
+    })?;
+
+    let width = AUTOMATION_SCREEN_WIDTH.to_string();
+    let height = AUTOMATION_SCREEN_HEIGHT.to_string();
+    let mut changed = Vec::new();
+    let mut saw_run_in_background = false;
+    let mut saw_width = false;
+    let mut saw_height = false;
+    let mut saw_native_resolution = false;
+    let mut lines = Vec::new();
+
+    for line in content.lines() {
+        if let Some(updated) = rewrite_project_setting(line, "runInBackground", "1", &mut changed) {
+            saw_run_in_background = true;
+            lines.push(updated);
+            continue;
+        }
+        if let Some(updated) = rewrite_project_setting(line, "defaultScreenWidth", &width, &mut changed) {
+            saw_width = true;
+            lines.push(updated);
+            continue;
+        }
+        if let Some(updated) = rewrite_project_setting(line, "defaultScreenHeight", &height, &mut changed) {
+            saw_height = true;
+            lines.push(updated);
+            continue;
+        }
+        if let Some(updated) = rewrite_project_setting(line, "defaultIsNativeResolution", "0", &mut changed) {
+            saw_native_resolution = true;
+            lines.push(updated);
+            continue;
+        }
+
+        lines.push(line.to_string());
+    }
+
+    if !saw_run_in_background || !saw_width || !saw_height || !saw_native_resolution {
+        anyhow::bail!(
+            "Unity player settings file is missing one or more automation fields in {}",
+            settings_path.display()
+        );
+    }
+
+    if changed.is_empty() {
+        return Ok(AutomationSettingsOutcome::default());
+    }
+
+    let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+    let updated = format!("{}{}", lines.join(newline), newline);
+    fs::write(&settings_path, updated).map_err(|error| {
+        anyhow::anyhow!(
+            "Failed to update Unity project settings at {}: {error}",
+            settings_path.display()
+        )
+    })?;
+
+    Ok(AutomationSettingsOutcome {
+        updated_on_disk: true,
+        live_applied: false,
+        changed,
+    })
+}
+
+fn rewrite_project_setting(
+    line: &str,
+    key: &str,
+    desired_value: &str,
+    changed: &mut Vec<String>,
+) -> Option<String> {
+    let marker = format!("{key}:");
+    let position = line.find(&marker)?;
+    let prefix = &line[..position];
+    let current_value = line[position + marker.len()..].trim();
+
+    if current_value != desired_value {
+        changed.push(format!("{key}={desired_value}"));
+    }
+
+    Some(format!("{prefix}{key}: {desired_value}"))
+}
+
+async fn apply_recommended_player_settings_via_bridge(project_path: &Path) -> anyhow::Result<bool> {
+    let lock = discovery::read_lock_file(project_path)?;
+    let mut client = BridgeClient::connect(&lock).await?;
+    client.handshake().await?;
+
+    for (key, value) in [
+        ("runInBackground", serde_json::json!(true)),
+        ("defaultScreenWidth", serde_json::json!(AUTOMATION_SCREEN_WIDTH)),
+        ("defaultScreenHeight", serde_json::json!(AUTOMATION_SCREEN_HEIGHT)),
+        ("defaultIsNativeResolution", serde_json::json!(false)),
+    ] {
+        client
+            .call(
+                "settings/player-set",
+                serde_json::json!({ "key": key, "value": value }),
+            )
+            .await?;
+    }
+
+    client.close().await;
+    Ok(true)
+}
+
+fn print_automation_settings_note(automation: &AutomationSettingsOutcome) {
+    if automation.changed.is_empty() {
+        eprintln!(
+            "  {} Automation-friendly player settings already enabled (run in background, 1920x1080 windowed defaults).",
+            style("ℹ").cyan()
+        );
+        return;
+    }
+
+    eprintln!(
+        "  {} Enabled automation-friendly player settings: {}.",
+        style("ℹ").cyan(),
+        automation.changed.join(", ")
+    );
+    eprintln!(
+        "  {} These defaults improve unattended capture and control. You can change them later in Player Settings, but disabling them may degrade automation reliability.",
+        style("ℹ").cyan()
+    );
 }
 
 #[cfg(test)]

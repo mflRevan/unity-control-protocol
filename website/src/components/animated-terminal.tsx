@@ -18,7 +18,7 @@ const lines: TerminalLine[] = [
   { text: '$ ucp connect', type: 'command', delay: 500 },
   { text: '✓ Connected to Unity 6000.3.1f1', type: 'success', delay: 700 },
   { text: '  Project: "MyGame"', type: 'info', delay: 300 },
-  { text: '  Protocol: v0.3.0', type: 'info', delay: 200 },
+  { text: '  Protocol: v0.3.1', type: 'info', delay: 200 },
   { text: '', type: 'output', delay: 100 },
   { text: '$ ucp snapshot', type: 'command', delay: 600 },
   { text: 'Scene: SampleScene (1 root)', type: 'output', delay: 500 },

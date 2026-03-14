@@ -13,6 +13,7 @@ namespace UCP.Bridge.Tests
     public class ControllerSmokeTests
     {
         private const string TempAssetPath = "Assets/UcpControllerSmoke.asset";
+        private const string TempReferenceAssetPath = "Assets/UcpControllerReference.asset";
         private const string TempPrefabPath = "Assets/UcpControllerSmoke.prefab";
         private const string TempMaterialPath = "Assets/UcpControllerSmoke.mat";
         private const string TempTextPath = "Assets/UcpControllerSmoke.txt";
@@ -35,6 +36,7 @@ namespace UCP.Bridge.Tests
             EditorSettingsController.Register(_router);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             DeleteTempAsset();
+            DeleteTempReferenceAsset();
             DeleteTempPrefab();
             DeleteTempMaterial();
             DeleteTempTextFile();
@@ -45,6 +47,7 @@ namespace UCP.Bridge.Tests
         public void TearDown()
         {
             DeleteTempAsset();
+            DeleteTempReferenceAsset();
             DeleteTempPrefab();
             DeleteTempMaterial();
             DeleteTempTextFile();
@@ -114,7 +117,7 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
-        public void LogsTail_TruncatesBulkResultsToTenEntries()
+        public void LogsTail_ReturnsRequestedBufferedCount()
         {
             for (var index = 0; index < 12; index++)
                 LogsController.RecordTestLog("info", $"log {index}");
@@ -125,13 +128,30 @@ namespace UCP.Bridge.Tests
 
             var result = (Dictionary<string, object>)response.result;
             Assert.That(Convert.ToInt32(result["total"]), Is.EqualTo(12));
-            Assert.That(Convert.ToInt32(result["returned"]), Is.EqualTo(10));
-            Assert.That(Convert.ToBoolean(result["truncated"]), Is.True);
+            Assert.That(Convert.ToInt32(result["returned"]), Is.EqualTo(12));
+            Assert.That(Convert.ToBoolean(result["truncated"]), Is.False);
 
             var logs = (List<object>)result["logs"];
             var first = (Dictionary<string, object>)logs[0];
             Assert.That(Convert.ToInt64(first["id"]), Is.EqualTo(12));
             Assert.That(first.ContainsKey("messagePreview"), Is.True);
+        }
+
+        [Test]
+        public void LogsSearch_FiltersBeforeApplyingCount()
+        {
+            LogsController.RecordTestLog("warning", "Target failed once");
+            for (var index = 0; index < 8; index++)
+                LogsController.RecordTestLog("info", $"Noise {index}");
+
+            var response = _router.Dispatch("logs/search", 1, "{\"pattern\":\"Target\",\"count\":1}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToInt32(result["total"]), Is.EqualTo(1));
+            Assert.That(Convert.ToInt32(result["returned"]), Is.EqualTo(1));
+            Assert.That(Convert.ToBoolean(result["truncated"]), Is.False);
         }
 
         [Test]
@@ -244,6 +264,70 @@ namespace UCP.Bridge.Tests
             var delete = _router.Dispatch("object/delete", 1, "{\"instanceId\":" + instanceId + "}");
             Assert.That(delete.error, Is.Null);
             Assert.That(EditorUtility.InstanceIDToObject(instanceId), Is.Null);
+        }
+
+        [Test]
+        public void ObjectSetProperty_AssignsObjectReferenceByAssetPath()
+        {
+            var referencedAsset = ScriptableObject.CreateInstance<SearchRootAsset>();
+            referencedAsset.name = "ReferenceAsset";
+            AssetDatabase.CreateAsset(referencedAsset, TempReferenceAssetPath);
+            AssetDatabase.SaveAssets();
+
+            var go = new GameObject("ReferenceCarrier");
+            var component = go.AddComponent<ReferenceComponent>();
+
+            var response = _router.Dispatch(
+                "object/set-property",
+                1,
+                "{\"instanceId\":" + go.GetInstanceID() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"" + TempReferenceAssetPath + "\"}}"
+            );
+
+            Assert.That(response.error, Is.Null);
+            Assert.That(component.referenceAsset, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(component.referenceAsset), Is.EqualTo(TempReferenceAssetPath));
+        }
+
+        [Test]
+        public void ObjectSetProperty_RejectsUnknownObjectReference()
+        {
+            var go = new GameObject("ReferenceCarrier");
+            go.AddComponent<ReferenceComponent>();
+
+            var response = _router.Dispatch(
+                "object/set-property",
+                1,
+                "{\"instanceId\":" + go.GetInstanceID() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"Assets/Missing.asset\"}}"
+            );
+
+            Assert.That(response.error, Is.Not.Null);
+        }
+
+        [Test]
+        public void AssetWriteBatch_UpdatesMultipleFieldsIncludingObjectReference()
+        {
+            var reference = ScriptableObject.CreateInstance<SearchRootAsset>();
+            reference.name = "ReferenceAsset";
+            AssetDatabase.CreateAsset(reference, TempReferenceAssetPath);
+
+            var asset = ScriptableObject.CreateInstance<BatchWritableAsset>();
+            asset.maxPlayers = 2;
+            asset.spawnDelay = 5f;
+            AssetDatabase.CreateAsset(asset, TempAssetPath);
+            AssetDatabase.SaveAssets();
+
+            var response = _router.Dispatch(
+                "asset/write-batch",
+                1,
+                "{\"path\":\"" + TempAssetPath + "\",\"values\":{\"maxPlayers\":8,\"spawnDelay\":1.5,\"referenceAsset\":{\"path\":\"" + TempReferenceAssetPath + "\"}}}"
+            );
+
+            Assert.That(response.error, Is.Null);
+
+            var reloaded = AssetDatabase.LoadAssetAtPath<BatchWritableAsset>(TempAssetPath);
+            Assert.That(reloaded.maxPlayers, Is.EqualTo(8));
+            Assert.That(reloaded.spawnDelay, Is.EqualTo(1.5f).Within(0.001f));
+            Assert.That(AssetDatabase.GetAssetPath(reloaded.referenceAsset), Is.EqualTo(TempReferenceAssetPath));
         }
 
         [Test]
@@ -411,6 +495,15 @@ namespace UCP.Bridge.Tests
             }
         }
 
+        private static void DeleteTempReferenceAsset()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(TempReferenceAssetPath) != null)
+            {
+                AssetDatabase.DeleteAsset(TempReferenceAssetPath);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
         private static void DeleteTempPrefab()
         {
             if (AssetDatabase.LoadMainAssetAtPath(TempPrefabPath) != null)
@@ -480,6 +573,18 @@ namespace UCP.Bridge.Tests
 
         private sealed class SearchNestedAsset : ScriptableObject
         {
+        }
+
+        private sealed class BatchWritableAsset : ScriptableObject
+        {
+            public int maxPlayers;
+            public float spawnDelay;
+            public SearchRootAsset referenceAsset;
+        }
+
+        private sealed class ReferenceComponent : MonoBehaviour
+        {
+            public SearchRootAsset referenceAsset;
         }
     }
 }

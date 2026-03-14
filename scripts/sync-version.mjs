@@ -44,7 +44,7 @@ const replacements = [
       next = replaceOne(
         next,
         /"documentationUrl": ".*"/,
-        `"documentationUrl": "${repository.url}/blob/main/PROJECT.md"`,
+        `"documentationUrl": "${repository.url}/blob/main/README.md"`,
       );
       next = replaceOne(
         next,
@@ -107,16 +107,6 @@ const replacements = [
   [
     'skills/unity-control-protocol/SKILL.md',
     (content) => replaceOne(content, /  version: '.*'/, `  version: '${version}'`),
-  ],
-  [
-    'PROJECT.md',
-    (content) => {
-      let next = replaceOne(content, /Current release target: `.*`/, `Current release target: \`${version}\``);
-      next = replaceOne(next, /Current protocol version: `.*`/, `Current protocol version: \`${protocolVersion}\``);
-      next = replaceIfPresent(next, /"serverVersion": ".*"/, `"serverVersion": "${protocolVersion}"`);
-      next = replaceIfPresent(next, /"protocolVersion": ".*"/, `"protocolVersion": "${protocolVersion}"`);
-      return next;
-    },
   ],
   ['version.json', () => `${JSON.stringify(metadata, null, 2)}\n`],
 ];

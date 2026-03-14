@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.1] - 2026-03-14
+
+### Added
+
+- Added `ucp asset write-batch` for multi-field ScriptableObject and asset updates in a single request.
+- Added a companion QA skill at `skills/unity-control-protocol-qa/` for release validation against the bundled dev project.
+
+### Changed
+
+- `ucp install` now enables automation-friendly PlayerSettings defaults by default: `runInBackground`, `1920x1080` windowed defaults, and `defaultIsNativeResolution = false`.
+- Object reference reads now include asset `path` and `guid` when available, making follow-up writes more deterministic.
+- Updated docs and skills for batch asset writes, installer defaults, and the revised log-query behavior.
+
+### Fixed
+
+- Fixed buffered log queries so regex searches filter before `--count` truncation, preventing false empty results when newer noise crowds out older matches.
+- Fixed buffered log reads ignoring requested counts because of the hard 10-entry return cap.
+- Fixed `object set-property` and asset writes silently no-oping on unresolved object references by failing explicitly instead.
+
+### Validation
+
+- Rust CLI compile/test surface validated after command and installer changes.
+- Unity bridge smoke coverage expanded for buffered log counts, object reference assignment failures, and asset batch writes.
+
 ## [0.3.0] - 2026-03-13
 
 ### Added

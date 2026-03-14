@@ -14,6 +14,7 @@ namespace UCP.Bridge
             router.Register("asset/info", HandleInfo);
             router.Register("asset/read", HandleReadScriptableObject);
             router.Register("asset/write", HandleWriteScriptableObject);
+            router.Register("asset/write-batch", HandleWriteScriptableObjectBatch);
             router.Register("asset/create-so", HandleCreateScriptableObject);
         }
 
@@ -207,15 +208,8 @@ namespace UCP.Bridge
 
             string fieldName = fieldObj.ToString();
             var so = new SerializedObject(asset);
-            var prop = so.FindProperty(fieldName);
-            if (prop == null)
-            {
-                so.Dispose();
-                throw new ArgumentException($"Field '{fieldName}' not found on {asset.GetType().Name}");
-            }
-
             Undo.RecordObject(asset, $"UCP Write {fieldName}");
-            WriteSerializedValue(prop, p["value"]);
+            WriteFieldValue(so, asset, fieldName, p["value"]);
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssetIfDirty(asset);
@@ -226,6 +220,42 @@ namespace UCP.Bridge
                 ["status"] = "ok",
                 ["path"] = assetPath,
                 ["field"] = fieldName
+            };
+        }
+
+        private static object HandleWriteScriptableObjectBatch(string paramsJson)
+        {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (p == null || !p.TryGetValue("path", out var pathObj))
+                throw new ArgumentException("Missing 'path' parameter");
+            if (!p.TryGetValue("values", out var valuesObj) || !(valuesObj is Dictionary<string, object> values))
+                throw new ArgumentException("Missing 'values' parameter");
+
+            string assetPath = pathObj.ToString();
+            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+            if (asset == null)
+                throw new ArgumentException($"Asset not found: {assetPath}");
+
+            var so = new SerializedObject(asset);
+            Undo.RecordObject(asset, $"UCP Batch Write {asset.name}");
+
+            var fields = new List<object>();
+            foreach (var entry in values)
+            {
+                WriteFieldValue(so, asset, entry.Key, entry.Value);
+                fields.Add(entry.Key);
+            }
+
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(asset);
+            AssetDatabase.SaveAssetIfDirty(asset);
+            so.Dispose();
+
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["path"] = assetPath,
+                ["fields"] = fields
             };
         }
 
@@ -381,14 +411,7 @@ namespace UCP.Bridge
                     var c = prop.colorValue;
                     return new List<object> { (double)c.r, (double)c.g, (double)c.b, (double)c.a };
                 case SerializedPropertyType.ObjectReference:
-                    if (prop.objectReferenceValue != null)
-                        return new Dictionary<string, object>
-                        {
-                            ["instanceId"] = prop.objectReferenceValue.GetInstanceID(),
-                            ["name"] = prop.objectReferenceValue.name,
-                            ["type"] = prop.objectReferenceValue.GetType().Name
-                        };
-                    return null;
+                    return ObjectReferenceResolver.Serialize(prop.objectReferenceValue);
                 case SerializedPropertyType.Enum:
                     return prop.enumValueIndex < prop.enumDisplayNames.Length
                         ? prop.enumDisplayNames[prop.enumValueIndex]
@@ -483,10 +506,9 @@ namespace UCP.Bridge
                         prop.quaternionValue = new Quaternion(Convert.ToSingle(qArr[0]), Convert.ToSingle(qArr[1]), Convert.ToSingle(qArr[2]), Convert.ToSingle(qArr[3]));
                     break;
                 case SerializedPropertyType.ObjectReference:
-                    if (value == null)
-                        prop.objectReferenceValue = null;
-                    else if (value is Dictionary<string, object> refDict && refDict.TryGetValue("instanceId", out var refId))
-                        prop.objectReferenceValue = EditorUtility.InstanceIDToObject(Convert.ToInt32(refId));
+                    prop.objectReferenceValue = ObjectReferenceResolver.Resolve(value, prop.displayName);
+                    if (value != null && prop.objectReferenceValue == null)
+                        throw new ArgumentException($"Unable to assign object reference to '{prop.displayName}'");
                     break;
                 case SerializedPropertyType.LayerMask:
                     prop.intValue = Convert.ToInt32(value);
@@ -494,6 +516,15 @@ namespace UCP.Bridge
                 default:
                     throw new ArgumentException($"Cannot write property of type {prop.propertyType}");
             }
+        }
+
+        private static void WriteFieldValue(SerializedObject serializedObject, UnityEngine.Object asset, string fieldName, object value)
+        {
+            var prop = serializedObject.FindProperty(fieldName);
+            if (prop == null)
+                throw new ArgumentException($"Field '{fieldName}' not found on {asset.GetType().Name}");
+
+            WriteSerializedValue(prop, value);
         }
     }
 }

@@ -30,7 +30,7 @@ namespace UCP.Bridge
                 ["companyName"] = PlayerSettings.companyName,
                 ["productName"] = PlayerSettings.productName,
                 ["bundleVersion"] = PlayerSettings.bundleVersion,
-                ["defaultIsFullScreen"] = PlayerSettings.defaultIsNativeResolution,
+                ["defaultIsNativeResolution"] = PlayerSettings.defaultIsNativeResolution,
                 ["runInBackground"] = PlayerSettings.runInBackground,
                 ["colorSpace"] = PlayerSettings.colorSpace.ToString(),
                 ["graphicsApi"] = PlayerSettings.GetGraphicsAPIs(EditorUserBuildSettings.activeBuildTarget)?[0].ToString() ?? "Unknown",
@@ -66,6 +66,9 @@ namespace UCP.Bridge
                     break;
                 case "runInBackground":
                     PlayerSettings.runInBackground = Convert.ToBoolean(value);
+                    break;
+                case "defaultIsNativeResolution":
+                    PlayerSettings.defaultIsNativeResolution = Convert.ToBoolean(value);
                     break;
                 case "defaultScreenWidth":
                     PlayerSettings.defaultScreenWidth = Convert.ToInt32(value);

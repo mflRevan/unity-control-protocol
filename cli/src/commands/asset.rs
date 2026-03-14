@@ -49,6 +49,14 @@ pub enum AssetAction {
         #[arg(long)]
         value: String,
     },
+    /// Write multiple fields on an asset from a JSON object
+    WriteBatch {
+        /// Asset path
+        path: String,
+        /// JSON object of field/value pairs
+        #[arg(long)]
+        values: String,
+    },
     /// Create a new ScriptableObject asset
     CreateSo {
         /// ScriptableObject type name
@@ -103,6 +111,19 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                 .call(
                     "asset/write",
                     serde_json::json!({ "path": path, "field": field, "value": parsed }),
+                )
+                .await?
+        }
+        AssetAction::WriteBatch { path, values } => {
+            let parsed: serde_json::Value = serde_json::from_str(values)
+                .unwrap_or_else(|_| serde_json::Value::String(values.clone()));
+            let object = parsed
+                .as_object()
+                .ok_or_else(|| anyhow::anyhow!("--values must be a JSON object"))?;
+            client
+                .call(
+                    "asset/write-batch",
+                    serde_json::json!({ "path": path, "values": object }),
                 )
                 .await?
         }
@@ -183,6 +204,14 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             }
             AssetAction::Write { path, field, .. } => {
                 output::print_success(&format!("Updated {path} → {field}"));
+            }
+            AssetAction::WriteBatch { path, .. } => {
+                let fields = result
+                    .get("fields")
+                    .and_then(|v| v.as_array())
+                    .map(|items| items.len())
+                    .unwrap_or(0);
+                output::print_success(&format!("Updated {path} → {fields} field(s)"));
             }
             AssetAction::CreateSo { r#type, path } => {
                 output::print_success(&format!("Created {type} at {path}"));

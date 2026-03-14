@@ -38,6 +38,15 @@ By default, `ucp install` writes a tracked manifest dependency to `Packages/mani
 
 Default install does **not** add a local `file:` dependency.
 
+Install now also enables automation-friendly PlayerSettings defaults in the target project:
+
+- `runInBackground: true`
+- `defaultScreenWidth: 1920`
+- `defaultScreenHeight: 1080`
+- `defaultIsNativeResolution: false`
+
+Those defaults make unattended screenshots, playmode control, and agent-driven automation more reliable. You can change them later in Unity's Player Settings, but disabling them may degrade workflow quality.
+
 For local bridge development against this repository, use `ucp install --dev` instead. That mounts the repo-local bridge into `Packages/com.ucp.bridge` without changing `Packages/manifest.json`.
 
 Use `ucp install --embedded` or `ucp install --bridge-path <path>` for other explicit local embedded workflows.
@@ -49,7 +58,7 @@ Add the following to your `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.0"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.1"
   }
 }
 ```

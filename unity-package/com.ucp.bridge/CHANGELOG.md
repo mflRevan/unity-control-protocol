@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.1] - 2026-03-14
+
+### Added
+
+- Added `asset/write-batch` for multi-field serialized asset updates in one bridge call.
+
+### Changed
+
+- Player settings now expose `defaultIsNativeResolution` so installer automation can reconcile live editor state as well as on-disk project settings.
+- Object reference payloads now include asset `path` and `guid` when available.
+
+### Fixed
+
+- Fixed buffered log searches by applying regex filtering before count truncation.
+- Fixed buffered log list requests being capped to 10 returned entries regardless of requested `count`.
+- Fixed serialized object reference writes silently accepting unresolved references in both object and asset controllers.
+
 ## [0.3.0] - 2026-03-13
 
 ### Added
