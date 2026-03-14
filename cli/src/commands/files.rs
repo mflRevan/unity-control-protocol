@@ -1,14 +1,9 @@
-use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 use super::Context;
 use super::compile;
 
 pub async fn read(path: &str, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = client
         .call("file/read", serde_json::json!({ "path": path }))
@@ -25,9 +20,6 @@ pub async fn read(path: &str, ctx: &Context) -> anyhow::Result<()> {
 }
 
 pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-
     let content = match content {
         Some(c) => c,
         None => {
@@ -38,8 +30,7 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
         }
     };
 
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = client
         .call(
@@ -63,14 +54,10 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
 }
 
 pub async fn patch(path: &str, find: Option<String>, replace: Option<String>, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-
     let find = find.ok_or_else(|| anyhow::anyhow!("--find is required for patch-file"))?;
     let replace = replace.unwrap_or_default();
 
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = client
         .call(

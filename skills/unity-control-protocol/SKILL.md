@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.3.1'
+  version: '0.3.2'
 ---
 
 # Unity Control Protocol (UCP)
@@ -32,20 +32,27 @@ UCP is a cross-platform CLI + Unity Editor bridge. The CLI (`ucp`) sends command
 
 ## Setup & connection
 
-Always verify the bridge before issuing commands.
+Always verify or bootstrap the bridge before issuing commands.
 
 ```bash
 ucp doctor                  # Health check
+ucp start                   # Launch Unity and wait for the bridge
 ucp connect                 # Verify live connection
+ucp bridge status           # Inspect bridge ref/version drift
+ucp bridge update           # Re-pin the tracked bridge dependency to this CLI version
 ucp install                 # Install bridge into current Unity project (manifest dependency by default)
 ucp install --dev           # Mount the repo-local bridge package as a local-only embedded package
 ucp install --manifest      # Explicit tracked manifest install mode (same as default)
 ucp uninstall               # Remove bridge
 ```
 
-If `ucp connect` fails, either Unity is not open or the bridge is not installed. Run `ucp install` from the project root and reopen Unity.
+`ucp connect` and other bridge-backed commands now auto-start Unity when the project can be resolved and a Unity executable is available. If auto-start fails, pass `--unity <path>` or set `UCP_UNITY`.
+
+If `ucp connect` fails after startup, either Unity is still importing/compiling or the bridge is not installed. Run `ucp install` from the project root and retry.
 
 `ucp install` is manifest-first by default and writes a tracked git dependency pinned to the CLI version. Default install does not add a local `file:` dependency. `ucp install --dev` leaves the target project's manifest alone and forces the repo-local bridge source.
+
+Bridge drift handling defaults to `--bridge-update-policy auto`, which means `ucp doctor`, `ucp connect`, and other bridge-backed commands will update stale tracked bridge refs before connecting. Use `--bridge-update-policy warn` when you want notification-only behavior.
 
 Install also enables automation-friendly PlayerSettings defaults by default: `runInBackground = true`, `defaultScreenWidth = 1920`, `defaultScreenHeight = 1080`, and `defaultIsNativeResolution = false`. Those defaults improve unattended capture and control.
 
@@ -57,6 +64,8 @@ Without `--json`, commands use human mode: concise terminal-oriented summaries m
 | ------------------ | ------------------------------------------------- |
 | `--json`           | Machine-readable JSON output                      |
 | `--project <path>` | Target a specific Unity project (defaults to cwd) |
+| `--unity <path>`   | Explicit Unity executable for lifecycle commands  |
+| `--bridge-update-policy <mode>` | Outdated bridge handling: `auto`, `warn`, `off` |
 | `--timeout <s>`    | Timeout in seconds (default 30)                   |
 | `--verbose`        | Extra diagnostic output                           |
 
@@ -84,6 +93,9 @@ Use the `[ID]` numbers from the output in subsequent `object` and `prefab` comma
 ## Editor control
 
 ```bash
+ucp editor status      # Show editor runtime state and resolved Unity path
+ucp editor logs        # Tail the stored Unity editor log
+ucp editor ps          # List discovered Unity editor processes
 ucp play              # Enter play mode
 ucp stop              # Exit play mode
 ucp pause             # Toggle pause
@@ -256,6 +268,13 @@ ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTa
 ```
 
 `--filter` uses Unity Test Runner semantics rather than a UCP-defined regex engine. Prefer fully qualified test names when you need precise selection.
+
+## Lifecycle guidance for agents
+
+- Prefer `ucp start` when you need an explicit editor bootstrap step before a larger workflow.
+- Use `ucp connect` when you want UCP to both start Unity if needed and verify that the bridge handshake is live.
+- Use `ucp doctor` first when you suspect the project is pinned to an outdated bridge package.
+- Use `ucp close` when you need a clean editor shutdown after automation.
 
 ## Editor scripting
 

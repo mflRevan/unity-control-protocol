@@ -2,7 +2,7 @@
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.3.1`
+Release: `0.3.2`
 
 ## What ships
 
@@ -72,7 +72,7 @@ Or add this dependency manually:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.1"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.2"
   }
 }
 ```
@@ -82,12 +82,16 @@ Or add this dependency manually:
 ```bash
 cd /path/to/MyUnityProject
 ucp doctor
+ucp start
 ucp connect
 ucp snapshot
 ucp play
 ucp screenshot --output capture.png
 ucp stop
+ucp close
 ```
+
+If UCP cannot locate Unity automatically, pass `--unity <path>` or set `UCP_UNITY`.
 
 If you need fully unattended runs, keep scene/save prompts disabled by using defaults or explicit flags:
 
@@ -107,6 +111,9 @@ ucp play --no-save --keep-untitled
 - `ucp connect`
 - `ucp install`
 - `ucp uninstall`
+- `ucp bridge status|update`
+- `ucp editor start|close|restart|status|logs|ps`
+- `ucp start|close`
 - `ucp play`
 - `ucp stop`
 - `ucp pause`
@@ -122,7 +129,7 @@ ucp play --no-save --keep-untitled
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.3.1`
+### Advanced editor control in `0.3.2`
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -132,7 +139,9 @@ ucp play --no-save --keep-untitled
 - `ucp build ...`
 - `ucp vcs ...`
 
-All commands support `--json`. Most commands also support `--project`, `--timeout`, and `--verbose`.
+All commands support `--json`. Most commands also support `--project`, `--unity`, `--bridge-update-policy`, `--timeout`, and `--verbose`.
+
+Bridge-backed commands now auto-start Unity when possible and auto-update stale tracked bridge refs by default. Use `--bridge-update-policy warn` if you want notification-only behavior.
 
 Without `--json`, commands use human mode: concise terminal-oriented summaries meant for people and agent review loops. Broad read commands intentionally truncate in human mode so large scenes, settings blobs, and log searches do not flood the terminal.
 
@@ -140,7 +149,7 @@ Example:
 
 ```bash
 ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.1"}}
+# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.2"}}
 ```
 
 ## Skills and docs
@@ -158,6 +167,7 @@ ucp connect --json
 - The npm package downloads the tagged release asset during `postinstall` and bundles the matching Unity bridge payload into the published package
 - GitHub releases publish bundled CLI archives that include the Unity bridge payload next to the binary
 - `ucp install` (default) pins the Unity bridge package to the matching CLI tag as a tracked dependency
+- `ucp bridge update` re-pins the tracked Unity bridge dependency without requiring a manual manifest edit
 - `ucp install --dev` / `--embedded` / `--bridge-path` are explicit local embedded install modes
 
 ## Development

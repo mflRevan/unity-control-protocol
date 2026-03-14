@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.2] - 2026-03-14
+
+### Added
+
+- Added `editor/quit` so the CLI can request graceful Unity editor shutdown before falling back to OS-level close/terminate behavior.
+
+### Changed
+
+- Bridge server registration now includes editor lifecycle RPC handlers alongside the existing play, compile, scene, asset, and build controllers.
+
 ## [0.3.1] - 2026-03-14
 
 ### Added

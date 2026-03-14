@@ -1,5 +1,4 @@
 use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 use clap::Subcommand;
 use console::style;
@@ -81,10 +80,7 @@ pub enum VcsAction {
 }
 
 pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     match action {
         VcsAction::Info => cmd_info(&mut client, ctx).await,

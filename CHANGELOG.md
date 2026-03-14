@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.2] - 2026-03-14
+
+### Added
+
+- Added first-class Unity editor lifecycle commands: `ucp editor start|close|restart|status|logs|ps` plus top-level `ucp start` and `ucp close` aliases.
+- Added `ucp bridge status` and `ucp bridge update` for explicit bridge dependency inspection and tracked git ref refreshes.
+- Added per-project editor session/log bookkeeping under `.ucp/editor-session.json` and `.ucp/logs/editor.log`.
+
+### Changed
+
+- Bridge-backed CLI commands now auto-start Unity when the target project can be resolved and a Unity executable is available.
+- `ucp doctor` and `ucp connect` now inspect tracked bridge package drift and auto-update stale refs by default (`--bridge-update-policy auto`).
+- Added global lifecycle/config flags for `--unity` and `--bridge-update-policy`.
+- Expanded docs and the primary skill to describe lifecycle management, bridge drift handling, and the new command surface.
+
+### Fixed
+
+- Fixed the bridge lifecycle gap where commands assumed Unity was already running and failed without guiding the user toward launch/configuration.
+- Fixed stale tracked bridge refs on the local dev project by auto-updating `com.ucp.bridge` from `v0.3.0` to `v0.3.1` during doctor validation.
+
+### Validation
+
+- `cargo check --manifest-path cli/Cargo.toml`
+- `cargo test --manifest-path cli/Cargo.toml`
+- Live smoke validation against `unity-project-dev/ucp-dev` confirmed bridge drift detection/update, `start` error handling for missing Unity installs, `close` no-op handling, and doctor reporting.
+
 ## [0.3.1] - 2026-03-14
 
 ### Added

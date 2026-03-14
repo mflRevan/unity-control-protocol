@@ -1,6 +1,6 @@
 [package]
 name = "ucp"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 description = "Unity Control Protocol — CLI for programmatic Unity Editor control"
 license = "MIT"
@@ -35,6 +35,7 @@ directories = "6"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 similar = "2"
+semver = "1"
 
 [profile.release]
 strip = true

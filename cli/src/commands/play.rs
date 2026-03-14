@@ -1,15 +1,10 @@
-use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 use serde_json::Value;
 
 use super::Context;
 
 pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = client.call(method, payload).await?;
     client.close().await;

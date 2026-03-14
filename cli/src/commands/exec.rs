@@ -1,14 +1,9 @@
-use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 
 use super::Context;
 
 pub async fn list(ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = client.call("exec/list", serde_json::json!({})).await?;
     client.close().await;
@@ -32,10 +27,7 @@ pub async fn list(ctx: &Context) -> anyhow::Result<()> {
 }
 
 pub async fn run(name: &str, params: Option<String>, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     if !ctx.json {
         output::print_info(&format!("Running script: {name}"));

@@ -1,5 +1,8 @@
+use crate::bridge_package;
+use crate::client::BridgeClient;
 use crate::config;
 use crate::discovery;
+use crate::editor_runtime;
 use crate::output;
 use console::style;
 
@@ -25,8 +28,89 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         }
     };
 
-    // 3. Bridge status
+    checks.push((
+        "Bridge update policy",
+        true,
+        ctx.bridge_update_policy.to_string(),
+    ));
+
+    // 3. Bridge package + editor status
     if let Some(ref proj) = project {
+        match bridge_package::apply_update_policy(proj, ctx, true).await {
+            Ok(package_outcome) => {
+                let package = package_outcome.status;
+                if package.installed {
+                    checks.push((
+                        "Bridge package",
+                        true,
+                        format!(
+                            "{} ({})",
+                            package
+                                .installed_version
+                                .as_deref()
+                                .unwrap_or("unknown"),
+                            package.source_kind
+                        ),
+                    ));
+                } else {
+                    checks.push(("Bridge package", false, "Not installed".into()));
+                    issues.push("Bridge package not installed -- run `ucp install`".into());
+                }
+
+                if package.outdated {
+                    checks.push((
+                        "Bridge package match",
+                        false,
+                        format!(
+                            "Installed {} behind target {}",
+                            package.installed_version.as_deref().unwrap_or("unknown"),
+                            package.target_version
+                        ),
+                    ));
+                    issues.push("Bridge package reference is behind the CLI version".into());
+                } else if package.installed {
+                    checks.push((
+                        "Bridge package match",
+                        true,
+                        format!("Target {}", package.target_version),
+                    ));
+                }
+            }
+            Err(error) => {
+                checks.push(("Bridge package", false, format!("{error:#}")));
+                issues.push("Failed to inspect bridge package state".into());
+            }
+        }
+
+        let editor = editor_runtime::status(proj, ctx);
+        checks.push((
+            "Editor runtime",
+            editor.running,
+            editor
+                .pid
+                .map(|pid| format!("Running (PID {pid})"))
+                .unwrap_or_else(|| "Not running".into()),
+        ));
+
+        match editor.resolved_unity_path.as_deref() {
+            Some(path) => checks.push(("Unity executable", true, path.to_string())),
+            None => {
+                checks.push((
+                    "Unity executable",
+                    false,
+                    editor
+                        .resolution_error
+                        .clone()
+                        .unwrap_or_else(|| "Not resolved".into()),
+                ));
+                issues.push("Unity executable could not be resolved for this project".into());
+            }
+        }
+
+        if let Some(version) = editor.project_version.as_deref() {
+            checks.push(("Project Unity version", true, version.to_string()));
+        }
+
         match discovery::read_lock_file(proj) {
             Ok(lock) => {
                 checks.push((
@@ -36,6 +120,22 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
                 ));
                 checks.push(("Protocol version", true, lock.protocol_version.clone()));
                 checks.push(("Unity version", true, lock.unity_version.clone()));
+
+                match BridgeClient::connect(&lock).await {
+                    Ok(mut client) => {
+                        if client.handshake().await.is_ok() {
+                            checks.push(("Bridge handshake", true, "Responsive".into()));
+                        } else {
+                            checks.push(("Bridge handshake", false, "Handshake failed".into()));
+                            issues.push("Bridge handshake failed".into());
+                        }
+                        client.close().await;
+                    }
+                    Err(error) => {
+                        checks.push(("Bridge handshake", false, format!("{error}")));
+                        issues.push("Bridge is not accepting connections".into());
+                    }
+                }
 
                 // 4. Check protocol compatibility
                 if lock.protocol_version != config::PROTOCOL_VERSION {
@@ -56,18 +156,6 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
             Err(e) => {
                 checks.push(("Bridge", false, format!("{e}")));
                 issues.push("Bridge not running".into());
-            }
-        }
-
-        // 5. Package installed?
-        let manifest = proj.join("Packages").join("manifest.json");
-        if manifest.exists() {
-            let content = std::fs::read_to_string(&manifest).unwrap_or_default();
-            if content.contains("com.ucp.bridge") {
-                checks.push(("Package installed", true, "com.ucp.bridge".into()));
-            } else {
-                checks.push(("Package installed", false, "Not found in manifest.json".into()));
-                issues.push("Bridge package not installed -- run `ucp install`".into());
             }
         }
     }

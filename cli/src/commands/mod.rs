@@ -1,8 +1,10 @@
 pub mod asset;
+pub mod bridge;
 pub mod build;
 pub mod compile;
 pub mod connect;
 pub mod doctor;
+pub mod editor;
 pub mod exec;
 pub mod files;
 pub mod install;
@@ -18,17 +20,27 @@ pub mod snapshot;
 pub mod tests;
 pub mod vcs;
 
+use crate::bridge_lifecycle::{self, WaitMode, WaitStatus};
+use crate::bridge_package;
+use crate::client::BridgeClient;
+use crate::config::{self, LockFile};
+use crate::discovery;
+use crate::editor_runtime;
+use crate::output;
 use clap::Subcommand;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Context {
     pub project: Option<String>,
     #[allow(dead_code)]
     pub port: Option<u16>,
+    pub unity: Option<String>,
     pub json: bool,
     pub timeout: u64,
     #[allow(dead_code)]
     pub verbose: bool,
+    pub bridge_update_policy: config::BridgeUpdatePolicy,
 }
 
 #[derive(Subcommand)]
@@ -65,6 +77,20 @@ pub enum Command {
     Doctor,
     /// Test connection to the bridge
     Connect,
+    /// Manage the Unity editor process lifecycle
+    Editor {
+        #[command(subcommand)]
+        action: editor::EditorAction,
+    },
+    /// Update or inspect the UCP bridge package reference
+    Bridge {
+        #[command(subcommand)]
+        action: bridge::BridgeAction,
+    },
+    /// Start the Unity editor for the detected project
+    Start,
+    /// Close the Unity editor for the detected project
+    Close,
     /// Enter play mode
     Play {
         /// Do not auto-save dirty scenes before entering play mode
@@ -229,6 +255,84 @@ pub enum ExecAction {
     },
 }
 
+pub fn resolve_project_path(ctx: &Context) -> anyhow::Result<PathBuf> {
+    Ok(discovery::resolve_project(ctx.project.as_deref())?)
+}
+
+pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile)> {
+    let project = resolve_project_path(ctx)?;
+    let _ = bridge_package::apply_update_policy(&project, ctx, true).await?;
+
+    let previous_lock = discovery::read_lock_file(&project).ok();
+    let start_outcome = editor_runtime::ensure_editor_running(&project, ctx).await?;
+    let mut lock = discovery::read_lock_file(&project).ok();
+
+    if start_outcome.started || lock.is_none() {
+        if !ctx.json {
+            output::print_info("Waiting for Unity bridge...");
+        }
+
+        let wait_outcome = bridge_lifecycle::wait_for_bridge(
+            &project,
+            previous_lock.as_ref(),
+            ctx.timeout.max(90),
+            if previous_lock.is_some() {
+                WaitMode::RestartOptional
+            } else {
+                WaitMode::FirstAvailable
+            },
+        )
+        .await?;
+
+        if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
+            anyhow::bail!(
+                "Unity editor is not running for {}",
+                project.display()
+            );
+        }
+
+        lock = Some(discovery::read_lock_file(&project)?);
+    }
+
+    let lock = match lock {
+        Some(lock) => lock,
+        None => discovery::read_lock_file(&project)?,
+    };
+
+    Ok((project, lock))
+}
+
+pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile, BridgeClient)> {
+    let (project, lock) = ensure_bridge_ready(ctx).await?;
+
+    if let Ok(mut client) = BridgeClient::connect(&lock).await {
+        if client.handshake().await.is_ok() {
+            return Ok((project, lock, client));
+        }
+        client.close().await;
+    }
+
+    let wait_outcome = bridge_lifecycle::wait_for_bridge(
+        &project,
+        Some(&lock),
+        ctx.timeout.max(90),
+        WaitMode::RestartOptional,
+    )
+    .await?;
+
+    if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
+        anyhow::bail!(
+            "Unity editor exited before the bridge became available for {}",
+            project.display()
+        );
+    }
+
+    let lock = discovery::read_lock_file(&project)?;
+    let mut client = BridgeClient::connect(&lock).await?;
+    client.handshake().await?;
+    Ok((project, lock, client))
+}
+
 pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
     match cmd {
         Command::Install {
@@ -255,6 +359,10 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Uninstall => install::uninstall(&ctx).await,
         Command::Doctor => doctor::run(&ctx).await,
         Command::Connect => connect::run(&ctx).await,
+        Command::Editor { action } => editor::run(action, &ctx).await,
+        Command::Bridge { action } => bridge::run(action, &ctx).await,
+        Command::Start => editor::run(editor::EditorAction::Start, &ctx).await,
+        Command::Close => editor::run(editor::EditorAction::Close { force: false }, &ctx).await,
         Command::Play {
             no_save,
             keep_untitled,

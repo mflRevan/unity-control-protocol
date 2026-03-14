@@ -1,7 +1,16 @@
 use crate::config::{self, LockFile};
 use crate::error::UcpError;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UnityEditorProcess {
+    pub pid: u32,
+    pub project_path: PathBuf,
+    pub executable_path: Option<PathBuf>,
+    pub args: Vec<String>,
+}
 
 /// Discover a Unity project by searching upward from `start` for ProjectSettings/.
 pub fn find_unity_project(start: &Path) -> Result<PathBuf, UcpError> {
@@ -60,7 +69,15 @@ pub fn is_unity_editor_running_for_project(project: &Path) -> bool {
 
 pub fn unity_editor_pid_for_project(project: &Path) -> Option<u32> {
     let normalized_project = normalize_path(project);
+    list_running_unity_editors()
+        .into_iter()
+        .find(|process| normalize_path(&process.project_path) == normalized_project)
+        .map(|process| process.pid)
+}
+
+pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
     let system = System::new_all();
+    let mut processes = Vec::new();
 
     for process in system.processes().values() {
         let args: Vec<String> = process
@@ -73,12 +90,15 @@ pub fn unity_editor_pid_for_project(project: &Path) -> Option<u32> {
             continue;
         };
 
-        if normalize_path(&project_arg) == normalized_project {
-            return Some(process.pid().as_u32());
-        }
+        processes.push(UnityEditorProcess {
+            pid: process.pid().as_u32(),
+            project_path: project_arg,
+            executable_path: process.exe().map(|value| value.to_path_buf()),
+            args,
+        });
     }
 
-    None
+    processes
 }
 
 pub fn focus_unity_editor(project: &Path) -> Result<bool, UcpError> {
@@ -87,6 +107,30 @@ pub fn focus_unity_editor(project: &Path) -> Result<bool, UcpError> {
     };
 
     focus_process_window(pid)
+}
+
+pub fn request_unity_editor_close(project: &Path) -> Result<bool, UcpError> {
+    let Some(pid) = unity_editor_pid_for_project(project) else {
+        return Ok(false);
+    };
+
+    request_process_window_close(pid)
+}
+
+pub fn is_process_running(pid: u32) -> bool {
+    let system = System::new_all();
+    system.process(sysinfo::Pid::from_u32(pid)).is_some()
+}
+
+pub fn terminate_process(pid: u32) -> Result<bool, UcpError> {
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let Some(process) = system.process(sysinfo::Pid::from_u32(pid)) else {
+        return Ok(false);
+    };
+
+    Ok(process.kill())
 }
 
 fn normalize_path(path: &Path) -> String {
@@ -99,7 +143,7 @@ fn normalize_path(path: &Path) -> String {
     }
 }
 
-fn extract_project_path_from_args(args: &[String]) -> Option<PathBuf> {
+pub fn extract_project_path_from_args(args: &[String]) -> Option<PathBuf> {
     for (index, arg) in args.iter().enumerate() {
         if let Some((flag, value)) = arg.split_once('=') {
             if is_project_path_flag(flag) && !value.trim().is_empty() {
@@ -204,8 +248,66 @@ fn focus_process_window(pid: u32) -> Result<bool, UcpError> {
     Ok(status.success())
 }
 
+#[cfg(windows)]
+fn request_process_window_close(pid: u32) -> Result<bool, UcpError> {
+    use std::ffi::c_void;
+
+    type Bool = i32;
+    type Hwnd = *mut c_void;
+    type Lparam = isize;
+
+    #[repr(C)]
+    struct EnumState {
+        target_pid: u32,
+        hwnd: Hwnd,
+    }
+
+    unsafe extern "system" {
+        fn EnumWindows(lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
+        fn IsWindowVisible(hwnd: Hwnd) -> Bool;
+        fn PostMessageW(hwnd: Hwnd, msg: u32, w_param: usize, l_param: isize) -> Bool;
+    }
+
+    extern "system" fn enum_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
+        let state = unsafe { &mut *(l_param as *mut EnumState) };
+        let mut process_id = 0;
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut process_id);
+        }
+
+        if process_id == state.target_pid && unsafe { IsWindowVisible(hwnd) } != 0 {
+            state.hwnd = hwnd;
+            0
+        } else {
+            1
+        }
+    }
+
+    let mut state = EnumState {
+        target_pid: pid,
+        hwnd: std::ptr::null_mut(),
+    };
+
+    unsafe {
+        EnumWindows(enum_windows, &mut state as *mut EnumState as isize);
+    }
+
+    if state.hwnd.is_null() {
+        return Ok(false);
+    }
+
+    const WM_CLOSE: u32 = 0x0010;
+    Ok(unsafe { PostMessageW(state.hwnd, WM_CLOSE, 0, 0) } != 0)
+}
+
 #[cfg(not(windows))]
 fn focus_process_window(_pid: u32) -> Result<bool, UcpError> {
+    Ok(false)
+}
+
+#[cfg(not(windows))]
+fn request_process_window_close(_pid: u32) -> Result<bool, UcpError> {
     Ok(false)
 }
 

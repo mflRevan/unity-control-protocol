@@ -4,21 +4,27 @@
 
 When you run any UCP command, the CLI automatically discovers the running Unity Editor instance:
 
-1. Looks for a `.ucp-lock` file in the project directory
-2. Reads the WebSocket port and authentication token from the lock file
-3. Establishes a WebSocket connection
-4. Performs a handshake to verify protocol version compatibility
+1. Resolves a Unity project from `--project` or the current working directory
+2. Checks the tracked `com.ucp.bridge` dependency and optionally auto-updates it when it is behind the CLI version
+3. Starts Unity automatically when the command requires a live bridge and the editor is not already running
+4. Reads `.ucp/bridge.lock` to discover the WebSocket port and session token
+5. Establishes a WebSocket connection and performs a handshake to verify protocol compatibility
 
 The bridge writes the lock file when Unity opens the project and removes it on exit.
+
+If UCP cannot find a Unity executable automatically, pass `--unity <path>` or set `UCP_UNITY`.
 
 ## Commands
 
 ### `ucp connect`
 
-Test the connection to the Unity bridge. Reports the Unity version, project name, and protocol version.
+Ensure the editor is running, wait for the bridge, and report the Unity version, project name, and protocol version.
 
 ```bash
 ucp connect
+
+# Override the Unity executable explicitly
+ucp --unity "C:/Program Files/Unity/Hub/Editor/6000.3.1f1/Editor/Unity.exe" connect
 ```
 
 **Output:**
@@ -27,8 +33,10 @@ ucp connect
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.3.1
+  | Protocol: 0.3.2
 ```
+
+By default, `ucp connect` auto-updates stale tracked bridge refs before launching Unity. To warn without mutating the project, use `--bridge-update-policy warn`.
 
 ### `ucp install [path]`
 
@@ -50,6 +58,23 @@ By default, `ucp install` writes a tracked git dependency into `Packages/manifes
 
 Default install does not add a local `file:` dependency. Use `--dev`, `--embedded`, or `--bridge-path` for explicit local embedded workflows.
 
+### `ucp bridge status`
+
+Inspect the installed bridge dependency source, version, and whether it matches the current CLI release.
+
+```bash
+ucp bridge status
+```
+
+### `ucp bridge update`
+
+Update the project to the tracked bridge git dependency for the current CLI version.
+
+```bash
+ucp bridge update
+ucp bridge update --no-wait
+```
+
 ### `ucp uninstall`
 
 Remove the UCP bridge package from the current Unity project.
@@ -60,17 +85,32 @@ ucp uninstall
 
 ### `ucp doctor`
 
-Run diagnostic checks on the CLI installation, bridge package, and connection status.
+Run diagnostic checks on the CLI installation, bridge package drift, Unity executable resolution, editor runtime, and bridge connection status.
 
 ```bash
 ucp doctor
 ```
 
+`ucp doctor` also applies the configured bridge update policy. With the default `auto` policy, it will re-pin stale tracked git dependencies before reporting status.
+
+## Related lifecycle commands
+
+Connection commands now integrate with the editor lifecycle surface documented in `docs/commands/editor.md`.
+
+```bash
+ucp start
+ucp close
+ucp editor status
+ucp editor logs --lines 200
+```
+
 ## Connection Troubleshooting
 
-| Issue                | Solution                                                      |
-| -------------------- | ------------------------------------------------------------- |
-| "No lock file found" | Ensure Unity Editor is open with the bridge package installed |
-| "Connection refused" | Unity might be busy compiling — wait and retry                |
-| "Protocol mismatch"  | Update CLI and bridge to matching versions                    |
-| "Token mismatch"     | Restart Unity to regenerate the lock file                     |
+| Issue                       | Solution                                                                 |
+| --------------------------- | ------------------------------------------------------------------------ |
+| "No lock file found"       | Use `ucp start` or `ucp connect`; UCP now launches Unity automatically when it can |
+| "Unity executable"         | Pass `--unity <path>` or set `UCP_UNITY`                                 |
+| "Bridge package is behind" | Use `ucp bridge update` or keep the default `--bridge-update-policy auto` |
+| "Connection refused"       | Unity might still be importing or compiling — wait and retry             |
+| "Protocol mismatch"        | Update CLI and bridge to matching versions                               |
+| "Token mismatch"           | Restart Unity to regenerate the lock file                                |

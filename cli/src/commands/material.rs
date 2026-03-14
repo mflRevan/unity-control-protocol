@@ -1,5 +1,3 @@
-use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 use clap::Subcommand;
 
@@ -66,10 +64,7 @@ pub enum MaterialAction {
 }
 
 pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let result = match &action {
         MaterialAction::GetProperties { path } => {

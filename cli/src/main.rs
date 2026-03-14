@@ -1,8 +1,10 @@
 mod bridge_lifecycle;
+mod bridge_package;
 mod client;
 mod commands;
 mod config;
 mod discovery;
+mod editor_runtime;
 mod error;
 mod output;
 mod protocol;
@@ -29,6 +31,10 @@ struct Cli {
     #[arg(long, global = true, env = "UCP_PORT")]
     port: Option<u16>,
 
+    /// Path to the Unity Editor executable to use when UCP launches the editor
+    #[arg(long, global = true, env = "UCP_UNITY")]
+    unity: Option<String>,
+
     /// Output as JSON
     #[arg(long, global = true)]
     json: bool,
@@ -40,6 +46,10 @@ struct Cli {
     /// Enable verbose logging
     #[arg(long, short, global = true)]
     verbose: bool,
+
+    /// Policy for handling outdated bridge package references
+    #[arg(long, global = true, env = "UCP_BRIDGE_UPDATE_POLICY", value_enum)]
+    bridge_update_policy: Option<config::BridgeUpdatePolicy>,
 }
 
 #[tokio::main]
@@ -71,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let cli = Cli::parse();
+    let cli_settings = config::load_cli_settings();
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -88,9 +99,14 @@ async fn main() -> anyhow::Result<()> {
     let ctx = commands::Context {
         project: cli.project,
         port: cli.port,
+        unity: cli.unity.or(cli_settings.unity_path),
         json: cli.json,
         timeout: cli.timeout,
         verbose: cli.verbose,
+        bridge_update_policy: cli
+            .bridge_update_policy
+            .or(cli_settings.bridge_update_policy)
+            .unwrap_or_default(),
     };
 
     let json_output = ctx.json;

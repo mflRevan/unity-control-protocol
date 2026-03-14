@@ -1,5 +1,4 @@
 use crate::client::BridgeClient;
-use crate::discovery;
 use crate::output;
 use console::style;
 
@@ -21,10 +20,7 @@ pub async fn run(
         anyhow::bail!("--id cannot be combined with --pattern, --before-id, --after-id, or --follow");
     }
 
-    let project = discovery::resolve_project(ctx.project.as_deref())?;
-    let lock = discovery::read_lock_file(&project)?;
-    let mut client = BridgeClient::connect(&lock).await?;
-    client.handshake().await?;
+    let (_, _, mut client) = super::connect_client(ctx).await?;
 
     let wants_live_follow = follow || (id.is_none() && pattern.is_none() && count.is_none() && before_id.is_none() && after_id.is_none());
 
