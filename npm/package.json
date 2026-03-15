@@ -1,7 +1,7 @@
 {
   "name": "@mflrevan/ucp",
   "version": "0.4.0",
-  "description": "Unity Control Protocol — CLI for programmatic Unity Editor control",
+  "description": "Unity Control Protocol - CLI for programmatic Unity Editor control",
   "license": "MIT",
   "repository": {
     "type": "git",

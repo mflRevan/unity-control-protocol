@@ -139,7 +139,7 @@ ucp build start --output "Builds/Windows/Game.exe"
 
 ## Notes
 
-- Build target switching reimports all assets for the new platform — this can be slow
+- Build target switching reimports all assets for the new platform - this can be slow
 - `set-defines` replaces all defines, so include existing ones you want to keep
 - `start` blocks until the build completes (or fails)
 - Build output path is relative to the Unity project root

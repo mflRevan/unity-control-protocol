@@ -20,10 +20,10 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 Available platforms:
 
-- **Windows** — `ucp-x86_64-pc-windows-msvc.zip`
-- **macOS (Intel)** — `ucp-x86_64-apple-darwin.tar.gz`
-- **macOS (Apple Silicon)** — `ucp-aarch64-apple-darwin.tar.gz`
-- **Linux** — `ucp-x86_64-unknown-linux-gnu.tar.gz`
+- **Windows** - `ucp-x86_64-pc-windows-msvc.zip`
+- **macOS (Intel)** - `ucp-x86_64-apple-darwin.tar.gz`
+- **macOS (Apple Silicon)** - `ucp-aarch64-apple-darwin.tar.gz`
+- **Linux** - `ucp-x86_64-unknown-linux-gnu.tar.gz`
 
 ## Install the Bridge
 
@@ -73,6 +73,6 @@ This checks that the CLI is installed, the bridge package is present, and Unity 
 
 ## System Requirements
 
-- **Unity** — 2021.3 LTS or newer (tested up to Unity 6)
-- **Node.js** — 16+ (for npm installation only)
-- **OS** — Windows 10+, macOS 12+, or Linux (x64)
+- **Unity** - 2021.3 LTS or newer (tested up to Unity 6)
+- **Node.js** - 16+ (for npm installation only)
+- **OS** - Windows 10+, macOS 12+, or Linux (x64)

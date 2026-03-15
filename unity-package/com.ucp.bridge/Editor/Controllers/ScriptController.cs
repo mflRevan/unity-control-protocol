@@ -39,7 +39,7 @@ namespace UCP.Bridge
                 }
                 catch (System.Reflection.ReflectionTypeLoadException)
                 {
-                    // Some assemblies can't be scanned — skip silently
+                    // Some assemblies can't be scanned - skip silently
                 }
             }
 

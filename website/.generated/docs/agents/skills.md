@@ -4,15 +4,15 @@ UCP ships with [Agent Skills](https://agentskills.io)-compatible skill files tha
 
 ## What are Agent Skills?
 
-Agent Skills is a standardized format for packaging tool-specific instructions that AI agents can discover and load on demand. When an agent encounters a task involving Unity — such as modifying a scene, tweaking a material, or running a build — it activates the UCP skill and gains detailed knowledge of every available command, flag, and workflow.
+Agent Skills is a standardized format for packaging tool-specific instructions that AI agents can discover and load on demand. When an agent encounters a task involving Unity - such as modifying a scene, tweaking a material, or running a build - it activates the UCP skill and gains detailed knowledge of every available command, flag, and workflow.
 
 ## Where are Agent Skills used?
 
 Agent Skills are supported by a growing number of AI coding tools:
 
-- **Claude Code** — Place the skill directory in your project and Claude will discover it automatically
-- **Cursor / Windsurf / Copilot** — Agents in VS Code-based editors can load skills from the workspace
-- **Custom agent frameworks** — Any agent that follows the Agent Skills specification can consume `SKILL.md` files
+- **Claude Code** - Place the skill directory in your project and Claude will discover it automatically
+- **Cursor / Windsurf / Copilot** - Agents in VS Code-based editors can load skills from the workspace
+- **Custom agent frameworks** - Any agent that follows the Agent Skills specification can consume `SKILL.md` files
 
 ## How to install
 

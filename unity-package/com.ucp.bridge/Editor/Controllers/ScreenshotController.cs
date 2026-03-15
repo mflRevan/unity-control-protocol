@@ -43,7 +43,7 @@ namespace UCP.Bridge
 
             if (png == null || png.Length == 0)
             {
-                throw new Exception("Screenshot capture failed — no camera available");
+                throw new Exception("Screenshot capture failed - no camera available");
             }
 
             string base64 = Convert.ToBase64String(png);

@@ -35,9 +35,9 @@ ucp scene focus --id 46894 --axis 1 0 0
 ucp scene focus --id 46894 --axis 0 0 -1
 ```
 
-| Flag           | Description                                              |
-| -------------- | -------------------------------------------------------- |
-| `--id <id>`    | Target GameObject instance ID                            |
+| Flag           | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--id <id>`    | Target GameObject instance ID                             |
 | `--axis X Y Z` | Optional Scene view alignment direction toward the target |
 
 ### `ucp scene load <path>`

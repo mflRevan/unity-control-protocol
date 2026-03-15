@@ -43,7 +43,7 @@ const features = [
   {
     icon: GitBranch,
     title: 'Version Control',
-    description: 'Full Plastic SCM / Unity VCS integration. Commit, checkout, diff, lock, branch — all from the CLI.',
+    description: 'Full Plastic SCM / Unity VCS integration. Commit, checkout, diff, lock, branch - all from the CLI.',
     accent: 'from-teal-500/20 to-emerald-500/20',
   },
   {
@@ -81,7 +81,7 @@ export function Features() {
               </span>
             </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-              A comprehensive toolkit for programmatic Unity Editor control — from file operations to play mode to
+              A comprehensive toolkit for programmatic Unity Editor control - from file operations to play mode to
               version control.
             </p>
           </div>

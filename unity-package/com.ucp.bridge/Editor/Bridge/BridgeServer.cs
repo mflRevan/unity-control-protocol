@@ -181,7 +181,7 @@ namespace UCP.Bridge
 
             if (!s_running)
             {
-                Debug.LogError("[UCP] Failed to start bridge server — all ports in use");
+                Debug.LogError("[UCP] Failed to start bridge server - all ports in use");
                 return;
             }
 

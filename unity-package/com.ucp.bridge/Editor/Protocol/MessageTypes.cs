@@ -14,7 +14,7 @@ namespace UCP.Bridge
         public string jsonrpc = "2.0";
         public long id;
         public string method;
-        public string @params; // raw JSON string — parsed by handlers
+        public string @params; // raw JSON string - parsed by handlers
     }
 
     [Serializable]

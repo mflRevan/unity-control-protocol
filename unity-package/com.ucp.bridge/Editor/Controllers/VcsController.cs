@@ -9,7 +9,7 @@ namespace UCP.Bridge
 {
     /// <summary>
     /// Version control operations via UnityEditor.VersionControl (Unity VCS / Plastic SCM).
-    /// All commands go through the Editor's VC provider — the active provider must be configured
+    /// All commands go through the Editor's VC provider - the active provider must be configured
     /// in Unity's Project Settings > Version Control.
     /// </summary>
     public static class VcsController
@@ -348,7 +348,7 @@ namespace UCP.Bridge
             }
             else
             {
-                // Diff specific files — launch diff tool if running interactively
+                // Diff specific files - launch diff tool if running interactively
                 // For CLI, return status info for the requested paths
                 var statusTask = Provider.Status(ToAssetList(paths), true);
                 WaitForTask(statusTask);
@@ -415,7 +415,7 @@ namespace UCP.Bridge
         {
             EnsureVcsActive();
 
-            // Use the cm CLI tool to list branches — Provider API doesn't expose branches directly
+            // Use the cm CLI tool to list branches - Provider API doesn't expose branches directly
             // Fall back to reporting what we can from the provider
             var result = new Dictionary<string, object>
             {

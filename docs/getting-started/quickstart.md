@@ -61,6 +61,6 @@ ucp build targets
 
 ## What's Next?
 
-- [Commands Overview](/docs/commands) — Full reference for every command
-- [Connection](/docs/commands/connection) — How connection and discovery works
-- [Object & Components](/docs/commands/objects) — Inspect and modify GameObjects
+- [Commands Overview](/docs/commands) - Full reference for every command
+- [Connection](/docs/commands/connection) - How connection and discovery works
+- [Object & Components](/docs/commands/objects) - Inspect and modify GameObjects

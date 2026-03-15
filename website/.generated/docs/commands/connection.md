@@ -115,6 +115,6 @@ ucp editor logs --lines 200
 | "Project version not installed" | Inspect `ucp editor status`, then use `--force-unity-version <ver>` only if you accept the upgrade risk |
 | "Bridge package is behind"      | Use `ucp bridge update` or keep the default `--bridge-update-policy auto`                               |
 | "Startup dialog blocked launch" | Retry with `--dialog-policy recover`, `safe-mode`, or `manual` depending on the prompt                  |
-| "Connection refused"            | Unity might still be importing or compiling — wait and retry                                            |
+| "Connection refused"            | Unity might still be importing or compiling - wait and retry                                            |
 | "Protocol mismatch"             | Update CLI and bridge to matching versions                                                              |
 | "Token mismatch"                | Restart Unity to regenerate the lock file                                                               |

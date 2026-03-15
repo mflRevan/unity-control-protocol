@@ -1,7 +1,7 @@
 namespace UCP.Bridge
 {
     /// <summary>
-    /// Interface for UCP scripts — editor automation sequences auto-discovered by the bridge.
+    /// Interface for UCP scripts - editor automation sequences auto-discovered by the bridge.
     /// Implement this interface in any Editor script to make it callable via `ucp exec`.
     ///
     /// Example:
@@ -31,7 +31,7 @@ namespace UCP.Bridge
         /// Execute the script. Runs on Unity's main thread.
         /// </summary>
         /// <param name="paramsJson">Optional JSON string with parameters. Defaults to "{}".</param>
-        /// <returns>Any serializable object — will be returned as JSON to the CLI.</returns>
+        /// <returns>Any serializable object - will be returned as JSON to the CLI.</returns>
         object Execute(string paramsJson);
     }
 }

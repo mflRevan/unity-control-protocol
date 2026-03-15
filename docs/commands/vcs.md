@@ -6,7 +6,7 @@ Full integration with Unity Version Control (Plastic SCM). Manage your workspace
 
 ### `ucp vcs status`
 
-Show working copy status — pending changes, added, deleted, and modified files.
+Show working copy status - pending changes, added, deleted, and modified files.
 
 ```bash
 ucp vcs status

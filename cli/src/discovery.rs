@@ -55,7 +55,7 @@ pub fn read_lock_file(project: &Path) -> Result<LockFile, UcpError> {
     let sys = System::new_all();
     let pid = sysinfo::Pid::from_u32(lock.pid);
     if sys.process(pid).is_none() {
-        // Stale lock file — clean it up
+        // Stale lock file - clean it up
         let _ = std::fs::remove_file(&path);
         return Err(UcpError::BridgeNotRunning);
     }

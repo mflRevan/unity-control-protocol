@@ -196,7 +196,7 @@ function CodeFence({ className, children }: { className?: string; children?: Rea
 
 export const markdownComponents: Components = {
   code({ children, ...props }) {
-    // Inline code only — block code is handled by `pre`
+    // Inline code only - block code is handled by `pre`
     return <code {...props}>{children}</code>;
   },
   pre({ children }) {
