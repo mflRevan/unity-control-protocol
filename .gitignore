@@ -31,3 +31,4 @@ docs/qa/
 test_*.py
 .vercel
 .env*.local
+.venv
