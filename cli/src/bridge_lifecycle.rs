@@ -42,7 +42,7 @@ pub async fn wait_for_bridge(
         });
     }
 
-    let max_wait = timeout_secs.max(90);
+    let max_wait = timeout_secs.max(5);
     let stable_after = Duration::from_secs(8);
     let start = Instant::now();
     let previous_token = previous_lock.map(|lock| lock.token.as_str());

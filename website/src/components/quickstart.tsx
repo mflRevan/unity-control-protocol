@@ -25,11 +25,12 @@ ucp install`,
     title: 'Connect & Automate',
     description: 'With Unity open, connect and start controlling the editor programmatically.',
     code: `ucp connect                    # verify connection
-ucp snapshot                   # capture scene hierarchy
-ucp write-file Assets/S.cs    # write project files
-ucp play                      # enter play mode
-ucp screenshot -o capture.png # grab screenshots
-ucp vcs commit -m "update"    # commit via VCS`,
+ucp scene snapshot             # capture scene hierarchy
+ucp scene focus --id 46894 --axis 1 0 0
+ucp compile                    # import workspace edits
+ucp play                       # enter play mode
+ucp screenshot -o capture.png  # grab screenshots
+ucp vcs commit -m "update"     # commit via VCS`,
     filename: 'terminal',
     icon: Rocket,
   },

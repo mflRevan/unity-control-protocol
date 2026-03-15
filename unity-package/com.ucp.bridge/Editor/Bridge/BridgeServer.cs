@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.3.3";
+        private const string ProtocolVersion = "0.4.0";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;

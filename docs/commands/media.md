@@ -8,6 +8,16 @@ Capture visual output and inspect Unity console logs.
 
 Capture a screenshot of the game or scene view.
 
+For in-scene greybox work, the recommended loop is:
+
+```bash
+ucp scene focus --id <instanceId> --axis 1 0 0
+ucp screenshot --view scene -o scene-iteration.png
+ucp object set-property --id <instanceId> --component Transform --property m_LocalPosition --value "[x,y,z]"
+ucp scene focus --id <instanceId> --axis 0 0 -1
+ucp screenshot --view scene -o scene-iteration-2.png
+```
+
 ```bash
 # Save to file
 ucp screenshot -o capture.png

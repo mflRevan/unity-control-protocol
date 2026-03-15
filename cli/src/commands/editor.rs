@@ -10,8 +10,8 @@ use super::{Context, resolve_project_path};
 
 #[derive(Subcommand)]
 pub enum EditorAction {
-    /// Start the Unity editor and wait for the bridge
-    Start,
+    /// Open the Unity editor and wait for the bridge
+    Open,
     /// Close the Unity editor for the project
     Close {
         /// Force kill the editor if graceful shutdown times out
@@ -39,7 +39,7 @@ pub enum EditorAction {
 pub async fn run(action: EditorAction, ctx: &Context) -> anyhow::Result<()> {
     match action {
         EditorAction::Ps => ps(ctx),
-        EditorAction::Start => start(ctx).await,
+        EditorAction::Open => open(ctx).await,
         EditorAction::Close { force } => close(ctx, force).await,
         EditorAction::Restart { force } => restart(ctx, force).await,
         EditorAction::Status => status(ctx),
@@ -47,7 +47,7 @@ pub async fn run(action: EditorAction, ctx: &Context) -> anyhow::Result<()> {
     }
 }
 
-async fn start(ctx: &Context) -> anyhow::Result<()> {
+async fn open(ctx: &Context) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     let _ = crate::bridge_package::apply_update_policy(&project, ctx, true).await?;
     let previous_lock = discovery::read_lock_file(&project).ok();
@@ -56,7 +56,7 @@ async fn start(ctx: &Context) -> anyhow::Result<()> {
     let wait_outcome = bridge_lifecycle::wait_for_bridge(
         &project,
         previous_lock.as_ref(),
-        ctx.timeout.max(90),
+        ctx.timeout,
         ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional
@@ -82,7 +82,7 @@ async fn start(ctx: &Context) -> anyhow::Result<()> {
     if outcome.already_running {
         output::print_success("Unity editor already running");
     } else {
-        output::print_success("Unity editor started");
+        output::print_success("Unity editor opened");
     }
     if let Some(pid) = outcome.pid {
         eprintln!("  PID: {pid}");
@@ -108,7 +108,9 @@ async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if outcome.forced {
+    if !outcome.exited {
+        output::print_warn("Unity editor shutdown requested, but the process is still closing");
+    } else if outcome.forced {
         output::print_warn("Unity editor was force-terminated");
     } else {
         output::print_success("Unity editor closed");
@@ -119,7 +121,7 @@ async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
 async fn restart(ctx: &Context, force: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     let _ = editor_runtime::close_editor(&project, ctx, force).await?;
-    start(ctx).await
+    open(ctx).await
 }
 
 fn status(ctx: &Context) -> anyhow::Result<()> {

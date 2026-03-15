@@ -47,8 +47,8 @@ ucp compile --no-wait
 ## Example Workflow
 
 ```bash
-# Write a script, compile, then test
-ucp write-file Assets/Scripts/Player.cs --content "..." --compile
+# Edit scripts directly in the project, compile, then test
+ucp compile
 ucp play
 ucp screenshot -o test.png
 ucp stop

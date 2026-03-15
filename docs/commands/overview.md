@@ -40,16 +40,16 @@ When a project declares a Unity version that is not installed, UCP reports the i
 
 ### Editor Lifecycle
 
-| Command              | Description                                                 |
-| -------------------- | ----------------------------------------------------------- |
-| `ucp start`          | Alias for `ucp editor start`                                |
-| `ucp close`          | Alias for `ucp editor close`                                |
-| `ucp editor start`   | Launch Unity for the target project and wait for the bridge |
-| `ucp editor close`   | Gracefully close the editor, with optional force fallback   |
-| `ucp editor restart` | Restart the editor for the target project                   |
+| Command              | Description                                                                    |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `ucp open`           | Alias for `ucp editor open`                                                    |
+| `ucp close`          | Alias for `ucp editor close`                                                   |
+| `ucp editor open`    | Launch Unity for the target project and wait for the bridge                    |
+| `ucp editor close`   | Gracefully close the editor, with optional force fallback                      |
+| `ucp editor restart` | Restart the editor for the target project                                      |
 | `ucp editor status`  | Show runtime state, resolved Unity path, version diagnostics, and log location |
-| `ucp editor logs`    | Read the editor log captured under `.ucp/logs/`             |
-| `ucp editor ps`      | List Unity editor processes discovered by UCP               |
+| `ucp editor logs`    | Read the editor log captured under `.ucp/logs/`                                |
+| `ucp editor ps`      | List Unity editor processes discovered by UCP                                  |
 
 ### Editor Control
 
@@ -62,20 +62,21 @@ When a project declares a Unity version that is not installed, UCP reports the i
 
 ### Scene Management
 
-| Command                             | Description                                                    |
-| ----------------------------------- | -------------------------------------------------------------- |
-| `ucp scene list`                    | List all scenes in the project                                 |
-| `ucp scene active`                  | Get the active scene                                           |
-| `ucp scene load <path>`             | Load a scene                                                   |
-| `ucp snapshot [--filter] [--depth]` | Capture a shallow hierarchy snapshot (root objects by default) |
+| Command                                   | Description                                                    |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `ucp scene list`                          | List all scenes in the project                                 |
+| `ucp scene active`                        | Get the active scene                                           |
+| `ucp scene focus --id <id>`               | Focus the Scene view camera on a GameObject                    |
+| `ucp scene load <path>`                   | Load a scene                                                   |
+| `ucp scene snapshot [--filter] [--depth]` | Capture a shallow hierarchy snapshot (root objects by default) |
 
 ### File Operations
 
-| Command                 | Description                     |
-| ----------------------- | ------------------------------- |
-| `ucp read-file <path>`  | Read a project file             |
-| `ucp write-file <path>` | Write content to a project file |
-| `ucp patch-file <path>` | Find and replace in a file      |
+| Command                  | Description                          |
+| ------------------------ | ------------------------------------ |
+| `ucp files read <path>`  | Read a project file through the bridge |
+| `ucp files write <path>` | Write a project file through the bridge |
+| `ucp files patch <path>` | Patch a project file through the bridge |
 
 ### Media
 

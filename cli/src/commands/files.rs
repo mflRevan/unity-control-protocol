@@ -1,6 +1,55 @@
 use crate::output;
-use super::Context;
+use clap::Subcommand;
+
 use super::compile;
+use super::Context;
+
+#[derive(Subcommand)]
+pub enum FilesAction {
+    /// Read a project file
+    Read {
+        /// File path relative to project root
+        path: String,
+    },
+    /// Write content to a project file
+    Write {
+        /// File path relative to project root
+        path: String,
+        /// File content (reads from stdin if omitted)
+        #[arg(long)]
+        content: Option<String>,
+        /// Trigger recompilation after write and wait for it to finish
+        #[arg(long)]
+        compile: bool,
+    },
+    /// Apply a find/replace patch to a project file
+    Patch {
+        /// File path relative to project root
+        path: String,
+        /// Text to find
+        #[arg(long)]
+        find: Option<String>,
+        /// Text to replace with
+        #[arg(long)]
+        replace: Option<String>,
+    },
+}
+
+pub async fn run(action: FilesAction, ctx: &Context) -> anyhow::Result<()> {
+    match action {
+        FilesAction::Read { path } => read(&path, ctx).await,
+        FilesAction::Write {
+            path,
+            content,
+            compile,
+        } => write(&path, content, compile, ctx).await,
+        FilesAction::Patch {
+            path,
+            find,
+            replace,
+        } => patch(&path, find, replace, ctx).await,
+    }
+}
 
 pub async fn read(path: &str, ctx: &Context) -> anyhow::Result<()> {
     let (_, _, mut client) = super::connect_client(ctx).await?;
@@ -54,7 +103,7 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
 }
 
 pub async fn patch(path: &str, find: Option<String>, replace: Option<String>, ctx: &Context) -> anyhow::Result<()> {
-    let find = find.ok_or_else(|| anyhow::anyhow!("--find is required for patch-file"))?;
+    let find = find.ok_or_else(|| anyhow::anyhow!("--find is required for files patch"))?;
     let replace = replace.unwrap_or_default();
 
     let (_, _, mut client) = super::connect_client(ctx).await?;

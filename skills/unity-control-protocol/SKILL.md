@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.3.3'
+  version: '0.4.0'
 ---
 
 # Unity Control Protocol (UCP)
@@ -36,7 +36,7 @@ Always verify or bootstrap the bridge before issuing commands.
 
 ```bash
 ucp doctor                  # Health check
-ucp start                   # Launch Unity and wait for the bridge
+ucp open                    # Launch Unity and wait for the bridge
 ucp connect                 # Verify live connection
 ucp bridge status           # Inspect bridge ref/version drift
 ucp bridge update           # Re-pin the tracked bridge dependency to this CLI version
@@ -64,22 +64,24 @@ Without `--json`, commands use human mode: concise terminal-oriented summaries m
 
 ## Global flags
 
-| Flag                            | Purpose                                           |
-| ------------------------------- | ------------------------------------------------- |
-| `--json`                        | Machine-readable JSON output                      |
-| `--project <path>`              | Target a specific Unity project (defaults to cwd) |
-| `--unity <path>`                | Explicit Unity executable for lifecycle commands  |
-| `--force-unity-version <ver>`   | Force a specific installed Unity editor version   |
-| `--bridge-update-policy <mode>` | Outdated bridge handling: `auto`, `warn`, `off`   |
+| Flag                            | Purpose                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `--json`                        | Machine-readable JSON output                                                          |
+| `--project <path>`              | Target a specific Unity project (defaults to cwd)                                     |
+| `--unity <path>`                | Explicit Unity executable for lifecycle commands                                      |
+| `--force-unity-version <ver>`   | Force a specific installed Unity editor version                                       |
+| `--bridge-update-policy <mode>` | Outdated bridge handling: `auto`, `warn`, `off`                                       |
 | `--dialog-policy <mode>`        | Startup dialog handling: `auto`, `manual`, `ignore`, `recover`, `safe-mode`, `cancel` |
-| `--timeout <s>`                 | Timeout in seconds (default 30)                   |
-| `--verbose`                     | Extra diagnostic output                           |
+| `--timeout <s>`                 | Timeout in seconds (default 30)                                                       |
+| `--verbose`                     | Extra diagnostic output                                                               |
 
 ## Scene management
 
 ```bash
 ucp scene list                              # All scenes in the project
 ucp scene active                            # Currently loaded scene
+ucp scene focus --id 46894 --axis 1 0 0              # Align the Scene view camera to a simple axis for repeatable screenshots
+ucp scene focus --id 46894 --axis 0 0 -1             # Negative axes work too
 ucp scene load Assets/Scenes/Level1.unity   # Load a scene
 ```
 
@@ -88,13 +90,13 @@ ucp scene load Assets/Scenes/Level1.unity   # Load a scene
 Run a snapshot before any GameObject command to discover instance IDs.
 
 ```bash
-ucp snapshot                        # Root objects only, with lean metadata
-ucp snapshot --filter "Player"      # Filter by name
-ucp snapshot --depth 2              # Limit depth
-ucp snapshot --json                 # JSON for parsing
+ucp scene snapshot                  # Root objects only, with lean metadata
+ucp scene snapshot --filter "Player" # Filter by name
+ucp scene snapshot --depth 2        # Limit depth
+ucp scene snapshot --json           # JSON for parsing
 ```
 
-Use the `[ID]` numbers from the output in subsequent `object` and `prefab` commands. Treat instance IDs as short-lived editor handles and refresh them with `ucp snapshot` after compilation, domain reloads, package refreshes, scene loads, or test runs.
+Use the `[ID]` numbers from the output in subsequent `object` and `prefab` commands. Treat instance IDs as short-lived editor handles and refresh them with `ucp scene snapshot` after compilation, domain reloads, package refreshes, scene loads, or test runs.
 
 ## Editor control
 
@@ -109,17 +111,13 @@ ucp compile           # Trigger script recompilation (blocks until done)
 ucp compile --no-wait # Fire and forget
 ```
 
-## File operations
+Prefer normal project-local file edits when the agent already has workspace access. Use `ucp compile` to import those changes. Use `ucp files ...` when you intentionally want the bridge to perform sandboxed project file I/O.
 
-```bash
-ucp read-file Assets/Scripts/Player.cs
-ucp write-file Assets/Scripts/Config.cs --content "public class Config {}"
-ucp patch-file Assets/Scripts/Player.cs --find "maxHealth = 100" --replace "maxHealth = 200"
-```
+Use `ucp scene focus` plus `ucp screenshot --view scene` for spatial iteration loops, then apply `object set-property`, `material set-property`, or `settings set-lighting` changes and capture again.
 
 ## GameObjects & components
 
-All commands require `--id <instanceID>` from `ucp snapshot`.
+All commands require `--id <instanceID>` from `ucp scene snapshot`.
 
 ```bash
 # Inspect
@@ -277,7 +275,7 @@ ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTa
 
 ## Lifecycle guidance for agents
 
-- Prefer `ucp start` when you need an explicit editor bootstrap step before a larger workflow.
+- Prefer `ucp open` when you need an explicit editor bootstrap step before a larger workflow.
 - Use `ucp connect` when you want UCP to both start Unity if needed and verify that the bridge handshake is live.
 - Use `ucp doctor` first when you suspect the project is pinned to an outdated bridge package.
 - Use `ucp close` when you need a clean editor shutdown after automation.
@@ -312,7 +310,7 @@ ucp vcs branch switch --name "main"
 ### Inspect and tweak a GameObject
 
 ```bash
-ucp snapshot --filter "Player"
+ucp scene snapshot --filter "Player"
 ucp object get-fields --id 46900 --component Rigidbody
 ucp object set-property --id 46900 --component Rigidbody --property m_Mass --value "2.5"
 ```
@@ -337,7 +335,7 @@ ucp build start --output "Builds/Game.exe"
 ### Quick scene audit
 
 ```bash
-ucp snapshot --json > hierarchy.json
+ucp scene snapshot --json > hierarchy.json
 ucp logs --level error
 ucp screenshot
 ```

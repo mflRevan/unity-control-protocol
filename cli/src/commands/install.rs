@@ -274,7 +274,7 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
     let wait_outcome = bridge_lifecycle::wait_for_bridge(
         &project_path,
         previous_lock.as_ref(),
-        ctx.timeout.max(90),
+        ctx.timeout,
         ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional
@@ -600,7 +600,7 @@ async fn run_embedded_local_install(
     let wait_outcome = bridge_lifecycle::wait_for_bridge(
         project_path,
         previous_lock.as_ref(),
-        ctx.timeout.max(90),
+        ctx.timeout,
         ctx.dialog_policy,
         if previous_lock.is_some() {
             WaitMode::RestartOptional

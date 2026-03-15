@@ -24,6 +24,10 @@ function syncDirectory(sourceDir, destinationDir) {
 function copyRecursive(source, destination) {
   const stats = fs.statSync(source);
   if (stats.isDirectory()) {
+    if (path.basename(source) === 'qa' && path.basename(path.dirname(source)) === 'docs') {
+      return;
+    }
+
     fs.mkdirSync(destination, { recursive: true });
     for (const entry of fs.readdirSync(source)) {
       copyRecursive(path.join(source, entry), path.join(destination, entry));

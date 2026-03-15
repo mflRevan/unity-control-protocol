@@ -2,7 +2,7 @@
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.3.3`
+Release: `0.4.0`
 
 ## What ships
 
@@ -72,7 +72,7 @@ Or add this dependency manually:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.3"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.0"
   }
 }
 ```
@@ -82,9 +82,9 @@ Or add this dependency manually:
 ```bash
 cd /path/to/MyUnityProject
 ucp doctor
-ucp start
+ucp open
 ucp connect
-ucp snapshot
+ucp scene snapshot
 ucp play
 ucp screenshot --output capture.png
 ucp stop
@@ -112,8 +112,8 @@ ucp play --no-save --keep-untitled
 - `ucp install`
 - `ucp uninstall`
 - `ucp bridge status|update`
-- `ucp editor start|close|restart|status|logs|ps`
-- `ucp start|close`
+- `ucp editor open|close|restart|status|logs|ps`
+- `ucp open|close`
 - `ucp play`
 - `ucp stop`
 - `ucp pause`
@@ -121,15 +121,14 @@ ucp play --no-save --keep-untitled
 
 ### Scene and file automation
 
-- `ucp scene list|active|load`
-- `ucp snapshot` (defaults to depth `0` and lean object metadata)
-- `ucp read-file|write-file|patch-file`
+- `ucp scene list|active|load|focus|snapshot`
+- `ucp files read|write|patch`
 - `ucp screenshot`
 - `ucp logs`
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.3.3`
+### Advanced editor control in `0.4.0`
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -149,7 +148,7 @@ Example:
 
 ```bash
 ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.3.3"}}
+# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.4.0"}}
 ```
 
 ## Skills and docs

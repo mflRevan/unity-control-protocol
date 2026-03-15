@@ -135,3 +135,73 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_grouped_files_read_command() {
+        let cli = Cli::try_parse_from(["ucp", "files", "read", "Assets/Scripts/Player.cs"])
+            .expect("grouped files read command should parse");
+
+        match cli.command {
+            commands::Command::Files {
+                action: commands::files::FilesAction::Read { path },
+            } => assert_eq!(path, "Assets/Scripts/Player.cs"),
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_scene_snapshot_command() {
+        let cli = Cli::try_parse_from(["ucp", "scene", "snapshot", "--depth", "2"])
+            .expect("scene snapshot command should parse");
+
+        match cli.command {
+            commands::Command::Scene {
+                action: commands::scene::SceneAction::Snapshot { filter, depth },
+            } => {
+                assert!(filter.is_none());
+                assert_eq!(depth, 2);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_scene_focus_command_with_axis() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "scene",
+            "focus",
+            "--id",
+            "-42",
+            "--axis",
+            "1",
+            "0.5",
+            "-1",
+        ])
+        .expect("scene focus command should parse");
+
+        match cli.command {
+            commands::Command::Scene {
+                action: commands::scene::SceneAction::Focus { id, axis },
+            } => {
+                assert_eq!(id, -42);
+                assert_eq!(axis.unwrap(), vec![1.0, 0.5, -1.0]);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_top_level_open_command() {
+        let cli = Cli::try_parse_from(["ucp", "open"]).expect("open command should parse");
+
+        match cli.command {
+            commands::Command::Open => {}
+            _ => panic!("unexpected command variant"),
+        }
+    }
+}

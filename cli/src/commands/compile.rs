@@ -30,11 +30,18 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
     let wait_outcome = bridge_lifecycle::wait_for_bridge(
         &project,
         Some(&lock),
-        ctx.timeout.max(60),
+        ctx.timeout,
         ctx.dialog_policy,
         WaitMode::RestartOptional,
     )
     .await?;
+
+    if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
+        anyhow::bail!(
+            "Unity editor exited before compilation finished for {}",
+            project.display()
+        );
+    }
 
     if ctx.json {
         output::print_json(&output::success_json(serde_json::json!({

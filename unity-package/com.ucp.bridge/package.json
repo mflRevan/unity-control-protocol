@@ -1,6 +1,6 @@
 {
   "name": "com.ucp.bridge",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "displayName": "Unity Control Protocol Bridge",
   "description": "WebSocket bridge for programmatic Unity Editor control via CLI and AI agents.",
   "unity": "2021.3",

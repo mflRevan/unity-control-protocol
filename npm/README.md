@@ -1,6 +1,6 @@
 # @mflrevan/ucp
 
-Version `0.3.3` of the Unity Control Protocol CLI.
+Version `0.4.0` of the Unity Control Protocol CLI.
 
 This package installs the `ucp` command, downloads the matching published binary for your platform during `postinstall`, and ships the matching Unity bridge payload inside the npm package.
 
@@ -30,7 +30,7 @@ pnpm approve-builds
 cd /path/to/MyUnityProject
 ucp doctor
 ucp connect
-ucp snapshot
+ucp scene snapshot
 ucp object get-fields --id 46894 --component Transform
 ucp asset search -t Material
 ucp build targets
@@ -49,7 +49,7 @@ Or add this to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.3.3"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.0"
   }
 }
 ```

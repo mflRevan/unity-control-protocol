@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2026-03-15
+
+### Added
+
+- Added `scene/focus` so the CLI can align the Unity Scene view to a target object for screenshot-driven iteration.
+- Added smoke coverage for asset refresh after `file/write` and Scene view focus axis handling.
+
+### Changed
+
+- `scene/focus` now exposes the stable axis-alignment workflow only, without public distance overrides.
+
+### Fixed
+
+- Fixed `file/write` and `file/patch` so changes under `Assets/` and `Packages/` trigger a synchronous `AssetDatabase.Refresh`, making newly created scripts and assets available immediately.
+- Fixed Scene view focus behavior and validation coverage so live automation and package smoke tests agree on the resulting alignment.
+
 ## [0.3.3] - 2026-03-14
 
 ### Added

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using UnityEditor;
 using UnityEngine;
 
 namespace UCP.Bridge
@@ -67,6 +68,7 @@ namespace UCP.Bridge
                 Directory.CreateDirectory(dir);
 
             File.WriteAllText(fullPath, contentObj.ToString());
+            RefreshProjectAssets(pathObj.ToString());
 
             return new Dictionary<string, object>
             {
@@ -116,6 +118,7 @@ namespace UCP.Bridge
 
                 var patched = original.Replace(find, replace);
                 File.WriteAllText(fullPath, patched);
+                RefreshProjectAssets(pathObj.ToString());
 
                 return new Dictionary<string, object>
                 {
@@ -125,6 +128,18 @@ namespace UCP.Bridge
             }
 
             throw new ArgumentException("Unsupported patch format. Use {\"find\": \"...\", \"replace\": \"...\"}");
+        }
+
+        private static void RefreshProjectAssets(string relativePath)
+        {
+            var normalized = relativePath.Replace('\\', '/');
+            if (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Assets", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("Packages", StringComparison.OrdinalIgnoreCase))
+            {
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
         }
     }
 }

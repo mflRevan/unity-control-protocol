@@ -90,10 +90,15 @@ pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
             continue;
         };
 
+        let executable_path = process.exe().map(|value| value.to_path_buf());
+        if !is_unity_editor_executable(executable_path.as_deref(), &args) {
+            continue;
+        }
+
         processes.push(UnityEditorProcess {
             pid: process.pid().as_u32(),
             project_path: project_arg,
-            executable_path: process.exe().map(|value| value.to_path_buf()),
+            executable_path,
             args,
         });
     }
@@ -240,6 +245,22 @@ pub fn extract_project_path_from_args(args: &[String]) -> Option<PathBuf> {
 
 fn is_project_path_flag(value: &str) -> bool {
     value.eq_ignore_ascii_case("-projectpath")
+}
+
+fn is_unity_editor_executable(executable_path: Option<&Path>, args: &[String]) -> bool {
+    if let Some(executable_path) = executable_path {
+        if let Some(name) = executable_path.file_name().and_then(|value| value.to_str()) {
+            return is_unity_editor_name(name);
+        }
+    }
+
+    args.first()
+        .and_then(|value| Path::new(value).file_name().and_then(|part| part.to_str()))
+        .is_some_and(is_unity_editor_name)
+}
+
+fn is_unity_editor_name(name: &str) -> bool {
+    name.eq_ignore_ascii_case("Unity.exe") || name.eq_ignore_ascii_case("Unity")
 }
 
 #[cfg(windows)]
@@ -549,9 +570,12 @@ fn request_process_window_close(_pid: u32) -> Result<bool, UcpError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_project_path_from_args, normalize_dialog_label, preferred_dialog_button_label};
+    use super::{
+        extract_project_path_from_args, is_unity_editor_executable, normalize_dialog_label,
+        preferred_dialog_button_label,
+    };
     use crate::config::StartupDialogPolicy;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn extracts_project_path_from_split_flag() {
@@ -608,5 +632,25 @@ mod tests {
             preferred_dialog_button_label(&labels, StartupDialogPolicy::Recover),
             Some("Load Recovery".to_string())
         );
+    }
+
+    #[test]
+    fn excludes_unity_hub_launcher_processes() {
+        let args = vec![
+            "C:/Program Files/Unity Hub/Unity Hub.exe".to_string(),
+            "--editor-path".to_string(),
+            "D:/Unity/Installs/6000.3.1f1/Editor/Unity.exe".to_string(),
+            "-projectPath".to_string(),
+            "D:/Unity/Projects/HijraVR".to_string(),
+        ];
+
+        assert!(!is_unity_editor_executable(
+            Some(Path::new("C:/Program Files/Unity Hub/Unity Hub.exe")),
+            &args,
+        ));
+        assert!(is_unity_editor_executable(
+            Some(Path::new("D:/Unity/Installs/6000.3.1f1/Editor/Unity.exe")),
+            &args,
+        ));
     }
 }

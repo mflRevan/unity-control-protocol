@@ -4,16 +4,16 @@ UCP now manages the Unity Editor process directly instead of assuming Unity is a
 
 ## Commands
 
-### `ucp start`
+### `ucp open`
 
-Alias for `ucp editor start`.
+Alias for `ucp editor open`.
 
 ```bash
-ucp start
-ucp --project /path/to/MyProject start
+ucp open
+ucp --project /path/to/MyProject open
 ```
 
-This launches Unity for the target project, waits for `.ucp/bridge.lock`, and then waits for the bridge handshake to succeed.
+This launches Unity for the target project, waits for `.ucp/bridge.lock`, and then waits for the bridge handshake to succeed. If UCP detects a Unity process for the project without a live bridge, it waits for that instance to either finish starting or exit before launching another one.
 
 ### `ucp close`
 
@@ -24,7 +24,7 @@ ucp close
 ucp editor close --force
 ```
 
-UCP first requests a graceful shutdown through the bridge, then falls back to a window-close request, and finally uses forced termination when `--force` is supplied or graceful shutdown times out.
+UCP first requests a graceful shutdown through the bridge, then falls back to a window-close request, and finally uses forced termination when `--force` is supplied or graceful shutdown times out. If shutdown is still in progress when the timeout expires, the command now reports that the process is still closing instead of claiming success.
 
 ### `ucp editor restart`
 
@@ -76,7 +76,7 @@ If the project's configured Unity version is known but not installed, UCP now fa
 ### Forcing a different Unity version
 
 ```bash
-ucp --force-unity-version 6000.3.1f1 start
+ucp --force-unity-version 6000.3.1f1 open
 ucp --force-unity-version 2023.1.7f1 editor status
 ```
 

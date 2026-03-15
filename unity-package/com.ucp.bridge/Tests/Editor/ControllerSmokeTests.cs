@@ -17,6 +17,7 @@ namespace UCP.Bridge.Tests
         private const string TempPrefabPath = "Assets/UcpControllerSmoke.prefab";
         private const string TempMaterialPath = "Assets/UcpControllerSmoke.mat";
         private const string TempTextPath = "Assets/UcpControllerSmoke.txt";
+        private const string TempScriptPath = "Assets/UcpControllerSmokeComponent.cs";
 
         private CommandRouter _router;
 
@@ -34,12 +35,14 @@ namespace UCP.Bridge.Tests
             PrefabController.Register(_router);
             BuildController.Register(_router);
             EditorSettingsController.Register(_router);
+            SceneController.Register(_router);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             DeleteTempAsset();
             DeleteTempReferenceAsset();
             DeleteTempPrefab();
             DeleteTempMaterial();
             DeleteTempTextFile();
+            DeleteTempScriptFile();
             LogsController.ClearHistoryForTests();
         }
 
@@ -51,6 +54,7 @@ namespace UCP.Bridge.Tests
             DeleteTempPrefab();
             DeleteTempMaterial();
             DeleteTempTextFile();
+            DeleteTempScriptFile();
             LogsController.ClearHistoryForTests();
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
@@ -355,6 +359,72 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void FileController_Write_RefreshesAssetDatabaseForNewAssets()
+        {
+            var write = _router.Dispatch(
+                "file/write",
+                1,
+                "{\"path\":\"Assets/UcpControllerSmokeComponent.cs\",\"content\":\"using UnityEngine; public class UcpControllerSmokeComponent : MonoBehaviour {}\"}"
+            );
+
+            Assert.That(write.error, Is.Null);
+
+            var script = AssetDatabase.LoadAssetAtPath<MonoScript>(TempScriptPath);
+            Assert.That(script, Is.Not.Null);
+            Assert.That(script.name, Is.EqualTo("UcpControllerSmokeComponent"));
+        }
+
+        [Test]
+        public void SceneFocus_WithAxis_AlignsSceneCameraTowardTarget()
+        {
+            var sceneView = EditorWindow.GetWindow<SceneView>();
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "FocusTarget";
+            cube.transform.position = new Vector3(2f, 1f, 3f);
+            cube.transform.localScale = new Vector3(2f, 2f, 2f);
+
+            var response = _router.Dispatch(
+                "scene/focus",
+                1,
+                "{\"instanceId\":" + cube.GetInstanceID() + ",\"axis\":[1,0,1]}"
+            );
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(result["name"].ToString(), Is.EqualTo("FocusTarget"));
+            Assert.That(Selection.activeGameObject, Is.EqualTo(cube));
+
+            var expectedDirection = new Vector3(1f, 0f, 1f).normalized;
+            var axisData = (List<object>)result["axis"];
+            var returnedAxis = new Vector3(
+                System.Convert.ToSingle(axisData[0]),
+                System.Convert.ToSingle(axisData[1]),
+                System.Convert.ToSingle(axisData[2]));
+            var actualForward = sceneView.camera.transform.forward;
+            Assert.That(Vector3.Dot(returnedAxis.normalized, expectedDirection), Is.GreaterThan(0.98f));
+            Assert.That(Mathf.Abs(Vector3.Dot(actualForward.normalized, expectedDirection)), Is.GreaterThan(0.98f));
+            Assert.That(Vector3.Distance(sceneView.pivot, cube.transform.position), Is.LessThan(2f));
+        }
+
+        [Test]
+        public void SceneFocus_RejectsZeroAxisVector()
+        {
+            EditorWindow.GetWindow<SceneView>();
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "ZeroAxisTarget";
+
+            var response = _router.Dispatch(
+                "scene/focus",
+                1,
+                "{\"instanceId\":" + cube.GetInstanceID() + ",\"axis\":[0,0,0]}"
+            );
+
+            Assert.That(response.error, Is.Not.Null);
+            Assert.That(response.error.code, Is.EqualTo(ErrorCodes.InvalidParams));
+        }
+
+        [Test]
         public void MaterialController_SetAndGetFloatProperty_RoundTrips()
         {
             var shader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit");
@@ -528,6 +598,15 @@ namespace UCP.Bridge.Tests
             if (AssetDatabase.LoadMainAssetAtPath(TempTextPath) != null)
             {
                 AssetDatabase.DeleteAsset(TempTextPath);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static void DeleteTempScriptFile()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(TempScriptPath) != null)
+            {
+                AssetDatabase.DeleteAsset(TempScriptPath);
                 AssetDatabase.SaveAssets();
             }
         }

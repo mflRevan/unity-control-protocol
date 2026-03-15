@@ -45,6 +45,7 @@ pub struct EditorCloseOutcome {
     pub graceful: bool,
     pub forced: bool,
     pub via_bridge: bool,
+    pub exited: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,23 +68,37 @@ pub async fn ensure_editor_running(
     project: &Path,
     ctx: &commands::Context,
 ) -> anyhow::Result<EditorStartOutcome> {
-    if let Some(pid) = discovery::unity_editor_pid_for_project(project) {
-        let process = discovery::list_running_unity_editors()
-            .into_iter()
-            .find(|process| process.pid == pid);
+    if let Some(mut pid) = discovery::unity_editor_pid_for_project(project) {
+        let wait_deadline = Instant::now() + Duration::from_secs(ctx.timeout.max(15).min(120));
 
-        let outcome = EditorStartOutcome {
-            started: false,
-            already_running: true,
-            pid: Some(pid),
-            executable_path: process
-                .and_then(|process| process.executable_path)
-                .map(|path| path.display().to_string()),
-            log_path: config::editor_log_path(project).display().to_string(),
-        };
+        loop {
+            if !discovery::is_process_running(pid) {
+                clear_session(project)?;
+                break;
+            }
 
-        persist_session(project, &outcome)?;
-        return Ok(outcome);
+            if bridge_is_available(project).await {
+                let outcome = already_running_outcome(project, pid);
+                persist_session(project, &outcome)?;
+                return Ok(outcome);
+            }
+
+            if Instant::now() >= wait_deadline {
+                anyhow::bail!(
+                    "Unity editor process {pid} for {} is still running without a live bridge. It is likely still closing or stuck. Wait a moment and retry, or run `ucp editor close --force`.",
+                    project.display()
+                );
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+
+            if let Some(current_pid) = discovery::unity_editor_pid_for_project(project) {
+                pid = current_pid;
+            } else {
+                clear_session(project)?;
+                break;
+            }
+        }
     }
 
     start_editor(project, ctx).await
@@ -171,6 +186,7 @@ pub async fn close_editor(
             graceful: false,
             forced: false,
             via_bridge: false,
+            exited: true,
         });
     };
 
@@ -201,6 +217,7 @@ pub async fn close_editor(
                 graceful,
                 forced: false,
                 via_bridge,
+                exited: true,
             });
         }
 
@@ -224,6 +241,7 @@ pub async fn close_editor(
                     graceful,
                     forced: true,
                     via_bridge,
+                    exited: true,
                 });
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -236,6 +254,7 @@ pub async fn close_editor(
         graceful,
         forced,
         via_bridge,
+        exited: false,
     })
 }
 
@@ -546,6 +565,36 @@ fn unity_executable_name() -> &'static str {
 fn ensure_log_dir(project: &Path) -> anyhow::Result<()> {
     fs::create_dir_all(config::editor_logs_dir(project))?;
     Ok(())
+}
+
+fn already_running_outcome(project: &Path, pid: u32) -> EditorStartOutcome {
+    let process = discovery::list_running_unity_editors()
+        .into_iter()
+        .find(|process| process.pid == pid);
+
+    EditorStartOutcome {
+        started: false,
+        already_running: true,
+        pid: Some(pid),
+        executable_path: process
+            .and_then(|process| process.executable_path)
+            .map(|path| path.display().to_string()),
+        log_path: config::editor_log_path(project).display().to_string(),
+    }
+}
+
+async fn bridge_is_available(project: &Path) -> bool {
+    let Ok(lock) = discovery::read_lock_file(project) else {
+        return false;
+    };
+
+    let Ok(mut client) = BridgeClient::connect(&lock).await else {
+        return false;
+    };
+
+    let ready = client.handshake().await.is_ok();
+    client.close().await;
+    ready
 }
 
 fn persist_session(project: &Path, outcome: &EditorStartOutcome) -> anyhow::Result<()> {

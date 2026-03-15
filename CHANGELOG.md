@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.4.0] - 2026-03-15
+
+### Added
+
+- Added grouped `ucp files read|write|patch` commands as the canonical bridge-mediated file workflow.
+- Added `ucp scene snapshot` as the canonical hierarchy snapshot command.
+- Added `ucp scene focus --id <id> [--axis X Y Z]` for repeatable Scene view alignment during screenshot-driven iteration.
+- Added bridge smoke coverage for synchronous asset refresh on file writes and Scene view focus behavior.
+- Added a deterministic roll-a-ball greybox workflow in `unity-project-dev/ucp-dev`, including arena setup automation, runtime scripts, and edit-mode tests.
+
+### Changed
+
+- Renamed the primary lifecycle command from `ucp start` to `ucp open` and removed the old start alias.
+- Removed top-level legacy command aliases for `snapshot`, `read-file`, `write-file`, and `patch-file`; the grouped `scene` and `files` commands are now the only supported surfaces.
+- Simplified `ucp scene focus` to axis-based alignment only, removing distance overrides from the public command surface and docs.
+- Updated the README, command docs, skills, project reference, smoke scripts, QA scripts, and generated website content to match the final command surface.
+- The greybox arena builder now starts the player at center and arranges collectibles in an even circular ring for cleaner scene inspection.
+
+### Fixed
+
+- Fixed a bridge-side asset import gap where file writes and patches updated disk content without refreshing Unity's asset database.
+- Fixed editor lifecycle handling so `close` distinguishes between fully exited and still-closing processes, and `open` no longer misreports a half-closed instance as safely running.
+- Fixed compile waits to fail clearly when the editor disappears instead of hanging behind a stale lifecycle state.
+- Fixed Unity process discovery so Unity Hub launcher processes are no longer mistaken for live editor instances.
+- Fixed the extended QA harness so bridge waits are bounded and visible, and multi-word `ucp files write --content` payloads are passed correctly during stress runs.
+- Fixed the dev-project edit-mode test assembly so editor-only automation types no longer break compilation and script discovery.
+- Fixed scene-focus validation to match Unity SceneView behavior consistently across live automation and smoke tests.
+
+### Validation
+
+- `cargo test --manifest-path cli/Cargo.toml`
+- `./scripts/qa-playground.ps1 -Project unity-project-dev/ucp-dev -TimeoutSeconds 45`
+- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev open`
+- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev compile`
+- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev run-tests --mode edit`
+- `./scripts/smoke-dev.ps1 -Project unity-project-dev/ucp-dev`
+- `npm run build` in `website/`
+
 ## [0.3.3] - 2026-03-14
 
 ### Added

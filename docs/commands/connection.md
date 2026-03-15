@@ -33,7 +33,7 @@ ucp --unity "C:/Program Files/Unity/Hub/Editor/6000.3.1f1/Editor/Unity.exe" conn
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.3.3
+  | Protocol: 0.4.0
 ```
 
 By default, `ucp connect` auto-updates stale tracked bridge refs before launching Unity. To warn without mutating the project, use `--bridge-update-policy warn`.
@@ -100,7 +100,7 @@ ucp doctor
 Connection commands now integrate with the editor lifecycle surface documented in `docs/commands/editor.md`.
 
 ```bash
-ucp start
+ucp open
 ucp close
 ucp editor status
 ucp editor logs --lines 200
@@ -108,13 +108,13 @@ ucp editor logs --lines 200
 
 ## Connection Troubleshooting
 
-| Issue                      | Solution                                                                           |
-| -------------------------- | ---------------------------------------------------------------------------------- |
-| "No lock file found"       | Use `ucp start` or `ucp connect`; UCP now launches Unity automatically when it can |
-| "Unity executable"         | Pass `--unity <path>` or set `UCP_UNITY`                                           |
+| Issue                           | Solution                                                                                                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| "No lock file found"            | Use `ucp open` or `ucp connect`; UCP now launches Unity automatically when it can                       |
+| "Unity executable"              | Pass `--unity <path>` or set `UCP_UNITY`                                                                |
 | "Project version not installed" | Inspect `ucp editor status`, then use `--force-unity-version <ver>` only if you accept the upgrade risk |
-| "Bridge package is behind" | Use `ucp bridge update` or keep the default `--bridge-update-policy auto`          |
-| "Startup dialog blocked launch" | Retry with `--dialog-policy recover`, `safe-mode`, or `manual` depending on the prompt |
-| "Connection refused"       | Unity might still be importing or compiling — wait and retry                       |
-| "Protocol mismatch"        | Update CLI and bridge to matching versions                                         |
-| "Token mismatch"           | Restart Unity to regenerate the lock file                                          |
+| "Bridge package is behind"      | Use `ucp bridge update` or keep the default `--bridge-update-policy auto`                               |
+| "Startup dialog blocked launch" | Retry with `--dialog-policy recover`, `safe-mode`, or `manual` depending on the prompt                  |
+| "Connection refused"            | Unity might still be importing or compiling — wait and retry                                            |
+| "Protocol mismatch"             | Update CLI and bridge to matching versions                                                              |
+| "Token mismatch"                | Restart Unity to regenerate the lock file                                                               |

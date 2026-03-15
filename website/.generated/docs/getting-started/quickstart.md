@@ -26,7 +26,7 @@ Open the project in Unity Editor. The bridge starts automatically.
 ucp connect
 
 # Capture root hierarchy overview
-ucp snapshot
+ucp scene snapshot
 
 # Enter play mode
 ucp play
@@ -34,11 +34,11 @@ ucp play
 # Take a screenshot
 ucp screenshot -o capture.png
 
-# Read a file
-ucp read-file Assets/Scripts/Player.cs
+# Focus the Scene view for spatial iteration
+ucp scene focus --id 46894 --axis 1 0 0
 
-# Write a file
-ucp write-file Assets/Scripts/Config.cs --content "public class Config {}"
+# Edit scripts directly in the project workspace, then import them
+ucp compile
 
 # Read recent logs
 ucp logs --count 10

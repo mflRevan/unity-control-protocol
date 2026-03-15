@@ -20,6 +20,26 @@ Get the currently active scene.
 ucp scene active
 ```
 
+### `ucp scene focus`
+
+Focus the Scene view camera on a GameObject. This is the recommended visual iteration loop for autonomous in-scene work: focus a target, capture a scene screenshot, adjust transforms or lighting, then focus and capture again.
+
+```bash
+# Frame the object with the current Scene view orientation
+ucp scene focus --id 46894
+
+# Align the Scene view to look from the positive X side
+ucp scene focus --id 46894 --axis 1 0 0
+
+# Negative axes are supported too
+ucp scene focus --id 46894 --axis 0 0 -1
+```
+
+| Flag           | Description                                              |
+| -------------- | -------------------------------------------------------- |
+| `--id <id>`    | Target GameObject instance ID                            |
+| `--axis X Y Z` | Optional Scene view alignment direction toward the target |
+
 ### `ucp scene load <path>`
 
 Load a scene by path.
@@ -28,22 +48,22 @@ Load a scene by path.
 ucp scene load Assets/Scenes/Level1.unity
 ```
 
-### `ucp snapshot`
+### `ucp scene snapshot`
 
 Capture a lean hierarchy snapshot of the active scene. By default this returns only root objects with lightweight metadata such as instance ID, name, active state, tags, layers, child counts, and component type names. Use `--depth` to expand into children. Use object-specific commands for full component/property inspection.
 
 ```bash
 # Root objects only (default depth 0)
-ucp snapshot
+ucp scene snapshot
 
 # Filter by name
-ucp snapshot --filter "Player"
+ucp scene snapshot --filter "Player"
 
 # Limit depth
-ucp snapshot --depth 2
+ucp scene snapshot --depth 2
 
 # JSON output for programmatic use
-ucp snapshot --json
+ucp scene snapshot --json
 ```
 
 | Flag                 | Description                            |

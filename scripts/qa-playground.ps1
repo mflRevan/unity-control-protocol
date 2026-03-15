@@ -16,6 +16,7 @@ function Invoke-UcpJson {
 	param(
 		[Parameter(Mandatory = $true)]
 		[string[]]$UcpArgs,
+		[int]$ProcessTimeoutSeconds = 0,
 		[switch]$AllowFailure
 	)
 
@@ -29,9 +30,39 @@ function Invoke-UcpJson {
 		'--json'
 	) + $UcpArgs
 
-	$output = & cargo @command 2>&1
-	$exitCode = $LASTEXITCODE
-	$text = ($output | Out-String).Trim()
+	$effectiveProcessTimeout = if ($ProcessTimeoutSeconds -gt 0) { $ProcessTimeoutSeconds } else { $TimeoutSeconds + 10 }
+	$tempOutput = [System.IO.Path]::GetTempFileName()
+	$tempError = [System.IO.Path]::GetTempFileName()
+
+	try {
+		$process = Start-Process -FilePath 'cargo' -ArgumentList $command -RedirectStandardOutput $tempOutput -RedirectStandardError $tempError -NoNewWindow -PassThru
+		if (-not $process.WaitForExit($effectiveProcessTimeout * 1000)) {
+			try {
+				$process.Kill($true)
+			}
+			catch {
+			}
+
+			$text = ((Get-Content $tempOutput -Raw -ErrorAction SilentlyContinue), (Get-Content $tempError -Raw -ErrorAction SilentlyContinue) -join [Environment]::NewLine).Trim()
+			if (-not $AllowFailure) {
+				throw "ucp command timed out after ${effectiveProcessTimeout}s: $($UcpArgs -join ' ')`n$text"
+			}
+
+			return [pscustomobject]@{
+				ExitCode = 124
+				Json = $null
+				Raw = if ($text) { $text } else { "timed out after ${effectiveProcessTimeout}s" }
+			}
+		}
+
+		$stdout = Get-Content $tempOutput -Raw -ErrorAction SilentlyContinue
+		$stderr = Get-Content $tempError -Raw -ErrorAction SilentlyContinue
+		$text = (($stdout, $stderr) -join [Environment]::NewLine).Trim()
+		$exitCode = $process.ExitCode
+	}
+	finally {
+		Remove-Item $tempOutput, $tempError -Force -ErrorAction SilentlyContinue
+	}
 
 	$json = $null
 	if (-not [string]::IsNullOrWhiteSpace($text)) {
@@ -76,31 +107,45 @@ function Add-Result {
 
 function Wait-BridgeReady {
 	param(
+		[string]$Reason = 'bridge-ready',
 		[int]$MaxAttempts = 60,
 		[int]$DelaySeconds = 2
 	)
 
+	$lastDetail = ''
 	for ($i = 0; $i -lt $MaxAttempts; $i++) {
 		$probe = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
 		if ($probe.ExitCode -eq 0 -and $probe.Json -and $probe.Json.success) {
-			return $true
+			return [pscustomobject]@{
+				Ready = $true
+				Attempts = $i + 1
+				Detail = if ($probe.Raw) { $probe.Raw } else { 'connected' }
+			}
 		}
+		$lastDetail = if ($probe.Raw) { $probe.Raw } else { 'no output' }
+		Write-Host "[WAIT] $Reason attempt $($i + 1)/$MaxAttempts :: $lastDetail" -ForegroundColor Yellow
 		Start-Sleep -Seconds $DelaySeconds
 	}
 
-	return $false
+	return [pscustomobject]@{
+		Ready = $false
+		Attempts = $MaxAttempts
+		Detail = $lastDetail
+	}
 }
 
 function Run-Step {
 	param(
 		[string]$Name,
 		[string[]]$UcpArgs,
+		[int]$ProcessTimeoutSeconds = 0,
 		[scriptblock]$Assert,
 		[switch]$AllowFailure
 	)
 
 	try {
-		$result = Invoke-UcpJson -UcpArgs $UcpArgs -AllowFailure:$AllowFailure
+		Write-Host "[RUN ] $Name :: ucp $($UcpArgs -join ' ')" -ForegroundColor Cyan
+		$result = Invoke-UcpJson -UcpArgs $UcpArgs -ProcessTimeoutSeconds $ProcessTimeoutSeconds -AllowFailure:$AllowFailure
 		$assertResult = & $Assert $result
 		Add-Result -Name $Name -Passed:$assertResult.Passed -Detail $assertResult.Detail
 		return $result
@@ -118,6 +163,11 @@ if (-not (Test-Path (Join-Path $Project 'ProjectSettings/ProjectSettings.asset')
 }
 
 if (-not $SkipInstall) {
+	Run-Step -Name 'preflight-close-force' -UcpArgs @('editor', 'close', '--force') -AllowFailure -Assert {
+		param($r)
+		[pscustomobject]@{ Passed = $true; Detail = if ($r.Raw) { $r.Raw } else { 'no-op' } }
+	} | Out-Null
+
 	Run-Step -Name 'install-dev-no-wait' -UcpArgs @('install', '--dev', '--no-wait') -Assert {
 		param($r)
 		if ($r.ExitCode -ne 0 -or -not $r.Json.success) {
@@ -127,15 +177,30 @@ if (-not $SkipInstall) {
 	} | Out-Null
 }
 
-# Wait for bridge connectivity.
-[void](Wait-BridgeReady -MaxAttempts 90 -DelaySeconds 2)
-
-$connect = Run-Step -Name 'connect' -UcpArgs @('connect') -Assert {
+Run-Step -Name 'open' -UcpArgs @('open') -ProcessTimeoutSeconds ([Math]::Min($TimeoutSeconds, 30)) -AllowFailure -Assert {
 	param($r)
-	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $r.Json.success); Detail = $r.Raw }
+	$passed = ($r.ExitCode -eq 0 -and $r.Json.success) -or ($r.ExitCode -eq 124)
+	$detail = if ($r.ExitCode -eq 124) { "open timed out locally; continuing with bridge probe :: $($r.Raw)" } else { $r.Raw }
+	[pscustomobject]@{ Passed = $passed; Detail = $detail }
+} | Out-Null
+
+$postOpenAttempts = [Math]::Max([int][Math]::Ceiling([double]$TimeoutSeconds / 12.0), 3)
+$connect = Run-Step -Name 'connect' -UcpArgs @('connect') -AllowFailure -Assert {
+	param($r)
+	if ($r.ExitCode -eq 0 -and $r.Json.success) {
+		return [pscustomobject]@{ Passed = $true; Detail = $r.Raw }
+	}
+
+	$wait = Wait-BridgeReady -Reason 'post-open-connect' -MaxAttempts $postOpenAttempts -DelaySeconds 2
+	if (-not $wait.Ready) {
+		return [pscustomobject]@{ Passed = $false; Detail = "timed out waiting for bridge after open ($($wait.Attempts) attempts): $($wait.Detail)" }
+	}
+
+	$retry = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
+	[pscustomobject]@{ Passed = ($retry.ExitCode -eq 0 -and $retry.Json.success); Detail = $retry.Raw }
 }
 
-$snapshot = Run-Step -Name 'snapshot-root' -UcpArgs @('snapshot') -Assert {
+$snapshot = Run-Step -Name 'snapshot-root' -UcpArgs @('scene', 'snapshot') -Assert {
 	param($r)
 	$count = @($r.Json.data.objects).Count
 	[pscustomobject]@{ Passed = ($r.Json.success -and $count -ge 1); Detail = "rootCount=$count" }
@@ -273,23 +338,23 @@ if ($materialSearch -and [int]$materialSearch.Json.data.returned -ge 1) {
 	} | Out-Null
 }
 
-Run-Step -Name 'write-file' -UcpArgs @('write-file', 'Assets/UcpQaFile.txt', '--content', 'alpha smoke file') -Assert {
+Run-Step -Name 'files-write' -UcpArgs @('files', 'write', 'Assets/UcpQaFile.txt', '--content', '"alpha smoke file"') -Assert {
 	param($r)
 	[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
 } | Out-Null
 
-Run-Step -Name 'patch-file' -UcpArgs @('patch-file', 'Assets/UcpQaFile.txt', '--find', 'smoke', '--replace', 'patched') -Assert {
+Run-Step -Name 'files-patch' -UcpArgs @('files', 'patch', 'Assets/UcpQaFile.txt', '--find', 'smoke', '--replace', 'patched') -Assert {
 	param($r)
 	[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
 } | Out-Null
 
-Run-Step -Name 'read-file' -UcpArgs @('read-file', 'Assets/UcpQaFile.txt') -Assert {
+Run-Step -Name 'files-read' -UcpArgs @('files', 'read', 'Assets/UcpQaFile.txt') -Assert {
 	param($r)
 	$content = $r.Json.data.content
 	[pscustomobject]@{ Passed = ($r.Json.success -and $content -match 'patched'); Detail = "content=$content" }
 } | Out-Null
 
-Run-Step -Name 'read-file-path-traversal-rejected' -UcpArgs @('read-file', '../outside.txt') -AllowFailure -Assert {
+Run-Step -Name 'files-read-path-traversal-rejected' -UcpArgs @('files', 'read', '../outside.txt') -AllowFailure -Assert {
 	param($r)
 	$passed = ($r.ExitCode -ne 0) -or ($r.Json -and -not $r.Json.success)
 	[pscustomobject]@{ Passed = $passed; Detail = $r.Raw }
@@ -349,17 +414,18 @@ Run-Step -Name 'screenshot' -UcpArgs @('screenshot', '--output', $screenshotPath
 Run-Step -Name 'compile-no-wait' -UcpArgs @('compile', '--no-wait') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
 Run-Step -Name 'play' -UcpArgs @('play') -AllowFailure -Assert {
 	param($r)
-	$reconnected = Wait-BridgeReady -MaxAttempts 30 -DelaySeconds 2
-	$passed = $reconnected
-	$detail = if ($reconnected) { 'bridge-reconnected-after-play' } else { $r.Raw }
+	$reconnected = Wait-BridgeReady -Reason 'play-domain-reload' -MaxAttempts 15 -DelaySeconds 2
+	$passed = $reconnected.Ready
+	$detail = if ($reconnected.Ready) { 'bridge-reconnected-after-play' } else { "timeout after play: $($reconnected.Detail)" }
 	[pscustomobject]@{ Passed = $passed; Detail = $detail }
 } | Out-Null
 
 Run-Step -Name 'pause' -UcpArgs @('pause') -AllowFailure -Assert {
 	param($r)
 	if (-not ($r.ExitCode -eq 0 -and $r.Json.success)) {
-		if (-not (Wait-BridgeReady -MaxAttempts 30 -DelaySeconds 2)) {
-			return [pscustomobject]@{ Passed = $false; Detail = $r.Raw }
+		$wait = Wait-BridgeReady -Reason 'pause-retry' -MaxAttempts 15 -DelaySeconds 2
+		if (-not $wait.Ready) {
+			return [pscustomobject]@{ Passed = $false; Detail = "timeout before pause retry: $($wait.Detail)" }
 		}
 		$r = Invoke-UcpJson -UcpArgs @('pause') -AllowFailure
 	}
@@ -369,13 +435,14 @@ Run-Step -Name 'pause' -UcpArgs @('pause') -AllowFailure -Assert {
 Run-Step -Name 'stop' -UcpArgs @('stop') -AllowFailure -Assert {
 	param($r)
 	if (-not ($r.ExitCode -eq 0 -and $r.Json.success)) {
-		if (-not (Wait-BridgeReady -MaxAttempts 30 -DelaySeconds 2)) {
-			return [pscustomobject]@{ Passed = $false; Detail = $r.Raw }
+		$wait = Wait-BridgeReady -Reason 'stop-retry' -MaxAttempts 15 -DelaySeconds 2
+		if (-not $wait.Ready) {
+			return [pscustomobject]@{ Passed = $false; Detail = "timeout before stop retry: $($wait.Detail)" }
 		}
 		$r = Invoke-UcpJson -UcpArgs @('stop') -AllowFailure
 	}
-	$ready = Wait-BridgeReady -MaxAttempts 30 -DelaySeconds 2
-	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $r.Json.success -and $ready); Detail = $r.Raw }
+	$ready = Wait-BridgeReady -Reason 'post-stop-stable' -MaxAttempts 15 -DelaySeconds 2
+	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $r.Json.success -and $ready.Ready); Detail = if ($ready.Ready) { $r.Raw } else { "timeout after stop: $($ready.Detail)" } }
 } | Out-Null
 
 Run-Step -Name 'exec-list' -UcpArgs @('exec', 'list') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null

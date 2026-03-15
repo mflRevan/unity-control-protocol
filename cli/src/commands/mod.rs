@@ -89,8 +89,8 @@ pub enum Command {
         #[command(subcommand)]
         action: bridge::BridgeAction,
     },
-    /// Start the Unity editor for the detected project
-    Start,
+    /// Open the Unity editor for the detected project
+    Open,
     /// Close the Unity editor for the detected project
     Close,
     /// Enter play mode
@@ -117,14 +117,10 @@ pub enum Command {
         #[command(subcommand)]
         action: scene::SceneAction,
     },
-    /// Capture a state snapshot
-    Snapshot {
-        /// Filter objects by name pattern
-        #[arg(long)]
-        filter: Option<String>,
-        /// Max hierarchy depth (default: 0, root objects only)
-        #[arg(long, default_value_t = 0)]
-        depth: u32,
+    /// Project file operations
+    Files {
+        #[command(subcommand)]
+        action: files::FilesAction,
     },
     /// Capture a screenshot
     Screenshot {
@@ -173,33 +169,6 @@ pub enum Command {
         /// Filter test names
         #[arg(long)]
         filter: Option<String>,
-    },
-    /// Read a file from the project
-    ReadFile {
-        /// File path relative to project root
-        path: String,
-    },
-    /// Write a file to the project
-    WriteFile {
-        /// File path relative to project root
-        path: String,
-        /// File content (reads from stdin if omitted)
-        #[arg(long)]
-        content: Option<String>,
-        /// Trigger recompilation after write and wait for it to finish
-        #[arg(long)]
-        compile: bool,
-    },
-    /// Apply a find/replace patch to a project file
-    PatchFile {
-        /// File path relative to project root
-        path: String,
-        /// Text to find
-        #[arg(long)]
-        find: Option<String>,
-        /// Text to replace with
-        #[arg(long)]
-        replace: Option<String>,
     },
     /// Execute a UCP script (Playwright-like editor automation)
     Exec {
@@ -277,7 +246,7 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
         let wait_outcome = bridge_lifecycle::wait_for_bridge(
             &project,
             previous_lock.as_ref(),
-            ctx.timeout.max(90),
+            ctx.timeout,
             ctx.dialog_policy,
             if previous_lock.is_some() {
                 WaitMode::RestartOptional
@@ -318,7 +287,7 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
     let wait_outcome = bridge_lifecycle::wait_for_bridge(
         &project,
         Some(&lock),
-        ctx.timeout.max(90),
+        ctx.timeout,
         ctx.dialog_policy,
         WaitMode::RestartOptional,
     )
@@ -365,7 +334,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Connect => connect::run(&ctx).await,
         Command::Editor { action } => editor::run(action, &ctx).await,
         Command::Bridge { action } => bridge::run(action, &ctx).await,
-        Command::Start => editor::run(editor::EditorAction::Start, &ctx).await,
+        Command::Open => editor::run(editor::EditorAction::Open, &ctx).await,
         Command::Close => editor::run(editor::EditorAction::Close { force: false }, &ctx).await,
         Command::Play {
             no_save,
@@ -381,7 +350,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Pause => play::run("pause", serde_json::json!({}), &ctx).await,
         Command::Compile { no_wait } => compile::run(no_wait, &ctx).await,
         Command::Scene { action } => scene::run(action, &ctx).await,
-        Command::Snapshot { filter, depth } => snapshot::run(filter, depth, &ctx).await,
+        Command::Files { action } => files::run(action, &ctx).await,
         Command::Screenshot {
             view,
             width,
@@ -398,9 +367,6 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             follow,
         } => logs::run(level, count, pattern, id, before_id, after_id, follow, &ctx).await,
         Command::RunTests { mode, filter } => tests::run(&mode, filter, &ctx).await,
-        Command::ReadFile { path } => files::read(&path, &ctx).await,
-        Command::WriteFile { path, content, compile } => files::write(&path, content, compile, &ctx).await,
-        Command::PatchFile { path, find, replace } => files::patch(&path, find, replace, &ctx).await,
         Command::Exec { action } => match action {
             ExecAction::List => exec::list(&ctx).await,
             ExecAction::Run { name, params } => exec::run(&name, params, &ctx).await,

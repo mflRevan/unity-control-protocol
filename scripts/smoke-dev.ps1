@@ -31,13 +31,13 @@ if (-not $SkipInstall) {
 
 try {
     Invoke-Ucp editor status
-    Invoke-Ucp --timeout 180 start
+    Invoke-Ucp --timeout 180 open
     Invoke-Ucp doctor
     Invoke-Ucp connect
     Invoke-Ucp --json run-tests
 
     if (-not $SkipSnapshot) {
-        Invoke-Ucp --json snapshot
+        Invoke-Ucp --json scene snapshot
     }
 
     Invoke-Ucp scene active

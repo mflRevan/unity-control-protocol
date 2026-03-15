@@ -24,6 +24,7 @@ Thumbs.db
 
 # Dev artifacts
 unity-project-dev
+docs/qa/
 
 # Test artifacts
 *.png
