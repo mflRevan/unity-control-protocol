@@ -1,4 +1,4 @@
-import { Github, Terminal } from 'lucide-react';
+import { Github } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export function Footer() {
@@ -8,7 +8,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="space-y-3">
             <Link to="/" className="flex items-center gap-2">
-              <Terminal className="h-5 w-5 text-primary" />
+              <img src="/favicon.svg" alt="UCP logo" className="h-5 w-5" />
               <span className="font-bold">UCP</span>
             </Link>
             <p className="text-sm text-muted-foreground">

@@ -1,36 +1,76 @@
-# Unity Control Protocol (UCP)
+<p align="center">
+  <img src="assets/branding/ucp-icon.svg" alt="UCP logo" width="96" />
+</p>
+
+<h1 align="center">Unity Control Protocol</h1>
+
+<p align="center">
+  CLI-first automation for the Unity Editor.
+</p>
+
+<p align="center">
+  <a href="assets/branding/ucp-icon.svg">SVG logo</a>
+  |
+  <a href="assets/branding/ucp-icon-128.png">PNG icon (128)</a>
+  |
+  <a href="assets/branding/ucp-icon-512.png">PNG icon (512)</a>
+  |
+  <a href="https://github.com/mflRevan/unity-control-protocol/releases">Releases</a>
+  |
+  <a href="https://www.npmjs.com/package/@mflrevan/ucp">npm</a>
+</p>
 
 UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
 
-Release: `0.4.0`
+## What UCP is
 
-## What ships
+UCP is split into two parts:
+
+- `ucp`: a Rust CLI for operators, agents, and scripts
+- `com.ucp.bridge`: a Unity Editor package that exposes editor operations over localhost WebSocket JSON-RPC
+
+The bridge writes `.ucp/bridge.lock` in the Unity project root. The CLI reads that lock file, authenticates with a per-session token, and then talks to the editor through the bridge.
+
+Most bridge-backed commands can now auto-start Unity when the project and editor path can be resolved.
+
+## What ships in this repo
 
 - `cli/`: Rust CLI exposed as `ucp`
-- `unity-package/com.ucp.bridge/`: Unity Editor bridge package (`com.ucp.bridge`)
-- `npm/`: npm wrapper that downloads the correct released binary at install time
-- `website/`: Vite/React docs site deployed on Vercel
-- `docs/`: markdown source for the docs site
-- `skills/unity-control-protocol/SKILL.md`: Agent Skills-compatible skill file
+- `unity-package/com.ucp.bridge/`: Unity bridge package
+- `npm/`: npm wrapper that downloads the matching released binary and bundles the bridge payload
+- `docs/`: markdown docs source
+- `website/`: Vite/React docs site built from `docs/` and `skills/`
+- `skills/unity-control-protocol/SKILL.md`: canonical agent skill file
 
-## Architecture
+## Recommended workflow
 
-```text
-Terminal / Agent / CI
-                |
-                v
-         ucp CLI
-                |
-    WebSocket + JSON-RPC 2.0
-                |
-                v
-Unity Bridge package
-                |
-                v
- Unity Editor APIs
+This is the current happy-path workflow for real project use:
+
+```bash
+cd /path/to/MyUnityProject
+ucp install
+ucp open
+ucp connect
+ucp scene snapshot
+ucp scene focus --id 46894 --axis 1 0 0
+
+# edit files locally in your workspace
+ucp compile
+
+ucp play
+ucp screenshot --view scene --output capture.png
+ucp stop
+ucp run-tests --mode edit
+ucp close
 ```
 
-The bridge binds to localhost, writes a lock file in the Unity project, and authenticates the CLI with a per-session token.
+Recommended usage notes:
+
+- Prefer normal workspace file edits plus `ucp compile` for script iteration.
+- Use `ucp files read|write|patch` when you intentionally want bridge-mediated project file I/O.
+- Use `ucp open` when you want an explicit lifecycle step.
+- Use `ucp connect` when you want "make sure Unity is running and verify the bridge is healthy" in one command.
+- Use `ucp scene snapshot` to discover instance IDs, then `ucp scene focus` and `ucp screenshot` for visual iteration loops.
 
 ## Install
 
@@ -53,21 +93,28 @@ pnpm approve-builds
 cargo install --git https://github.com/mflRevan/unity-control-protocol --path cli
 ```
 
-### bridge package
+## Install the Unity bridge
 
-From your Unity project:
+From a Unity project root:
 
 ```bash
 ucp install
 ```
 
-By default, `ucp install` writes a tracked manifest dependency (`com.ucp.bridge` git URL pinned to the CLI version) into `Packages/manifest.json`.
+Default behavior:
 
-Default install does **not** add a local `file:` dependency. Local embedded installs are explicit via `ucp install --dev`, `ucp install --embedded`, or `ucp install --bridge-path <path>`.
+- writes a tracked `com.ucp.bridge` dependency into `Packages/manifest.json`
+- pins that dependency to the matching CLI tag
+- stays non-interactive unless you pass `--confirm`
+- does not inject a local `file:` dependency
 
-`ucp install` is non-interactive by default (no `y/n` prompt). Use `ucp install --confirm` if you want an explicit confirmation step.
+Explicit local bridge development modes:
 
-Or add this dependency manually:
+- `ucp install --dev`
+- `ucp install --embedded`
+- `ucp install --bridge-path <path>`
+
+Manual manifest dependency:
 
 ```json
 {
@@ -77,49 +124,75 @@ Or add this dependency manually:
 }
 ```
 
-## Quick start
+## Lifecycle and bridge behavior
 
-```bash
-cd /path/to/MyUnityProject
-ucp doctor
-ucp open
-ucp connect
-ucp scene snapshot
-ucp play
-ucp screenshot --output capture.png
-ucp stop
-ucp close
-```
+### `ucp open`
 
-If UCP cannot locate Unity automatically, pass `--unity <path>` or set `UCP_UNITY`.
+- explicit editor bootstrap
+- launches Unity for the target project
+- waits for `.ucp/bridge.lock`
+- waits for handshake success
+- will not incorrectly treat a half-closed editor as healthy
 
-If you need fully unattended runs, keep scene/save prompts disabled by using defaults or explicit flags:
+### `ucp connect`
 
-```bash
-ucp scene load Assets/Scenes/SampleScene.unity
-ucp play
-# opt out of auto-save/discard behavior:
-ucp scene load Assets/Scenes/SampleScene.unity --no-save --keep-untitled
-ucp play --no-save --keep-untitled
-```
+- ensures Unity is running
+- waits for the bridge
+- reports Unity version, project name, and protocol version
+- is the simplest “make this project ready for automation” entrypoint
 
-## Command surface
+### `ucp close`
 
-### Core
+- requests graceful shutdown through the bridge first
+- falls back to window-close behavior when needed
+- can force terminate with `ucp editor close --force`
+- now reports when the editor is still closing instead of falsely claiming success
+
+### bridge drift handling
+
+Before bridge-backed commands launch or connect, UCP checks whether the tracked bridge dependency is behind the current CLI version.
+
+- `auto`: update the tracked dependency before launch or connect
+- `warn`: report drift without mutating the project
+- `off`: skip drift handling
+
+Use `--bridge-update-policy warn` if you want notification-only behavior.
+
+### Unity resolution
+
+UCP resolves Unity in this order:
+
+1. `--unity <path>`
+2. `UCP_UNITY`
+3. saved CLI settings
+4. `--force-unity-version <version>`
+5. `ProjectSettings/ProjectVersion.txt`
+6. Unity Hub project metadata
+7. standard and secondary Unity Hub install roots
+8. `Unity.exe` on `PATH`
+
+If the project's configured Unity version is known but not installed, UCP fails instead of silently picking a different editor. Use `--force-unity-version <ver>` only when you explicitly accept that risk.
+
+## Core command surface
+
+### Setup and lifecycle
 
 - `ucp doctor`
-- `ucp connect`
 - `ucp install`
 - `ucp uninstall`
 - `ucp bridge status|update`
+- `ucp connect`
 - `ucp editor open|close|restart|status|logs|ps`
 - `ucp open|close`
+
+### Runtime control
+
 - `ucp play`
 - `ucp stop`
 - `ucp pause`
 - `ucp compile`
 
-### Scene and file automation
+### Scene, files, media, tests, scripts
 
 - `ucp scene list|active|load|focus|snapshot`
 - `ucp files read|write|patch`
@@ -128,7 +201,7 @@ ucp play --no-save --keep-untitled
 - `ucp run-tests`
 - `ucp exec list|run`
 
-### Advanced editor control in `0.4.0`
+### Advanced editor control
 
 - `ucp object ...`
 - `ucp asset ...`
@@ -138,38 +211,47 @@ ucp play --no-save --keep-untitled
 - `ucp build ...`
 - `ucp vcs ...`
 
-All commands support `--json`. Most commands also support `--project`, `--unity`, `--bridge-update-policy`, `--timeout`, and `--verbose`.
+All commands support `--json`. Most also support `--project`, `--unity`, `--bridge-update-policy`, `--dialog-policy`, `--timeout`, and `--verbose`.
 
-Bridge-backed commands now auto-start Unity when possible and auto-update stale tracked bridge refs by default. Use `--bridge-update-policy warn` if you want notification-only behavior.
+## Practical examples
 
-Without `--json`, commands use human mode: concise terminal-oriented summaries meant for people and agent review loops. Broad read commands intentionally truncate in human mode so large scenes, settings blobs, and log searches do not flood the terminal.
-
-Example:
+### Bootstrap and inspect
 
 ```bash
-ucp connect --json
-# {"success":true,"data":{"unityVersion":"6000.3.1f1","projectName":"MyGame","protocolVersion":"0.4.0"}}
+ucp doctor
+ucp connect
+ucp scene snapshot --depth 1
+ucp scene active
 ```
 
-## Skills and docs
+### Visual iteration loop
 
-- Docs site source lives in `docs/` and is rendered by `website/`
-- The docs site includes an `Agents > Skills` page with a live preview and direct download for `SKILL.md`
-- The canonical agent skill lives in `skills/unity-control-protocol/SKILL.md`
+```bash
+ucp scene snapshot --filter "Player"
+ucp scene focus --id 46894 --axis 0 0 -1
+ucp screenshot --view scene --output scene-pass.png
+ucp object set-property --id 46894 --component Transform --property m_LocalPosition --value "[0,1,0]"
+ucp screenshot --view scene --output scene-pass-2.png
+```
 
-## Release flow
+### Local code iteration
 
-- The docs website is deployed on Vercel from the `website/` app, with build-time content sync from `docs/` and `skills/`
-- Pushing a tag matching `v*` runs `.github/workflows/release.yml`
-- The tag workflow builds binaries for Linux, macOS, and Windows
-- The same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
-- The npm package downloads the tagged release asset during `postinstall` and bundles the matching Unity bridge payload into the published package
-- GitHub releases publish bundled CLI archives that include the Unity bridge payload next to the binary
-- `ucp install` (default) pins the Unity bridge package to the matching CLI tag as a tracked dependency
-- `ucp bridge update` re-pins the tracked Unity bridge dependency without requiring a manual manifest edit
-- `ucp install --dev` / `--embedded` / `--bridge-path` are explicit local embedded install modes
+```bash
+# edit files in your editor
+ucp compile
+ucp run-tests --mode edit
+ucp logs --count 20
+```
 
-## Development
+### Buffered or live logs
+
+```bash
+ucp logs --count 10
+ucp logs --pattern "NullReference|Exception" --count 100
+ucp logs --follow --level error
+```
+
+## Development in this repo
 
 ### Local validation
 
@@ -181,41 +263,40 @@ cd website && npm run build
 
 ### Live Unity smoke testing
 
-Install the local bridge package into a real Unity project without touching the released tag-pinned workflow:
+Mount the repo-local bridge into a real Unity project:
 
 ```powershell
 cargo run --manifest-path cli/Cargo.toml -- --project D:/Unity/Projects/MyGame install --dev
 ```
 
-Or use the helper script:
+Or use the helper scripts:
 
 ```powershell
 ./scripts/smoke-dev.ps1 -Project D:/Unity/Projects/MyGame
+./scripts/qa-playground.ps1 -Project unity-project-dev/ucp-dev -TimeoutSeconds 45
 ```
 
-`ucp install` is manifest-first by default. Use `install --dev` to mount the repo-local package source, `install --embedded` to force embedded local mount mode, and `install --bridge-path` to mount another local package source.
+## Release flow
 
-The clean long-term packaging model for UCP is: ship or cache a versioned bridge payload with the CLI, then mount it locally into `Packages/com.ucp.bridge` on demand. That keeps the product centered on the CLI instead of treating the bridge as a repo dependency users have to commit.
+- `version.json` is the metadata source of truth
+- `scripts/sync-version.mjs --check <version>` validates synced version-bearing files
+- pushing a tag matching `v*` runs `.github/workflows/release.yml`
+- the workflow builds Linux, macOS, and Windows binaries
+- the same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
+- released npm packages bundle the bridge payload
+- GitHub release archives include the CLI binary plus `bridge/com.ucp.bridge`
 
-Log inspection now supports both live follow mode and buffered history queries:
-
-```powershell
-ucp logs --follow --level error
-ucp logs --count 10
-ucp logs --pattern "NullReference|Exception" --count 100
-ucp logs --id 42
-```
-
-### Repository map
+## Repository map
 
 ```text
 cli/                              Rust CLI
 unity-package/com.ucp.bridge/     Unity Editor bridge package
 npm/                              npm wrapper and postinstall downloader
-website/                          Docs site
 docs/                             Markdown documentation source
+website/                          Docs site
 skills/                           Agent skill files
-scripts/                          Build helpers
+scripts/                          Validation and build helpers
+assets/branding/                  Shared logo assets
 ```
 
 ## License

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Moon, Sun, Menu, X, Github, Terminal } from 'lucide-react';
+import { Moon, Sun, Menu, X, Github } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useRef } from 'react';
@@ -40,9 +40,12 @@ export function Navbar() {
     >
       <nav className="mx-auto max-w-7xl flex items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-3 group">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-linear-to-br from-primary/18 via-primary/8 to-transparent shadow-[0_12px_30px_-18px_rgba(109,40,217,0.65)] transition-transform duration-300 group-hover:scale-[1.04]">
-            <Terminal className="h-5 w-5 text-primary transition-transform group-hover:scale-110" />
-            <div className="absolute -left-2 top-1/2 hidden -translate-y-1/2 text-primary/70 md:block">&gt;</div>
+          <div className="relative flex h-11 w-11 items-center justify-center transition-transform duration-300 group-hover:scale-[1.04]">
+            <img
+              src="/favicon.svg"
+              alt="UCP logo"
+              className="h-11 w-11 drop-shadow-[0_10px_20px_rgba(109,40,217,0.28)]"
+            />
           </div>
           <div className="leading-none">
             <div className="font-semibold text-[0.72rem] uppercase tracking-[0.34em] text-primary/70">
