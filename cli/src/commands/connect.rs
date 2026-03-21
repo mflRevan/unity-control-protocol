@@ -18,7 +18,11 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
     } else {
         output::print_success("Connected to Unity bridge");
         if let Some(obj) = info.as_object() {
-            let bar = if output::supports_unicode() { "│" } else { "|" };
+            let bar = if output::supports_unicode() {
+                "│"
+            } else {
+                "|"
+            };
             if let Some(v) = obj.get("unityVersion") {
                 eprintln!("  {} Unity {}", style(bar).dim(), v.as_str().unwrap_or("?"));
             }

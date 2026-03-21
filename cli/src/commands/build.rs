@@ -58,7 +58,10 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
         BuildAction::SetScenes { scenes } => {
             let scene_list: Vec<&str> = scenes.split(',').map(|s| s.trim()).collect();
             client
-                .call("build/set-scenes", serde_json::json!({ "scenes": scene_list }))
+                .call(
+                    "build/set-scenes",
+                    serde_json::json!({ "scenes": scene_list }),
+                )
                 .await?
         }
         BuildAction::Start {
@@ -71,9 +74,7 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
             }
             client.call("build/start", params).await?
         }
-        BuildAction::Defines => {
-            client.call("build/defines", serde_json::json!({})).await?
-        }
+        BuildAction::Defines => client.call("build/defines", serde_json::json!({})).await?,
         BuildAction::SetDefines { defines } => {
             client
                 .call(
@@ -91,46 +92,34 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
     } else {
         match &action {
             BuildAction::Targets => {
-                let active = result
-                    .get("active")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let active = result.get("active").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("Active target: {active}"));
                 if let Some(targets) = result.get("targets").and_then(|v| v.as_array()) {
                     let installed: Vec<_> = targets
                         .iter()
                         .filter(|t| {
-                            t.get("installed").and_then(|v| v.as_bool()).unwrap_or(false)
+                            t.get("installed")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false)
                         })
                         .collect();
                     eprintln!("  Installed targets ({}):", installed.len());
                     for t in installed {
                         let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                        let is_active = t
-                            .get("isActive")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
+                        let is_active =
+                            t.get("isActive").and_then(|v| v.as_bool()).unwrap_or(false);
                         let marker = if is_active { " (active)" } else { "" };
                         eprintln!("    {name}{marker}");
                     }
                 }
             }
             BuildAction::ActiveTarget => {
-                let target = result
-                    .get("target")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
-                let group = result
-                    .get("group")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let target = result.get("target").and_then(|v| v.as_str()).unwrap_or("?");
+                let group = result.get("group").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("{target} ({group})"));
             }
             BuildAction::SetTarget { target } => {
-                let status = result
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let status = result.get("status").and_then(|v| v.as_str()).unwrap_or("?");
                 if status == "ok" {
                     output::print_success(&format!("Switched to: {target}"));
                 } else {
@@ -142,10 +131,7 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
                     output::print_success(&format!("{} build scene(s)", scenes.len()));
                     for s in scenes {
                         let path = s.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-                        let enabled = s
-                            .get("enabled")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
+                        let enabled = s.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
                         let marker = if enabled { "+" } else { "-" };
                         eprintln!("  [{marker}] {path}");
                     }
@@ -156,10 +142,7 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success(&format!("Set {count} build scene(s)"));
             }
             BuildAction::Start { .. } => {
-                let build_result = result
-                    .get("result")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let build_result = result.get("result").and_then(|v| v.as_str()).unwrap_or("?");
                 let time = result
                     .get("totalTime")
                     .and_then(|v| v.as_f64())
@@ -168,7 +151,9 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
                     .get("totalErrors")
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0);
-                output::print_success(&format!("Build {build_result} ({time:.1}s, {errors} errors)"));
+                output::print_success(&format!(
+                    "Build {build_result} ({time:.1}s, {errors} errors)"
+                ));
                 if let Some(out) = result.get("outputPath").and_then(|v| v.as_str()) {
                     eprintln!("  Output: {out}");
                 }

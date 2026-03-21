@@ -13,7 +13,11 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
     let mut checks: Vec<(&str, bool, String)> = Vec::new();
 
     // 1. CLI version
-    checks.push(("CLI version", true, format!("v{}", env!("CARGO_PKG_VERSION"))));
+    checks.push((
+        "CLI version",
+        true,
+        format!("v{}", env!("CARGO_PKG_VERSION")),
+    ));
 
     // 2. Project detection
     let project = match discovery::resolve_project(ctx.project.as_deref()) {
@@ -45,10 +49,7 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
                         true,
                         format!(
                             "{} ({})",
-                            package
-                                .installed_version
-                                .as_deref()
-                                .unwrap_or("unknown"),
+                            package.installed_version.as_deref().unwrap_or("unknown"),
                             package.source_kind
                         ),
                     ));
@@ -172,10 +173,18 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         eprintln!();
         for (name, ok, detail) in &checks {
             let icon = if *ok {
-                let sym = if output::supports_unicode() { "✔" } else { "[OK]" };
+                let sym = if output::supports_unicode() {
+                    "✔"
+                } else {
+                    "[OK]"
+                };
                 style(sym).green().bold().to_string()
             } else {
-                let sym = if output::supports_unicode() { "✖" } else { "[ERR]" };
+                let sym = if output::supports_unicode() {
+                    "✖"
+                } else {
+                    "[ERR]"
+                };
                 style(sym).red().bold().to_string()
             };
             eprintln!("  {icon} {}: {}", style(name).bold(), detail);
@@ -187,7 +196,11 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         } else {
             output::print_error(&format!("{} issue(s) found", issues.len()));
             for issue in &issues {
-                let arrow = if output::supports_unicode() { "→" } else { "->" };
+                let arrow = if output::supports_unicode() {
+                    "→"
+                } else {
+                    "->"
+                };
                 eprintln!("    {arrow} {issue}");
             }
         }

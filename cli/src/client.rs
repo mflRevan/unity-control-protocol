@@ -4,8 +4,8 @@ use crate::protocol::{self, RpcNotification, RpcRequest, RpcResponse};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::tungstenite::Message;
 
 static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -62,8 +62,9 @@ impl BridgeClient {
             }
         }
 
-        let response = std::str::from_utf8(&buf[..total])
-            .map_err(|_| UcpError::ConnectionFailed("Invalid UTF-8 in handshake response".into()))?;
+        let response = std::str::from_utf8(&buf[..total]).map_err(|_| {
+            UcpError::ConnectionFailed("Invalid UTF-8 in handshake response".into())
+        })?;
 
         // Validate status line
         if !response.starts_with("HTTP/1.1 101") {
@@ -80,7 +81,10 @@ impl BridgeClient {
             let mut hasher = Sha1::new();
             hasher.update(key.as_bytes());
             hasher.update(magic.as_bytes());
-            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, hasher.finalize())
+            base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                hasher.finalize(),
+            )
         };
 
         let accept_ok = response.lines().any(|line| {
@@ -100,7 +104,12 @@ impl BridgeClient {
         tracing::debug!("WebSocket handshake completed");
 
         // Wrap in WebSocketStream (server=false since we're the client)
-        let ws = WebSocketStream::from_raw_socket(stream, tokio_tungstenite::tungstenite::protocol::Role::Client, None).await;
+        let ws = WebSocketStream::from_raw_socket(
+            stream,
+            tokio_tungstenite::tungstenite::protocol::Role::Client,
+            None,
+        )
+        .await;
         let (write, read) = ws.split();
         Ok(Self {
             write,

@@ -91,9 +91,7 @@ pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
             all,
             keep_local,
         } => cmd_revert(&mut client, paths, all, keep_local, ctx).await,
-        VcsAction::Commit { message, paths } => {
-            cmd_commit(&mut client, &message, paths, ctx).await
-        }
+        VcsAction::Commit { message, paths } => cmd_commit(&mut client, &message, paths, ctx).await,
         VcsAction::Diff { paths } => cmd_diff(&mut client, paths, ctx).await,
         VcsAction::Incoming => cmd_incoming(&mut client, ctx).await,
         VcsAction::Update => cmd_update(&mut client, ctx).await,
@@ -101,9 +99,7 @@ pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
         VcsAction::Lock { paths } => cmd_lock(&mut client, paths, ctx).await,
         VcsAction::Unlock { paths } => cmd_unlock(&mut client, paths, ctx).await,
         VcsAction::History { limit: _ } => cmd_history(&mut client, ctx).await,
-        VcsAction::Resolve { paths, method } => {
-            cmd_resolve(&mut client, paths, &method, ctx).await
-        }
+        VcsAction::Resolve { paths, method } => cmd_resolve(&mut client, paths, &method, ctx).await,
     }?;
 
     client.close().await;
@@ -112,15 +108,16 @@ pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
 
 // ── Individual command implementations ───────────────────────────────
 
-async fn cmd_info(
-    client: &mut BridgeClient,
-    ctx: &Context,
-) -> anyhow::Result<()> {
+async fn cmd_info(client: &mut BridgeClient, ctx: &Context) -> anyhow::Result<()> {
     let result = client.call("vcs/info", serde_json::json!({})).await?;
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let bar = if output::supports_unicode() { "\u{2502}" } else { "|" };
+        let bar = if output::supports_unicode() {
+            "\u{2502}"
+        } else {
+            "|"
+        };
         output::print_success("Version control info");
         if let Some(obj) = result.as_object() {
             for (k, v) in obj {
@@ -148,10 +145,7 @@ async fn cmd_status(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         if count == 0 {
             output::print_success("No pending changes");
         } else {
@@ -177,10 +171,7 @@ async fn cmd_checkout(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         if count == 0 {
             output::print_info("Nothing to checkout");
         } else {
@@ -209,10 +200,7 @@ async fn cmd_revert(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         output::print_success(&format!("Reverted {count} file(s)"));
     }
     Ok(())
@@ -237,10 +225,7 @@ async fn cmd_commit(
             .get("success")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         if success {
             output::print_success(&format!("Committed {count} file(s)"));
         } else {
@@ -278,10 +263,7 @@ async fn cmd_diff(
                 }
             }
         }
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         if count > 0 {
             eprintln!();
             print_asset_list(&result);
@@ -293,18 +275,12 @@ async fn cmd_diff(
     Ok(())
 }
 
-async fn cmd_incoming(
-    client: &mut BridgeClient,
-    ctx: &Context,
-) -> anyhow::Result<()> {
+async fn cmd_incoming(client: &mut BridgeClient, ctx: &Context) -> anyhow::Result<()> {
     let result = client.call("vcs/incoming", serde_json::json!({})).await?;
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         if count == 0 {
             output::print_success("No incoming changes");
         } else {
@@ -315,10 +291,7 @@ async fn cmd_incoming(
     Ok(())
 }
 
-async fn cmd_update(
-    client: &mut BridgeClient,
-    ctx: &Context,
-) -> anyhow::Result<()> {
+async fn cmd_update(client: &mut BridgeClient, ctx: &Context) -> anyhow::Result<()> {
     if !ctx.json {
         output::print_info("Pulling latest changes...");
     }
@@ -326,14 +299,8 @@ async fn cmd_update(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let msg = result
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+        let msg = result.get("message").and_then(|v| v.as_str()).unwrap_or("");
         if count == 0 {
             output::print_success(if msg.is_empty() {
                 "Already up to date"
@@ -347,13 +314,8 @@ async fn cmd_update(
     Ok(())
 }
 
-async fn cmd_branches(
-    client: &mut BridgeClient,
-    ctx: &Context,
-) -> anyhow::Result<()> {
-    let result = client
-        .call("vcs/branches", serde_json::json!({}))
-        .await?;
+async fn cmd_branches(client: &mut BridgeClient, ctx: &Context) -> anyhow::Result<()> {
+    let result = client.call("vcs/branches", serde_json::json!({})).await?;
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
@@ -390,10 +352,7 @@ async fn cmd_lock(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         output::print_success(&format!("Locked {count} file(s)"));
     }
     Ok(())
@@ -410,22 +369,14 @@ async fn cmd_unlock(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         output::print_success(&format!("Unlocked {count} file(s)"));
     }
     Ok(())
 }
 
-async fn cmd_history(
-    client: &mut BridgeClient,
-    ctx: &Context,
-) -> anyhow::Result<()> {
-    let result = client
-        .call("vcs/history", serde_json::json!({}))
-        .await?;
+async fn cmd_history(client: &mut BridgeClient, ctx: &Context) -> anyhow::Result<()> {
+    let result = client.call("vcs/history", serde_json::json!({})).await?;
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
@@ -464,10 +415,7 @@ async fn cmd_resolve(
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let count = result
-            .get("count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
         output::print_success(&format!("Resolved {count} conflict(s)"));
     }
     Ok(())
@@ -480,7 +428,10 @@ fn print_asset_list(result: &serde_json::Value) {
         for a in assets {
             let path = a.get("path").and_then(|v| v.as_str()).unwrap_or("?");
             let state = a.get("state").and_then(|v| v.as_str()).unwrap_or("");
-            let locked = a.get("lockedLocal").and_then(|v| v.as_bool()).unwrap_or(false);
+            let locked = a
+                .get("lockedLocal")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let lock_marker = if locked { " [locked]" } else { "" };
             eprintln!(
                 "  {} {}{}",

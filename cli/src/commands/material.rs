@@ -99,10 +99,7 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
         }
         MaterialAction::Keywords { path } => {
             client
-                .call(
-                    "material/get-keywords",
-                    serde_json::json!({ "path": path }),
-                )
+                .call("material/get-keywords", serde_json::json!({ "path": path }))
                 .await?
         }
         MaterialAction::SetKeyword {
@@ -138,10 +135,7 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
                     .get("material")
                     .and_then(|v| v.as_str())
                     .unwrap_or("?");
-                let shader = result
-                    .get("shader")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let shader = result.get("shader").and_then(|v| v.as_str()).unwrap_or("?");
                 if let Some(props) = result.get("properties").and_then(|v| v.as_array()) {
                     output::print_success(&format!(
                         "{mat_name} ({shader}): {} properties",
@@ -162,11 +156,11 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
                 }
             }
             MaterialAction::GetProperty { property, .. } => {
-                let val = result.get("value").map(|v| v.to_string()).unwrap_or_default();
-                let ptype = result
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let val = result
+                    .get("value")
+                    .map(|v| v.to_string())
+                    .unwrap_or_default();
+                let ptype = result.get("type").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("{property} ({ptype}): {val}"));
             }
             MaterialAction::SetProperty { property, .. } => {
@@ -182,7 +176,9 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
-            MaterialAction::SetKeyword { keyword, enabled, .. } => {
+            MaterialAction::SetKeyword {
+                keyword, enabled, ..
+            } => {
                 let state = if *enabled { "enabled" } else { "disabled" };
                 output::print_success(&format!("Keyword {keyword}: {state}"));
             }

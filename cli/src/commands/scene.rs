@@ -87,14 +87,20 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     output::print_success(&format!("Found {} scene(s)", scenes.len()));
                     for s in scenes {
                         if let Some(path) = s.get("path").and_then(|v| v.as_str()) {
-                            let enabled = s
-                                .get("enabled")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false);
+                            let enabled =
+                                s.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
                             let marker = if enabled {
-                                if output::supports_unicode() { "●" } else { "*" }
+                                if output::supports_unicode() {
+                                    "●"
+                                } else {
+                                    "*"
+                                }
                             } else {
-                                if output::supports_unicode() { "○" } else { "o" }
+                                if output::supports_unicode() {
+                                    "○"
+                                } else {
+                                    "o"
+                                }
                             };
                             eprintln!("  {marker} {path}");
                         }

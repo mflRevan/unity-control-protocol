@@ -63,6 +63,53 @@ pub enum AssetAction {
         /// Asset path to create at
         path: String,
     },
+    /// Reimport an asset or meta file through Unity
+    Reimport {
+        /// Asset path or .meta path
+        path: String,
+    },
+    /// Inspect and modify Unity importer settings for an asset
+    ImportSettings {
+        #[command(subcommand)]
+        action: ImportSettingsAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ImportSettingsAction {
+    /// Read importer settings from an asset or .meta file
+    Read {
+        /// Asset path or .meta path
+        path: String,
+        /// Specific importer field/property path (reads all if omitted)
+        #[arg(long)]
+        field: Option<String>,
+    },
+    /// Write one importer setting
+    Write {
+        /// Asset path or .meta path
+        path: String,
+        /// Importer field/property path
+        #[arg(long)]
+        field: String,
+        /// Value as JSON
+        #[arg(long)]
+        value: String,
+        /// Update settings without immediately reimporting the asset
+        #[arg(long)]
+        no_reimport: bool,
+    },
+    /// Write multiple importer settings from a JSON object
+    WriteBatch {
+        /// Asset path or .meta path
+        path: String,
+        /// JSON object of field/value pairs
+        #[arg(long)]
+        values: String,
+        /// Update settings without immediately reimporting the asset
+        #[arg(long)]
+        no_reimport: bool,
+    },
 }
 
 pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
@@ -130,6 +177,59 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                 )
                 .await?
         }
+        AssetAction::Reimport { path } => {
+            client
+                .call("asset/reimport", serde_json::json!({ "path": path }))
+                .await?
+        }
+        AssetAction::ImportSettings { action } => match action {
+            ImportSettingsAction::Read { path, field } => {
+                let mut params = serde_json::json!({ "path": path });
+                if let Some(f) = field {
+                    params["field"] = serde_json::json!(f);
+                }
+                client.call("asset/import-settings/read", params).await?
+            }
+            ImportSettingsAction::Write {
+                path,
+                field,
+                value,
+                no_reimport,
+            } => {
+                let parsed = parse_json_or_string(value);
+                client
+                    .call(
+                        "asset/import-settings/write",
+                        serde_json::json!({
+                            "path": path,
+                            "field": field,
+                            "value": parsed,
+                            "noReimport": no_reimport
+                        }),
+                    )
+                    .await?
+            }
+            ImportSettingsAction::WriteBatch {
+                path,
+                values,
+                no_reimport,
+            } => {
+                let parsed = parse_json_or_string(values);
+                let object = parsed
+                    .as_object()
+                    .ok_or_else(|| anyhow::anyhow!("--values must be a JSON object"))?;
+                client
+                    .call(
+                        "asset/import-settings/write-batch",
+                        serde_json::json!({
+                            "path": path,
+                            "values": object,
+                            "noReimport": no_reimport
+                        }),
+                    )
+                    .await?
+            }
+        },
     };
 
     client.close().await;
@@ -161,14 +261,8 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             }
             AssetAction::Info { .. } => {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                let atype = result
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
-                let path = result
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let atype = result.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+                let path = result.get("path").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("{name} ({atype})"));
                 eprintln!("  Path: {path}");
                 if let Some(guid) = result.get("guid").and_then(|v| v.as_str()) {
@@ -177,10 +271,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             }
             AssetAction::Read { .. } => {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                let atype = result
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let atype = result.get("type").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("{name} ({atype})"));
                 if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
                     for f in fields.iter().take(MAX_ASSET_FIELDS) {
@@ -209,10 +300,94 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success(&format!("Updated {path} → {fields} field(s)"));
             }
             AssetAction::CreateSo { r#type, path } => {
-                output::print_success(&format!("Created {type} at {path}"));
+                output::print_success(&format!("Created {} at {path}", r#type));
             }
+            AssetAction::Reimport { .. } => {
+                let asset_path = result
+                    .get("assetPath")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let importer_type = result
+                    .get("importerType")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("asset");
+                output::print_success(&format!("Reimported {asset_path} ({importer_type})"));
+            }
+            AssetAction::ImportSettings { action } => match action {
+                ImportSettingsAction::Read { .. } => {
+                    let importer_type = result
+                        .get("importerType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Importer");
+                    let asset_path = result
+                        .get("assetPath")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
+                    output::print_success(&format!("{importer_type} settings for {asset_path}"));
+                    if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
+                        for field in fields.iter().take(MAX_ASSET_FIELDS) {
+                            let property_path = field
+                                .get("propertyPath")
+                                .and_then(|v| v.as_str())
+                                .or_else(|| field.get("name").and_then(|v| v.as_str()))
+                                .unwrap_or("?");
+                            let field_type =
+                                field.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+                            let value = field
+                                .get("value")
+                                .map(|v| v.to_string())
+                                .unwrap_or_default();
+                            eprintln!("  {property_path} ({field_type}): {value}");
+                        }
+                        if fields.len() > MAX_ASSET_FIELDS {
+                            eprintln!(
+                                "  ... {} more field(s) omitted; use --json or --field for a narrower read",
+                                fields.len() - MAX_ASSET_FIELDS
+                            );
+                        }
+                    }
+                }
+                ImportSettingsAction::Write {
+                    path,
+                    field,
+                    no_reimport,
+                    ..
+                } => {
+                    if *no_reimport {
+                        output::print_success(&format!(
+                            "Updated importer setting {path} → {field} (reimport skipped)"
+                        ));
+                    } else {
+                        output::print_success(&format!(
+                            "Updated importer setting {path} → {field} and reimported"
+                        ));
+                    }
+                }
+                ImportSettingsAction::WriteBatch {
+                    path, no_reimport, ..
+                } => {
+                    let fields = result
+                        .get("fields")
+                        .and_then(|v| v.as_array())
+                        .map(|items| items.len())
+                        .unwrap_or(0);
+                    if *no_reimport {
+                        output::print_success(&format!(
+                            "Updated importer settings {path} → {fields} field(s) (reimport skipped)"
+                        ));
+                    } else {
+                        output::print_success(&format!(
+                            "Updated importer settings {path} → {fields} field(s) and reimported"
+                        ));
+                    }
+                }
+            },
         }
     }
 
     Ok(())
+}
+
+fn parse_json_or_string(value: &str) -> serde_json::Value {
+    serde_json::from_str(value).unwrap_or_else(|_| serde_json::Value::String(value.to_owned()))
 }

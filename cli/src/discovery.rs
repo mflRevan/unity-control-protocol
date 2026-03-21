@@ -279,7 +279,10 @@ fn focus_process_window(pid: u32) -> Result<bool, UcpError> {
     }
 
     unsafe extern "system" {
-        fn EnumWindows(lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn EnumWindows(
+            lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool,
+            l_param: Lparam,
+        ) -> Bool;
         fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
         fn IsWindowVisible(hwnd: Hwnd) -> Bool;
         fn ShowWindow(hwnd: Hwnd, cmd_show: i32) -> Bool;
@@ -375,8 +378,15 @@ fn handle_process_startup_dialogs(
     }
 
     unsafe extern "system" {
-        fn EnumWindows(lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
-        fn EnumChildWindows(hwnd: Hwnd, lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn EnumWindows(
+            lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool,
+            l_param: Lparam,
+        ) -> Bool;
+        fn EnumChildWindows(
+            hwnd: Hwnd,
+            lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool,
+            l_param: Lparam,
+        ) -> Bool;
         fn GetWindow(hwnd: Hwnd, cmd: u32) -> Hwnd;
         fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
         fn GetWindowTextLengthW(hwnd: Hwnd) -> i32;
@@ -512,7 +522,10 @@ fn request_process_window_close(pid: u32) -> Result<bool, UcpError> {
     }
 
     unsafe extern "system" {
-        fn EnumWindows(lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool, l_param: Lparam) -> Bool;
+        fn EnumWindows(
+            lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool,
+            l_param: Lparam,
+        ) -> Bool;
         fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
         fn IsWindowVisible(hwnd: Hwnd) -> Bool;
         fn PostMessageW(hwnd: Hwnd, msg: u32, w_param: usize, l_param: isize) -> Bool;

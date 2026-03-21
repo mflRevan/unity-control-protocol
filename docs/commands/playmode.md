@@ -8,6 +8,8 @@ Control Unity's play mode state from the command line.
 
 Enter play mode.
 
+If Unity refuses to enter play mode because there are still breaking script errors, `ucp play` now returns a failure instead of reporting a false success. Use the existing log commands if you need the full console details.
+
 ```bash
 ucp play
 ```

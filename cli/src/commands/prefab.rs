@@ -89,10 +89,7 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
         }
         PrefabAction::Overrides { id } => {
             client
-                .call(
-                    "prefab/overrides",
-                    serde_json::json!({ "instanceId": id }),
-                )
+                .call("prefab/overrides", serde_json::json!({ "instanceId": id }))
                 .await?
         }
     };
@@ -127,10 +124,7 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success("Prefab instance reverted");
             }
             PrefabAction::Unpack { .. } => {
-                let mode = result
-                    .get("mode")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let mode = result.get("mode").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("Unpacked ({mode})"));
             }
             PrefabAction::Create { path, .. } => {
@@ -161,14 +155,14 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                     if !added.is_empty() {
                         eprintln!("  Added components:");
                         for a in added.iter().take(MAX_PREFAB_COMPONENT_CHANGES) {
-                            let comp = a
-                                .get("component")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("?");
+                            let comp = a.get("component").and_then(|v| v.as_str()).unwrap_or("?");
                             eprintln!("    + {comp}");
                         }
                         if added.len() > MAX_PREFAB_COMPONENT_CHANGES {
-                            eprintln!("    ... {} more added component(s) omitted", added.len() - MAX_PREFAB_COMPONENT_CHANGES);
+                            eprintln!(
+                                "    ... {} more added component(s) omitted",
+                                added.len() - MAX_PREFAB_COMPONENT_CHANGES
+                            );
                         }
                     }
                 }
@@ -176,14 +170,14 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                     if !removed.is_empty() {
                         eprintln!("  Removed components:");
                         for r in removed.iter().take(MAX_PREFAB_COMPONENT_CHANGES) {
-                            let comp = r
-                                .get("component")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("?");
+                            let comp = r.get("component").and_then(|v| v.as_str()).unwrap_or("?");
                             eprintln!("    - {comp}");
                         }
                         if removed.len() > MAX_PREFAB_COMPONENT_CHANGES {
-                            eprintln!("    ... {} more removed component(s) omitted", removed.len() - MAX_PREFAB_COMPONENT_CHANGES);
+                            eprintln!(
+                                "    ... {} more removed component(s) omitted",
+                                removed.len() - MAX_PREFAB_COMPONENT_CHANGES
+                            );
                         }
                     }
                 }

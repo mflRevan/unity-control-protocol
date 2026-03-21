@@ -91,6 +91,22 @@ When a project declares a Unity version that is not installed, UCP reports the i
 | ----------------------------------- | ------------------------------ |
 | `ucp run-tests [--mode] [--filter]` | Run tests in edit or play mode |
 
+### Profiling
+
+| Command                         | Description                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `ucp profiler status`           | Show profiler capabilities, session state, config, and buffered frames |
+| `ucp profiler config get|set`   | Read or update profiler configuration and safe memory limits          |
+| `ucp profiler session start`    | Start a bounded profiler session in edit or play mode                 |
+| `ucp profiler session stop`     | Stop the active session and restore heavy profiler settings           |
+| `ucp profiler session clear`    | Clear buffered profiler frames                                        |
+| `ucp profiler capture save|load`| Export a structured JSON snapshot or load a raw/data capture          |
+| `ucp profiler frames list|show` | Inspect buffered frames and available threads                         |
+| `ucp profiler timeline`         | Inspect ordered samples for a fresh frame/thread                      |
+| `ucp profiler hierarchy`        | Inspect hierarchy data for a fresh frame/thread                       |
+| `ucp profiler callstacks`       | Resolve callstacks when the selected sample exposes them              |
+| `ucp profiler summary`          | Aggregate recent profiler stats and top markers                       |
+
 ### Scripting
 
 | Command                          | Description                |
@@ -177,15 +193,6 @@ When a project declares a Unity version that is not installed, UCP reports the i
 
 ### Version Control
 
-| Command                 | Description            |
-| ----------------------- | ---------------------- |
-| `ucp vcs status`        | Working copy status    |
-| `ucp vcs commit`        | Commit changes         |
-| `ucp vcs checkout`      | Checkout files         |
-| `ucp vcs diff`          | Show differences       |
-| `ucp vcs history`       | View changeset history |
-| `ucp vcs lock`          | Lock files             |
-| `ucp vcs unlock`        | Unlock files           |
-| `ucp vcs branch list`   | List branches          |
-| `ucp vcs branch create` | Create a branch        |
-| `ucp vcs branch switch` | Switch branches        |
+| Command   | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `ucp vcs` | Show fallback Unity VCS usage; prefer native `cm` CLI |

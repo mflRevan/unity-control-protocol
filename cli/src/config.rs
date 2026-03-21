@@ -3,7 +3,7 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const PROTOCOL_VERSION: &str = "0.4.0";
+pub const PROTOCOL_VERSION: &str = "0.4.1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "lowercase")]
@@ -97,8 +97,7 @@ pub fn lock_file_path(project: &Path) -> PathBuf {
 }
 
 pub fn cli_settings_path() -> Option<PathBuf> {
-    ProjectDirs::from("io", "mflrevan", "ucp")
-        .map(|dirs| dirs.config_dir().join("settings.json"))
+    ProjectDirs::from("io", "mflrevan", "ucp").map(|dirs| dirs.config_dir().join("settings.json"))
 }
 
 pub fn load_cli_settings() -> CliSettings {

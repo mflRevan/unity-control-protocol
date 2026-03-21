@@ -66,10 +66,10 @@ const replacements = [
   [
     'README.md',
     (content) => {
-      let next = replaceOne(content, /Release: `.*`/, `Release: \`${version}\``);
-      next = replaceOne(next, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
-      next = replaceOne(next, /### Advanced editor control in `.*`/, `### Advanced editor control in \`${version}\``);
-      next = replaceOne(next, /"protocolVersion":".*"/, `"protocolVersion":"${protocolVersion}"`);
+      let next = replaceOne(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
+      next = replaceIfPresent(next, /Release: `.*`/, `Release: \`${version}\``);
+      next = replaceIfPresent(next, /### Advanced editor control in `.*`/, `### Advanced editor control in \`${version}\``);
+      next = replaceIfPresent(next, /"protocolVersion":".*"/, `"protocolVersion":"${protocolVersion}"`);
       return next;
     },
   ],

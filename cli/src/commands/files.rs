@@ -1,8 +1,8 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::compile;
 use super::Context;
+use super::compile;
 
 #[derive(Subcommand)]
 pub enum FilesAction {
@@ -18,6 +18,9 @@ pub enum FilesAction {
         /// File content (reads from stdin if omitted)
         #[arg(long)]
         content: Option<String>,
+        /// Skip the automatic Unity reimport after writing the file
+        #[arg(long)]
+        no_reimport: bool,
         /// Trigger recompilation after write and wait for it to finish
         #[arg(long)]
         compile: bool,
@@ -32,6 +35,9 @@ pub enum FilesAction {
         /// Text to replace with
         #[arg(long)]
         replace: Option<String>,
+        /// Skip the automatic Unity reimport after patching the file
+        #[arg(long)]
+        no_reimport: bool,
     },
 }
 
@@ -41,13 +47,15 @@ pub async fn run(action: FilesAction, ctx: &Context) -> anyhow::Result<()> {
         FilesAction::Write {
             path,
             content,
+            no_reimport,
             compile,
-        } => write(&path, content, compile, ctx).await,
+        } => write(&path, content, no_reimport, compile, ctx).await,
         FilesAction::Patch {
             path,
             find,
             replace,
-        } => patch(&path, find, replace, ctx).await,
+            no_reimport,
+        } => patch(&path, find, replace, no_reimport, ctx).await,
     }
 }
 
@@ -68,7 +76,13 @@ pub async fn read(path: &str, ctx: &Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &Context) -> anyhow::Result<()> {
+pub async fn write(
+    path: &str,
+    content: Option<String>,
+    no_reimport: bool,
+    do_compile: bool,
+    ctx: &Context,
+) -> anyhow::Result<()> {
     let content = match content {
         Some(c) => c,
         None => {
@@ -84,7 +98,7 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
     let result = client
         .call(
             "file/write",
-            serde_json::json!({ "path": path, "content": content }),
+            serde_json::json!({ "path": path, "content": content, "noReimport": no_reimport }),
         )
         .await?;
     client.close().await;
@@ -92,7 +106,11 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
     if ctx.json && !do_compile {
         output::print_json(&output::success_json(result));
     } else if !ctx.json {
-        output::print_success(&format!("Written: {path}"));
+        if no_reimport {
+            output::print_success(&format!("Written: {path} (reimport skipped)"));
+        } else {
+            output::print_success(&format!("Written: {path}"));
+        }
     }
 
     if do_compile {
@@ -102,7 +120,13 @@ pub async fn write(path: &str, content: Option<String>, do_compile: bool, ctx: &
     Ok(())
 }
 
-pub async fn patch(path: &str, find: Option<String>, replace: Option<String>, ctx: &Context) -> anyhow::Result<()> {
+pub async fn patch(
+    path: &str,
+    find: Option<String>,
+    replace: Option<String>,
+    no_reimport: bool,
+    ctx: &Context,
+) -> anyhow::Result<()> {
     let find = find.ok_or_else(|| anyhow::anyhow!("--find is required for files patch"))?;
     let replace = replace.unwrap_or_default();
 
@@ -111,7 +135,11 @@ pub async fn patch(path: &str, find: Option<String>, replace: Option<String>, ct
     let result = client
         .call(
             "file/patch",
-            serde_json::json!({ "path": path, "patch": { "find": find, "replace": replace } }),
+            serde_json::json!({
+                "path": path,
+                "patch": { "find": find, "replace": replace },
+                "noReimport": no_reimport
+            }),
         )
         .await?;
     client.close().await;
@@ -119,7 +147,11 @@ pub async fn patch(path: &str, find: Option<String>, replace: Option<String>, ct
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        output::print_success(&format!("Patched: {path}"));
+        if no_reimport {
+            output::print_success(&format!("Patched: {path} (reimport skipped)"));
+        } else {
+            output::print_success(&format!("Patched: {path}"));
+        }
     }
 
     Ok(())

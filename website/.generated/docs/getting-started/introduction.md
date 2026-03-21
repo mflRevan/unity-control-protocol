@@ -19,7 +19,7 @@ Together, they let you automate virtually any Unity Editor operation from the te
 - **Project Settings** - Read/write player, quality, physics, and lighting settings
 - **Prefab Workflow** - Check status, apply/revert overrides, create prefabs, unpack instances
 - **Build Pipeline** - List targets, manage scenes, control scripting defines, trigger builds
-- **Version Control** - Full Plastic SCM / Unity VCS integration
+- **Version Control** - Lightweight Unity VCS fallback commands; prefer native `cm` for full UVCS workflows
 - **Editor Scripting** - Execute custom C# scripts remotely with parameters
 - **Cross-Platform** - Works on macOS (x64 + ARM), Linux, and Windows
 

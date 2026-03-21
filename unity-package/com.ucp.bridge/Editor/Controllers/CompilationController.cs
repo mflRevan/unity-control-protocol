@@ -19,7 +19,7 @@ namespace UCP.Bridge
 
         private static object HandleRefresh(string paramsJson)
         {
-            AssetDatabase.Refresh();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             return new { status = "ok", message = "Asset database refreshed" };
         }
     }

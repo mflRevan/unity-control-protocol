@@ -10,6 +10,7 @@ namespace UCP.Bridge
         public static void Register(CommandRouter router)
         {
             router.Register("play", HandlePlay);
+            router.Register("play/status", HandleStatus);
             router.Register("stop", HandleStop);
             router.Register("pause", HandlePause);
         }
@@ -25,6 +26,17 @@ namespace UCP.Bridge
 
             EditorApplication.isPlaying = true;
             return new { status = "ok" };
+        }
+
+        private static object HandleStatus(string paramsJson)
+        {
+            return new
+            {
+                playing = EditorApplication.isPlaying,
+                paused = EditorApplication.isPaused,
+                willChange = EditorApplication.isPlayingOrWillChangePlaymode,
+                compiling = EditorApplication.isCompiling
+            };
         }
 
         private static bool GetBoolParam(string paramsJson, string key, bool defaultValue)

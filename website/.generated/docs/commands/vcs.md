@@ -1,82 +1,23 @@
 # Version Control
 
-Full integration with Unity Version Control (Plastic SCM). Manage your workspace directly from the command line.
+Bridge-backed fallback commands for Unity Version Control (Plastic SCM / UVCS).
+
+When the native `cm` CLI is available, prefer `cm` for normal Unity Version Control work. It exposes a much richer command surface for branch management, shelvesets, merge workflows, workspace operations, and other full-source-control tasks.
+
+Use `ucp vcs` when you specifically want a lightweight fallback through the Unity bridge, or when an agent needs a small editor-adjacent VCS action without leaving the UCP workflow.
 
 ## Commands
 
-### `ucp vcs status`
-
-Show working copy status - pending changes, added, deleted, and modified files.
-
 ```bash
-ucp vcs status
+ucp vcs
 ```
 
-### `ucp vcs commit`
+Running `ucp vcs` prints the currently available fallback subcommands and flags.
 
-Commit pending changes with a message.
-
-```bash
-ucp vcs commit -m "Add player controller"
-```
-
-### `ucp vcs checkout`
-
-Revert files to their last committed state.
-
-```bash
-ucp vcs checkout Assets/Scripts/Player.cs
-```
-
-### `ucp vcs diff`
-
-Show differences for pending changes.
-
-```bash
-ucp vcs diff
-```
-
-### `ucp vcs history`
-
-View changeset history.
-
-```bash
-# Recent history
-ucp vcs history
-
-# Limit results
-ucp vcs history --count 10
-```
-
-### `ucp vcs lock`
-
-Lock a file to prevent others from editing it.
-
-```bash
-ucp vcs lock Assets/Scenes/MainScene.unity
-```
-
-### `ucp vcs unlock`
-
-Release a file lock.
-
-```bash
-ucp vcs unlock Assets/Scenes/MainScene.unity
-```
-
-### Branch Operations
-
-```bash
-# List branches
-ucp vcs branch list
-
-# Create a branch
-ucp vcs branch create feature/new-ui
-
-# Switch branches
-ucp vcs branch switch feature/new-ui
-```
+Typical fallback usage includes lightweight status, checkout, revert, commit, diff, history, lock, unlock, update, and conflict-resolution actions. For richer Unity Version Control workflows, use `cm`.
 
 ## Requirements
 
-Version control commands require Unity Version Control (Plastic SCM) to be configured in your project. These commands interact with the Plastic SCM CLI through Unity's VCS integration.
+Version control commands require Unity Version Control (Plastic SCM) to be configured in your project.
+
+`ucp vcs` is not intended to replace the native `cm` CLI. Treat it like `ucp files ...`: useful as a fallback inside bridge-driven automation, but not the preferred surface when you already have direct workspace access to the real tool.

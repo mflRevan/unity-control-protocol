@@ -1,11 +1,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Profiling;
 using UnityEngine.TestTools;
 
 namespace UCP.Bridge.Tests
@@ -18,6 +20,8 @@ namespace UCP.Bridge.Tests
         private const string TempMaterialPath = "Assets/UcpControllerSmoke.mat";
         private const string TempTextPath = "Assets/UcpControllerSmoke.txt";
         private const string TempScriptPath = "Assets/UcpControllerSmokeComponent.cs";
+        private const string TempTexturePath = "Assets/UcpImporterSmoke.png";
+        private const string TempProfilerExportPath = "ProfilerCaptures\\smoke-export.json";
 
         private CommandRouter _router;
 
@@ -27,8 +31,10 @@ namespace UCP.Bridge.Tests
             _router = new CommandRouter();
             SnapshotController.Register(_router);
             AssetController.Register(_router);
+            ImporterController.Register(_router);
             LogsController.Register(_router);
             HierarchyController.Register(_router);
+            ProfilerController.Register(_router);
             PropertyController.Register(_router);
             FileController.Register(_router);
             MaterialController.Register(_router);
@@ -43,7 +49,14 @@ namespace UCP.Bridge.Tests
             DeleteTempMaterial();
             DeleteTempTextFile();
             DeleteTempScriptFile();
+            DeleteTempTextureAsset();
+            DeleteTempProfilerExport();
             LogsController.ClearHistoryForTests();
+            AssetImportSupport.ClearTestState();
+            Profiler.enabled = false;
+            Profiler.enableBinaryLog = false;
+            Profiler.enableAllocationCallstacks = false;
+            Profiler.logFile = string.Empty;
         }
 
         [TearDown]
@@ -55,8 +68,104 @@ namespace UCP.Bridge.Tests
             DeleteTempMaterial();
             DeleteTempTextFile();
             DeleteTempScriptFile();
+            DeleteTempTextureAsset();
+            DeleteTempProfilerExport();
             LogsController.ClearHistoryForTests();
+            AssetImportSupport.ClearTestState();
+            Profiler.enabled = false;
+            Profiler.enableBinaryLog = false;
+            Profiler.enableAllocationCallstacks = false;
+            Profiler.logFile = string.Empty;
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        }
+
+        [Test]
+        public void ProfilerStatus_ReturnsCapabilitiesAndConfig()
+        {
+            var response = _router.Dispatch("profiler/status", 1, "{}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(result.ContainsKey("session"), Is.True);
+            Assert.That(result.ContainsKey("config"), Is.True);
+            Assert.That(result.ContainsKey("capabilities"), Is.True);
+            Assert.That(result.ContainsKey("editorState"), Is.True);
+
+            var capabilities = (Dictionary<string, object>)result["capabilities"];
+            Assert.That(Convert.ToBoolean(capabilities["status"]), Is.True);
+            Assert.That(Convert.ToBoolean(capabilities["sessionControl"]), Is.True);
+        }
+
+        [Test]
+        public void ProfilerSessionStartStop_TogglesProfilerState()
+        {
+            Profiler.maxUsedMemory = 512 * 1024 * 1024;
+
+            var start = _router.Dispatch(
+                "profiler/session/start",
+                1,
+                "{\"mode\":\"edit\",\"binaryLog\":false,\"allocationCallstacks\":true}");
+
+            Assert.That(start.error, Is.Null);
+            Assert.That(Profiler.enabled, Is.True);
+            Assert.That(Profiler.maxUsedMemory, Is.EqualTo(64 * 1024 * 1024));
+
+            var startResult = (Dictionary<string, object>)start.result;
+            Assert.That(startResult["status"], Is.EqualTo("started"));
+            var session = (Dictionary<string, object>)startResult["session"];
+            Assert.That(Convert.ToBoolean(session["active"]), Is.True);
+            Assert.That(session["effectiveMode"], Is.EqualTo("edit"));
+
+            var stop = _router.Dispatch("profiler/session/stop", 1, "{}");
+
+            Assert.That(stop.error, Is.Null);
+            Assert.That(Profiler.enabled, Is.False);
+            Assert.That(Profiler.enableAllocationCallstacks, Is.False);
+            Assert.That(Profiler.maxUsedMemory, Is.EqualTo(512 * 1024 * 1024));
+
+            var stopResult = (Dictionary<string, object>)stop.result;
+            Assert.That(stopResult["status"], Is.EqualTo("stopped"));
+        }
+
+        [Test]
+        public void ProfilerConfigSet_UpdatesAllocationCallstacksFlag()
+        {
+            var response = _router.Dispatch(
+                "profiler/config/set",
+                1,
+                "{\"mode\":\"edit\",\"binaryLog\":false,\"allocationCallstacks\":true}");
+
+            Assert.That(response.error, Is.Null);
+            Assert.That(Profiler.enableAllocationCallstacks, Is.True);
+
+            var result = (Dictionary<string, object>)response.result;
+            var config = (Dictionary<string, object>)result["config"];
+            Assert.That(Convert.ToBoolean(config["allocationCallstacks"]), Is.True);
+        }
+
+        [Test]
+        public void ProfilerCaptureSave_ExportsStructuredJsonSnapshot()
+        {
+            var start = _router.Dispatch(
+                "profiler/session/start",
+                1,
+                "{\"mode\":\"edit\",\"binaryLog\":false,\"allocationCallstacks\":false,\"clearFirst\":true}");
+
+            Assert.That(start.error, Is.Null);
+
+            var response = _router.Dispatch(
+                "profiler/capture/save",
+                1,
+                "{\"output\":\"ProfilerCaptures/smoke-export.json\"}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            var capture = (Dictionary<string, object>)result["capture"];
+            Assert.That(capture["kind"], Is.EqualTo("json"));
+            Assert.That(Convert.ToBoolean(capture["exists"]), Is.True);
+            Assert.That(File.Exists(ResolveProjectRelativePath(TempProfilerExportPath)), Is.True);
         }
 
         [Test]
@@ -375,6 +484,100 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void FileController_Write_ReimportsOwningAssetForMetaFiles()
+        {
+            CreateTempTextureAsset(Color.cyan);
+            var metaPath = TempTexturePath + ".meta";
+            var metaContent = File.ReadAllText(ResolveProjectRelativePath(metaPath));
+            AssetImportSupport.ClearTestState();
+
+            var write = _router.Dispatch(
+                "file/write",
+                1,
+                MiniJson.Serialize(new Dictionary<string, object>
+                {
+                    ["path"] = metaPath,
+                    ["content"] = metaContent
+                }));
+
+            Assert.That(write.error, Is.Null);
+
+            var result = (Dictionary<string, object>)write.result;
+            var reimport = (Dictionary<string, object>)result["reimport"];
+            Assert.That(Convert.ToBoolean(reimport["reimported"]), Is.True);
+            Assert.That(reimport["assetPath"], Is.EqualTo(TempTexturePath));
+            Assert.That(AssetImportSupport.LastReimportedPathForTests, Is.EqualTo(TempTexturePath));
+        }
+
+        [Test]
+        public void ImporterController_ReadWriteAndReimport_TextureSettings()
+        {
+            CreateTempTextureAsset(Color.red);
+
+            var read = _router.Dispatch(
+                "asset/import-settings/read",
+                1,
+                "{\"path\":\"" + TempTexturePath + "\",\"field\":\"m_IsReadable\"}");
+
+            Assert.That(read.error, Is.Null);
+            var readResult = (Dictionary<string, object>)read.result;
+            Assert.That(readResult["assetPath"], Is.EqualTo(TempTexturePath));
+            Assert.That(readResult["importerType"], Is.EqualTo("TextureImporter"));
+            var fields = (List<object>)readResult["fields"];
+            Assert.That(fields.Count, Is.EqualTo(1));
+
+            AssetImportSupport.ClearTestState();
+            var write = _router.Dispatch(
+                "asset/import-settings/write",
+                1,
+                "{\"path\":\"" + TempTexturePath + "\",\"field\":\"m_IsReadable\",\"value\":true}");
+
+            Assert.That(write.error, Is.Null);
+            var writeResult = (Dictionary<string, object>)write.result;
+            var reimport = (Dictionary<string, object>)writeResult["reimport"];
+            Assert.That(Convert.ToBoolean(reimport["reimported"]), Is.True);
+            Assert.That(reimport["assetPath"], Is.EqualTo(TempTexturePath));
+            Assert.That(AssetImportSupport.LastReimportedPathForTests, Is.EqualTo(TempTexturePath));
+
+            var importer = AssetImporter.GetAtPath(TempTexturePath) as TextureImporter;
+            Assert.That(importer, Is.Not.Null);
+            Assert.That(importer.isReadable, Is.True);
+        }
+
+        [Test]
+        public void ImporterController_WriteBatch_CanSkipReimportUntilExplicitReimport()
+        {
+            CreateTempTextureAsset(Color.green);
+            AssetImportSupport.ClearTestState();
+
+            var write = _router.Dispatch(
+                "asset/import-settings/write-batch",
+                1,
+                "{\"path\":\"" + TempTexturePath + "\",\"values\":{\"m_IsReadable\":true},\"noReimport\":true}");
+
+            Assert.That(write.error, Is.Null);
+            var writeResult = (Dictionary<string, object>)write.result;
+            var reimport = (Dictionary<string, object>)writeResult["reimport"];
+            Assert.That(Convert.ToBoolean(reimport["reimported"]), Is.False);
+            Assert.That(Convert.ToBoolean(reimport["skipped"]), Is.True);
+            Assert.That(AssetImportSupport.LastReimportedPathForTests, Is.Null);
+
+            var explicitReimport = _router.Dispatch(
+                "asset/reimport",
+                1,
+                "{\"path\":\"" + TempTexturePath + ".meta\"}");
+
+            Assert.That(explicitReimport.error, Is.Null);
+            var explicitResult = (Dictionary<string, object>)explicitReimport.result;
+            Assert.That(explicitResult["assetPath"], Is.EqualTo(TempTexturePath));
+            Assert.That(AssetImportSupport.LastReimportedPathForTests, Is.EqualTo(TempTexturePath));
+
+            var importer = AssetImporter.GetAtPath(TempTexturePath) as TextureImporter;
+            Assert.That(importer, Is.Not.Null);
+            Assert.That(importer.isReadable, Is.True);
+        }
+
+        [Test]
         public void SceneFocus_WithAxis_AlignsSceneCameraTowardTarget()
         {
             var sceneView = EditorWindow.GetWindow<SceneView>();
@@ -609,6 +812,61 @@ namespace UCP.Bridge.Tests
                 AssetDatabase.DeleteAsset(TempScriptPath);
                 AssetDatabase.SaveAssets();
             }
+        }
+
+        private static void DeleteTempTextureAsset()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(TempTexturePath) != null)
+            {
+                AssetDatabase.DeleteAsset(TempTexturePath);
+                AssetDatabase.SaveAssets();
+            }
+
+            var fullPath = ResolveProjectRelativePath(TempTexturePath);
+            if (File.Exists(fullPath))
+                File.Delete(fullPath);
+
+            var metaPath = fullPath + ".meta";
+            if (File.Exists(metaPath))
+                File.Delete(metaPath);
+
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static void DeleteTempProfilerExport()
+        {
+            var fullPath = ResolveProjectRelativePath(TempProfilerExportPath);
+            if (File.Exists(fullPath))
+                File.Delete(fullPath);
+        }
+
+        private static void CreateTempTextureAsset(Color color)
+        {
+            DeleteTempTextureAsset();
+
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.SetPixels(new[]
+            {
+                color,
+                color,
+                color,
+                color
+            });
+            texture.Apply();
+
+            var bytes = texture.EncodeToPNG();
+            UnityEngine.Object.DestroyImmediate(texture);
+
+            File.WriteAllBytes(ResolveProjectRelativePath(TempTexturePath), bytes);
+            AssetDatabase.ImportAsset(
+                TempTexturePath,
+                ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static string ResolveProjectRelativePath(string assetPath)
+        {
+            var projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.Combine(projectRoot, assetPath.Replace('/', Path.DirectorySeparatorChar));
         }
 
         private static string FindFirstFloatOrRangeProperty(Shader shader)

@@ -50,7 +50,10 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
         if let Some(summary) = result.get("summary") {
             let total = summary.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
             let failed = summary.get("failed").and_then(|v| v.as_u64()).unwrap_or(0);
-            let dur = summary.get("duration").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dur = summary
+                .get("duration")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
 
             if failed == 0 {
                 output::print_success(&format!("All {total} tests passed ({dur:.2}s)"));
@@ -65,7 +68,11 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
                 if st == "failed" {
                     let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                     let msg = t.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                    let icon = if output::supports_unicode() { "✖" } else { "x" };
+                    let icon = if output::supports_unicode() {
+                        "✖"
+                    } else {
+                        "x"
+                    };
                     eprintln!("  {icon} {name}");
                     if !msg.is_empty() {
                         eprintln!("    {msg}");

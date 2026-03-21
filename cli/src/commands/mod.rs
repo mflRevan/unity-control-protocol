@@ -12,6 +12,7 @@ pub mod logs;
 pub mod material;
 pub mod object;
 pub mod play;
+pub mod profiler;
 pub mod prefab;
 pub mod scene;
 pub mod screenshot;
@@ -210,6 +211,11 @@ pub enum Command {
         #[command(subcommand)]
         action: build::BuildAction,
     },
+    /// Unity profiler workflows and inspection
+    Profiler {
+        #[command(subcommand)]
+        action: profiler::ProfilerAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -257,10 +263,7 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
         .await?;
 
         if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
-            anyhow::bail!(
-                "Unity editor is not running for {}",
-                project.display()
-            );
+            anyhow::bail!("Unity editor is not running for {}", project.display());
         }
 
         lock = Some(discovery::read_lock_file(&project)?);
@@ -378,5 +381,6 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Material { action } => material::run(action, &ctx).await,
         Command::Prefab { action } => prefab::run(action, &ctx).await,
         Command::Build { action } => build::run(action, &ctx).await,
+        Command::Profiler { action } => profiler::run(action, &ctx).await,
     }
 }

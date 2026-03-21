@@ -256,18 +256,12 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
         match &action {
             ObjectAction::GetFields { .. } => {
                 if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
-                    let obj_name = result
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let obj_name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                     let comp = result
                         .get("component")
                         .and_then(|v| v.as_str())
                         .unwrap_or("?");
-                    output::print_success(&format!(
-                        "{obj_name}.{comp}: {} field(s)",
-                        fields.len()
-                    ));
+                    output::print_success(&format!("{obj_name}.{comp}: {} field(s)", fields.len()));
                     for f in fields.iter().take(MAX_FIELD_LINES) {
                         let name = f.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                         let ftype = f.get("type").and_then(|v| v.as_str()).unwrap_or("?");
@@ -289,9 +283,7 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success(&format!("Set property: {property}"));
             }
             ObjectAction::SetActive { id, active } => {
-                output::print_success(&format!(
-                    "Object {id}: active = {active}"
-                ));
+                output::print_success(&format!("Object {id}: active = {active}"));
             }
             ObjectAction::SetName { name, .. } => {
                 output::print_success(&format!("Renamed to: {name}"));

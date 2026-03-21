@@ -4,6 +4,7 @@ import quickstartMd from '@docs/getting-started/quickstart.md?raw';
 import overviewMd from '@docs/commands/overview.md?raw';
 import connectionMd from '@docs/commands/connection.md?raw';
 import playmodeMd from '@docs/commands/playmode.md?raw';
+import profilerMd from '@docs/commands/profiler.md?raw';
 import scenesMd from '@docs/commands/scenes.md?raw';
 import filesMd from '@docs/commands/files.md?raw';
 import mediaMd from '@docs/commands/media.md?raw';
@@ -32,6 +33,7 @@ export const docsContent: Record<string, string> = {
   commands: overviewMd,
   'commands/connection': connectionMd,
   'commands/playmode': playmodeMd,
+  'commands/profiler': profilerMd,
   'commands/scenes': scenesMd,
   'commands/files': filesMd,
   'commands/media': mediaMd,

@@ -119,7 +119,7 @@ Manual manifest dependency:
 ```json
 {
   "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.0"
+    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.1"
   }
 }
 ```
@@ -191,6 +191,7 @@ If the project's configured Unity version is known but not installed, UCP fails 
 - `ucp stop`
 - `ucp pause`
 - `ucp compile`
+- `ucp profiler ...`
 
 ### Scene, files, media, tests, scripts
 
@@ -212,6 +213,8 @@ If the project's configured Unity version is known but not installed, UCP fails 
 - `ucp vcs ...`
 
 All commands support `--json`. Most also support `--project`, `--unity`, `--bridge-update-policy`, `--dialog-policy`, `--timeout`, and `--verbose`.
+
+Profiler workflows are safe-by-default for live editor use: new sessions clear stale buffered frames when needed, recent-frame summaries are bounded, heavy flags are restored on stop, and editor-side capture export uses structured JSON snapshots rather than pretending live raw binary capture is available.
 
 ## Practical examples
 

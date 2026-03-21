@@ -17,12 +17,19 @@ pub async fn run(
     ctx: &Context,
 ) -> anyhow::Result<()> {
     if id.is_some() && (pattern.is_some() || before_id.is_some() || after_id.is_some() || follow) {
-        anyhow::bail!("--id cannot be combined with --pattern, --before-id, --after-id, or --follow");
+        anyhow::bail!(
+            "--id cannot be combined with --pattern, --before-id, --after-id, or --follow"
+        );
     }
 
     let (_, _, mut client) = super::connect_client(ctx).await?;
 
-    let wants_live_follow = follow || (id.is_none() && pattern.is_none() && count.is_none() && before_id.is_none() && after_id.is_none());
+    let wants_live_follow = follow
+        || (id.is_none()
+            && pattern.is_none()
+            && count.is_none()
+            && before_id.is_none()
+            && after_id.is_none());
 
     if let Some(log_id) = id {
         let result = client
@@ -39,7 +46,11 @@ pub async fn run(
         return Ok(());
     }
 
-    let method = if pattern.is_some() { "logs/search" } else { "logs/tail" };
+    let method = if pattern.is_some() {
+        "logs/search"
+    } else {
+        "logs/tail"
+    };
     let mut params = serde_json::json!({});
     if let Some(level) = level.as_deref() {
         params["level"] = serde_json::json!(level);
@@ -116,8 +127,14 @@ fn print_log_detail(result: &serde_json::Value, ctx: &Context) {
     }
 
     let id = result.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-    let level = result.get("level").and_then(|v| v.as_str()).unwrap_or("info");
-    let timestamp = result.get("timestamp").and_then(|v| v.as_str()).unwrap_or("?");
+    let level = result
+        .get("level")
+        .and_then(|v| v.as_str())
+        .unwrap_or("info");
+    let timestamp = result
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
     let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("");
     output::print_success(&format!("Log #{id} [{level}] {timestamp}"));
     eprintln!("  {message}");
@@ -132,7 +149,10 @@ fn print_log_detail(result: &serde_json::Value, ctx: &Context) {
 fn print_log_list(result: &serde_json::Value, used_pattern: bool) {
     let total = result.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
     let returned = result.get("returned").and_then(|v| v.as_u64()).unwrap_or(0);
-    let truncated = result.get("truncated").and_then(|v| v.as_bool()).unwrap_or(false);
+    let truncated = result
+        .get("truncated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let logs = result
         .get("logs")
         .and_then(|v| v.as_array())

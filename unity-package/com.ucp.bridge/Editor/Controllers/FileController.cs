@@ -59,6 +59,9 @@ namespace UCP.Bridge
                 throw new ArgumentException("Missing 'path' parameter");
             if (!p.TryGetValue("content", out var contentObj))
                 throw new ArgumentException("Missing 'content' parameter");
+            var noReimport = p.TryGetValue("noReimport", out var noReimportObj)
+                && noReimportObj != null
+                && Convert.ToBoolean(noReimportObj);
 
             var fullPath = ResolveSafePath(pathObj.ToString());
 
@@ -68,13 +71,14 @@ namespace UCP.Bridge
                 Directory.CreateDirectory(dir);
 
             File.WriteAllText(fullPath, contentObj.ToString());
-            RefreshProjectAssets(pathObj.ToString());
+            var reimport = AssetImportSupport.ReimportOrDescribe(pathObj.ToString(), noReimport);
 
             return new Dictionary<string, object>
             {
                 ["path"] = pathObj.ToString(),
                 ["written"] = true,
-                ["size"] = contentObj.ToString().Length
+                ["size"] = contentObj.ToString().Length,
+                ["reimport"] = reimport
             };
         }
 
@@ -85,6 +89,9 @@ namespace UCP.Bridge
                 throw new ArgumentException("Missing 'path' parameter");
             if (!p.TryGetValue("patch", out var patchObj))
                 throw new ArgumentException("Missing 'patch' parameter");
+            var noReimport = p.TryGetValue("noReimport", out var noReimportObj)
+                && noReimportObj != null
+                && Convert.ToBoolean(noReimportObj);
 
             var fullPath = ResolveSafePath(pathObj.ToString());
 
@@ -118,28 +125,17 @@ namespace UCP.Bridge
 
                 var patched = original.Replace(find, replace);
                 File.WriteAllText(fullPath, patched);
-                RefreshProjectAssets(pathObj.ToString());
+                var reimport = AssetImportSupport.ReimportOrDescribe(pathObj.ToString(), noReimport);
 
                 return new Dictionary<string, object>
                 {
                     ["path"] = pathObj.ToString(),
-                    ["patched"] = true
+                    ["patched"] = true,
+                    ["reimport"] = reimport
                 };
             }
 
             throw new ArgumentException("Unsupported patch format. Use {\"find\": \"...\", \"replace\": \"...\"}");
-        }
-
-        private static void RefreshProjectAssets(string relativePath)
-        {
-            var normalized = relativePath.Replace('\\', '/');
-            if (normalized.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase)
-                || normalized.Equals("Assets", StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase)
-                || normalized.Equals("Packages", StringComparison.OrdinalIgnoreCase))
-            {
-                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            }
         }
     }
 }

@@ -195,7 +195,12 @@ pub async fn close_editor(
 
     if let Ok(lock) = discovery::read_lock_file(project) {
         if let Ok(mut client) = BridgeClient::connect(&lock).await {
-            if client.handshake().await.is_ok() && client.call("editor/quit", serde_json::json!({})).await.is_ok() {
+            if client.handshake().await.is_ok()
+                && client
+                    .call("editor/quit", serde_json::json!({}))
+                    .await
+                    .is_ok()
+            {
                 via_bridge = true;
                 graceful = true;
             }
@@ -282,7 +287,7 @@ pub fn status(project: &Path, ctx: &commands::Context) -> EditorStatus {
                 resolve_requested_unity_version(project, ctx),
                 None,
             ),
-    };
+        };
 
     EditorStatus {
         running: process.is_some(),
@@ -307,11 +312,11 @@ fn resolve_unity_launch_target(
     ctx: &commands::Context,
 ) -> anyhow::Result<UnityLaunchTarget> {
     let project_version = resolve_project_unity_version(project);
-    let requested_version = ctx
-        .force_unity_version
-        .clone()
-        .or(project_version.clone());
-    let warning = forced_version_warning(project_version.as_deref(), ctx.force_unity_version.as_deref());
+    let requested_version = ctx.force_unity_version.clone().or(project_version.clone());
+    let warning = forced_version_warning(
+        project_version.as_deref(),
+        ctx.force_unity_version.as_deref(),
+    );
     let roots = unity_install_roots();
     let installed_versions = installed_unity_versions(&roots);
 
@@ -325,7 +330,10 @@ fn resolve_unity_launch_target(
             });
         }
 
-        anyhow::bail!("Configured Unity executable was not found at {}", candidate.display());
+        anyhow::bail!(
+            "Configured Unity executable was not found at {}",
+            candidate.display()
+        );
     }
 
     if let Some(version) = requested_version.as_deref() {
@@ -406,7 +414,11 @@ fn unity_candidate_paths(version: &str, roots: &[PathBuf]) -> Vec<PathBuf> {
     dedupe_paths(
         roots
             .iter()
-            .map(|root| root.join(version).join("Editor").join(unity_executable_name()))
+            .map(|root| {
+                root.join(version)
+                    .join("Editor")
+                    .join(unity_executable_name())
+            })
             .collect(),
     )
 }
@@ -444,7 +456,10 @@ fn unity_install_roots() -> Vec<PathBuf> {
             }
         }
 
-        for root in [std::env::var_os("ProgramFiles"), std::env::var_os("ProgramFiles(x86)")] {
+        for root in [
+            std::env::var_os("ProgramFiles"),
+            std::env::var_os("ProgramFiles(x86)"),
+        ] {
             let Some(root) = root else {
                 continue;
             };
@@ -643,10 +658,8 @@ mod tests {
 
     #[test]
     fn reads_hub_path_json_string() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-hub-path-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-hub-path-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_root);
         fs::create_dir_all(&temp_root).unwrap();
         let path = temp_root.join("secondaryInstallPath.json");

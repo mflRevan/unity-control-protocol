@@ -114,7 +114,8 @@ pub async fn wait_for_bridge(
         }
 
         if last_nudge.elapsed() >= Duration::from_secs(10) {
-            nudged_editor = discovery::focus_unity_editor(project).unwrap_or(false) || nudged_editor;
+            nudged_editor =
+                discovery::focus_unity_editor(project).unwrap_or(false) || nudged_editor;
             last_nudge = Instant::now();
         }
 

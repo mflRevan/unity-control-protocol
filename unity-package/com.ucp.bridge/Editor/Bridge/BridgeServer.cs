@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.4.0";
+        private const string ProtocolVersion = "0.4.1";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -126,6 +126,9 @@ namespace UCP.Bridge
             // Tests
             TestRunnerController.Register(s_router);
 
+            // Profiler
+            ProfilerController.Register(s_router);
+
             // Scripts (exec)
             ScriptController.Register(s_router);
 
@@ -143,6 +146,7 @@ namespace UCP.Bridge
 
             // Asset Management
             AssetController.Register(s_router);
+            ImporterController.Register(s_router);
 
             // Editor Settings (Player, Quality, Physics, Lighting, Tags/Layers)
             EditorSettingsController.Register(s_router);

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1] - 2026-03-21
+
+### Added
+
+- Added `asset/reimport` for explicit targeted Unity reimport of an asset or its `.meta` file.
+- Added `asset/import-settings/read`, `asset/import-settings/write`, and `asset/import-settings/write-batch` for importer-aware settings inspection and updates.
+
+### Changed
+
+- File writes and patches now trigger targeted synchronous reimport for edited assets and `.meta` files under `Assets/` and `Packages/`.
+- Importer settings writes now save through Unity's importer pipeline and reimport automatically by default, with an opt-out path for deferred apply workflows.
+- Asset metadata responses now include the importer type when Unity resolves one for the target path.
+
+### Fixed
+
+- Fixed imported asset workflows that previously required manual `.meta` editing and separate reimport steps before changes became visible in the editor.
+
 ## [0.4.0] - 2026-03-15
 
 ### Added

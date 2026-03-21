@@ -45,44 +45,50 @@ pub fn inspect(project: &Path) -> anyhow::Result<BridgePackageStatus> {
     let target_version = env!("CARGO_PKG_VERSION").to_string();
     let target_reference = target_reference();
 
-    let (installed, source_kind, dependency, installed_version, managed_git_dependency, local_source) =
-        if embedded_exists {
-            (
-                true,
-                "embedded-local".to_string(),
-                Some(embedded_package_path.display().to_string()),
-                read_package_json_version(&embedded_package_path.join("package.json")),
-                false,
-                true,
-            )
-        } else if let Some(reference) = manifest_dependency.clone() {
-            let source_kind = if reference.starts_with(PACKAGE_GIT_URL_BASE) {
-                "git"
-            } else if reference.starts_with("file:") {
-                "file"
-            } else {
-                "custom"
-            };
-
-            let version = if source_kind == "git" {
-                parse_git_dependency_version(&reference)
-            } else if source_kind == "file" {
-                read_file_dependency_version(&reference)
-            } else {
-                parse_git_dependency_version(&reference)
-            };
-
-            (
-                true,
-                source_kind.to_string(),
-                Some(reference.clone()),
-                version,
-                source_kind == "git",
-                source_kind == "file",
-            )
+    let (
+        installed,
+        source_kind,
+        dependency,
+        installed_version,
+        managed_git_dependency,
+        local_source,
+    ) = if embedded_exists {
+        (
+            true,
+            "embedded-local".to_string(),
+            Some(embedded_package_path.display().to_string()),
+            read_package_json_version(&embedded_package_path.join("package.json")),
+            false,
+            true,
+        )
+    } else if let Some(reference) = manifest_dependency.clone() {
+        let source_kind = if reference.starts_with(PACKAGE_GIT_URL_BASE) {
+            "git"
+        } else if reference.starts_with("file:") {
+            "file"
         } else {
-            (false, "missing".to_string(), None, None, false, false)
+            "custom"
         };
+
+        let version = if source_kind == "git" {
+            parse_git_dependency_version(&reference)
+        } else if source_kind == "file" {
+            read_file_dependency_version(&reference)
+        } else {
+            parse_git_dependency_version(&reference)
+        };
+
+        (
+            true,
+            source_kind.to_string(),
+            Some(reference.clone()),
+            version,
+            source_kind == "git",
+            source_kind == "file",
+        )
+    } else {
+        (false, "missing".to_string(), None, None, false, false)
+    };
 
     let outdated = managed_git_dependency
         && installed_version
@@ -219,10 +225,8 @@ mod tests {
 
     #[test]
     fn inspect_prefers_embedded_local_mount_over_manifest_dependency() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-bridge-inspect-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-bridge-inspect-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_root);
 
         fs::create_dir_all(temp_root.join("Packages").join("com.ucp.bridge")).unwrap();

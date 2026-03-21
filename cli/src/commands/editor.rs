@@ -153,7 +153,10 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
         eprintln!("  Requested Unity version: {version}");
     }
     if !status.installed_versions.is_empty() {
-        eprintln!("  Installed Unity versions: {}", status.installed_versions.join(", "));
+        eprintln!(
+            "  Installed Unity versions: {}",
+            status.installed_versions.join(", ")
+        );
     }
     eprintln!("  Log: {}", status.log_path);
     if let Some(warning) = status.resolution_warning.as_deref() {

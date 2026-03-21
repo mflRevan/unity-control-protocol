@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1] - 2026-03-21
+
+### Added
+
+- Added `ucp asset reimport <path>` for explicit, targeted Unity reimport of an asset or its `.meta` file.
+- Added `ucp asset import-settings read|write|write-batch` so agents can inspect and modify importer settings without hand-editing `.meta` files.
+- Added end-to-end `ucp profiler ...` support for profiler status/config/session control, frame inspection, timeline/hierarchy analysis, callstacks, summaries, and structured snapshot export.
+
+### Changed
+
+- `ucp files write|patch` now trigger targeted synchronous reimport for edited assets and `.meta` files under `Assets/` and `Packages/` by default.
+- Importer settings writes now apply automatically through Unity's importer pipeline, with `--no-reimport` available when callers want to defer the reimport step.
+- `ucp asset info` now surfaces the Unity importer type when the target asset has an importer.
+- Profiler sessions now default to bounded live-editor behavior: stale buffered frames are cleared before new sessions when needed, heavy profiler settings are restored on stop, summaries use a recent-frame window by default, and editor capture export prefers structured JSON snapshots.
+
+### Fixed
+
+- Fixed `ucp play` falsely reporting success when Unity blocked play-mode entry because compile-breaking console errors still needed to be resolved.
+- Fixed imported-asset iteration gaps where agents had to patch `.meta` files manually and then remember to reimport assets before changes took effect.
+- Fixed importer-setting workflows for assets such as FBX models and textures by exposing a first-class, importer-aware editing surface instead of raw meta-file surgery.
+- Fixed profiler-driven editor memory blowups by clamping live profiler buffer budgets, bounding expensive export/summary paths, and avoiding long-lived allocation-callstack sessions after stop.
+
 ## [0.4.0] - 2026-03-15
 
 ### Added
@@ -28,16 +50,6 @@
 - Fixed the dev-project edit-mode test assembly so editor-only automation types no longer break compilation and script discovery.
 - Fixed scene-focus validation to match Unity SceneView behavior consistently across live automation and smoke tests.
 
-### Validation
-
-- `cargo test --manifest-path cli/Cargo.toml`
-- `./scripts/qa-playground.ps1 -Project unity-project-dev/ucp-dev -TimeoutSeconds 45`
-- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev open`
-- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev compile`
-- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev run-tests --mode edit`
-- `./scripts/smoke-dev.ps1 -Project unity-project-dev/ucp-dev`
-- `npm run build` in `website/`
-
 ## [0.3.3] - 2026-03-14
 
 ### Added
@@ -57,13 +69,6 @@
 - Fixed Unity executable auto-detection for editors installed under Unity Hub secondary install roots.
 - Fixed the bridge package import gap by adding missing Unity `.meta` files for `EditorController.cs` and `ObjectReferenceResolver.cs`.
 - Fixed negative object-reference and file path traversal test cases so they return protocol validation errors instead of spurious internal failures.
-
-### Validation
-
-- `cargo check --manifest-path cli/Cargo.toml`
-- `cargo test --manifest-path cli/Cargo.toml`
-- `cargo run --manifest-path cli/Cargo.toml -- --project unity-project-dev/ucp-dev run-tests --json`
-- `./scripts/smoke-dev.ps1 -Project unity-project-dev/ucp-dev`
 
 ## [0.3.2] - 2026-03-14
 
@@ -85,12 +90,6 @@
 - Fixed the bridge lifecycle gap where commands assumed Unity was already running and failed without guiding the user toward launch/configuration.
 - Fixed stale tracked bridge refs on the local dev project by auto-updating `com.ucp.bridge` from `v0.3.0` to `v0.3.1` during doctor validation.
 
-### Validation
-
-- `cargo check --manifest-path cli/Cargo.toml`
-- `cargo test --manifest-path cli/Cargo.toml`
-- Live smoke validation against `unity-project-dev/ucp-dev` confirmed bridge drift detection/update, `start` error handling for missing Unity installs, `close` no-op handling, and doctor reporting.
-
 ## [0.3.1] - 2026-03-14
 
 ### Added
@@ -109,11 +108,6 @@
 - Fixed buffered log queries so regex searches filter before `--count` truncation, preventing false empty results when newer noise crowds out older matches.
 - Fixed buffered log reads ignoring requested counts because of the hard 10-entry return cap.
 - Fixed `object set-property` and asset writes silently no-oping on unresolved object references by failing explicitly instead.
-
-### Validation
-
-- Rust CLI compile/test surface validated after command and installer changes.
-- Unity bridge smoke coverage expanded for buffered log counts, object reference assignment failures, and asset batch writes.
 
 ## [0.3.0] - 2026-03-13
 
@@ -139,11 +133,6 @@
 - Fixed install flow friction by removing default `y/n` prompt requirement (now opt-in via `--confirm`).
 - Fixed QA harness false negatives around bridge reconnect windows (`play/pause/stop`), prefab unpack CLI args, screenshot assertions, and cleanup idempotency.
 - Fixed website deployment structure by tracking the full `website/` app in the main repository and adding SPA rewrites for runtime routing.
-
-### Validation
-
-- Full command-palette playground QA harness passed: `50/50`.
-- EditMode bridge smoke suite passed in-run: `11/11`.
 
 ## [0.2.3] - 2026-03-12
 

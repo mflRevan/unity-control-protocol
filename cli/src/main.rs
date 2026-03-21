@@ -92,15 +92,13 @@ async fn main() -> anyhow::Result<()> {
     let cli_settings = config::load_cli_settings();
 
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                if cli.verbose {
-                    EnvFilter::new("ucp=debug")
-                } else {
-                    EnvFilter::new("ucp=warn")
-                }
-            }),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            if cli.verbose {
+                EnvFilter::new("ucp=debug")
+            } else {
+                EnvFilter::new("ucp=warn")
+            }
+        }))
         .without_time()
         .init();
 
@@ -172,15 +170,7 @@ mod tests {
     #[test]
     fn parses_scene_focus_command_with_axis() {
         let cli = Cli::try_parse_from([
-            "ucp",
-            "scene",
-            "focus",
-            "--id",
-            "-42",
-            "--axis",
-            "1",
-            "0.5",
-            "-1",
+            "ucp", "scene", "focus", "--id", "-42", "--axis", "1", "0.5", "-1",
         ])
         .expect("scene focus command should parse");
 
@@ -201,6 +191,66 @@ mod tests {
 
         match cli.command {
             commands::Command::Open => {}
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_profiler_summary_command() {
+        let cli =
+            Cli::try_parse_from(["ucp", "profiler", "summary", "--limit", "5", "--thread", "0"])
+                .expect("profiler summary command should parse");
+
+        match cli.command {
+            commands::Command::Profiler {
+                action: commands::profiler::ProfilerAction::Summary {
+                    first_frame,
+                    last_frame,
+                    thread,
+                    limit,
+                },
+            } => {
+                assert!(first_frame.is_none());
+                assert!(last_frame.is_none());
+                assert_eq!(thread, Some(0));
+                assert_eq!(limit, 5);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_profiler_session_start_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "profiler",
+            "session",
+            "start",
+            "--mode",
+            "play",
+            "--deep-profile",
+            "true",
+            "--enable-category",
+            "Scripts",
+        ])
+        .expect("profiler session start command should parse");
+
+        match cli.command {
+            commands::Command::Profiler {
+                action: commands::profiler::ProfilerAction::Session {
+                    action:
+                        commands::profiler::ProfilerSessionAction::Start {
+                            mode,
+                            deep_profile,
+                            enable_categories,
+                            ..
+                        },
+                },
+            } => {
+                assert_eq!(mode.as_deref(), Some("play"));
+                assert_eq!(deep_profile, Some(true));
+                assert_eq!(enable_categories, vec!["Scripts"]);
+            }
             _ => panic!("unexpected command variant"),
         }
     }

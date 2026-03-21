@@ -3,8 +3,8 @@ use crate::client::BridgeClient;
 use crate::discovery;
 use crate::output;
 use console::style;
-use directories::ProjectDirs;
 use dialoguer::{Confirm, theme::ColorfulTheme};
+use directories::ProjectDirs;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -48,7 +48,11 @@ struct AutomationSettingsOutcome {
     changed: Vec<String>,
 }
 
-pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -> anyhow::Result<()> {
+pub async fn run(
+    path: Option<String>,
+    options: InstallOptions,
+    ctx: &Context,
+) -> anyhow::Result<()> {
     let project_path = if let Some(p) = path {
         let pb = PathBuf::from(&p);
         if !pb.join("ProjectSettings").is_dir() {
@@ -62,11 +66,11 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
             Ok(p) => p,
             Err(_) => {
                 if !ctx.json {
-                    output::print_warn(
-                        "No Unity project found in current directory tree",
-                    );
+                    output::print_warn("No Unity project found in current directory tree");
                 }
-                anyhow::bail!("No Unity project found. Use --project or run from a Unity project directory.");
+                anyhow::bail!(
+                    "No Unity project found. Use --project or run from a Unity project directory."
+                );
             }
         }
     };
@@ -79,16 +83,15 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         anyhow::bail!("Use --manifest by itself, or use --dev/--embedded/--bridge-path");
     }
 
-    if options.bridge_ref.is_some() && (options.dev || options.bridge_path.is_some() || options.embedded) {
+    if options.bridge_ref.is_some()
+        && (options.dev || options.bridge_path.is_some() || options.embedded)
+    {
         anyhow::bail!("Use --bridge-ref by itself, or use --dev/--embedded/--bridge-path");
     }
 
     let manifest_path = project_path.join("Packages").join("manifest.json");
     if !manifest_path.exists() {
-        anyhow::bail!(
-            "manifest.json not found at {}",
-            manifest_path.display()
-        );
+        anyhow::bail!("manifest.json not found at {}", manifest_path.display());
     }
 
     if let Some(source_path) = desired_embedded_package_source(&options)? {
@@ -124,7 +127,8 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         .as_deref()
         .map(|current| current == desired_package_url)
         .unwrap_or(false);
-    let refresh_existing_custom_source = should_refresh_existing_custom_source(same_dependency, using_custom_source);
+    let refresh_existing_custom_source =
+        should_refresh_existing_custom_source(same_dependency, using_custom_source);
 
     let updating_existing = match current_dependency.as_deref() {
         Some(current) if current == desired_package_url => false,
@@ -132,12 +136,16 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         Some(_) => {
             if !using_custom_source {
                 if !ctx.json {
-                    output::print_info("UCP bridge is already installed with a custom dependency reference");
+                    output::print_info(
+                        "UCP bridge is already installed with a custom dependency reference",
+                    );
                 }
                 return Ok(());
             }
             if !ctx.json {
-                output::print_info("UCP bridge is already installed with a custom dependency reference");
+                output::print_info(
+                    "UCP bridge is already installed with a custom dependency reference",
+                );
             }
             true
         }
@@ -167,17 +175,18 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
 
     if options.confirm && !ctx.json && !refresh_existing_custom_source {
         eprintln!();
-        let bolt = if output::supports_unicode() { "⚡" } else { "*" };
-        let bar = if output::supports_unicode() { "│" } else { "|" };
-        eprintln!(
-            "  {} Install UCP bridge into:",
-            style(bolt).cyan().bold()
-        );
-        eprintln!(
-            "  {} {}",
-            style(bar).dim(),
-            project_path.display()
-        );
+        let bolt = if output::supports_unicode() {
+            "⚡"
+        } else {
+            "*"
+        };
+        let bar = if output::supports_unicode() {
+            "│"
+        } else {
+            "|"
+        };
+        eprintln!("  {} Install UCP bridge into:", style(bolt).cyan().bold());
+        eprintln!("  {} {}", style(bar).dim(), project_path.display());
         eprintln!();
 
         let confirm = Confirm::with_theme(&ColorfulTheme::default())
@@ -210,7 +219,9 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
     };
 
     if refresh_existing_custom_source && !ctx.json {
-        output::print_info("UCP bridge is already installed from a local/custom source; refreshing Unity package import");
+        output::print_info(
+            "UCP bridge is already installed from a local/custom source; refreshing Unity package import",
+        );
     }
 
     if !same_dependency || !already_running {
@@ -218,7 +229,9 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         // because Unity needs a concrete manifest change to re-evaluate the local package.
         inject_package(&manifest_path, PACKAGE_NAME, &desired_package_url)?;
     } else if !ctx.json {
-        output::print_info("Desired bridge reference is already installed; waiting for Unity to bring it back up");
+        output::print_info(
+            "Desired bridge reference is already installed; waiting for Unity to bring it back up",
+        );
     }
 
     ensure_ucp_state_dir(&project_path)?;
@@ -243,10 +256,13 @@ pub async fn run(path: Option<String>, options: InstallOptions, ctx: &Context) -
         eprintln!();
     }
 
-    write_install_state(&project_path, InstallState {
-        mode: "manifest".to_string(),
-        source: Some(desired_package_url.clone()),
-    })?;
+    write_install_state(
+        &project_path,
+        InstallState {
+            mode: "manifest".to_string(),
+            source: Some(desired_package_url.clone()),
+        },
+    )?;
 
     if options.no_wait {
         if ctx.json {
@@ -476,7 +492,10 @@ fn canonicalize_package_dir(path: PathBuf) -> anyhow::Result<PathBuf> {
     let canonical = normalize_windows_path(canonical);
 
     if !canonical.join("package.json").is_file() {
-        anyhow::bail!("Bridge path {} does not look like a Unity package", canonical.display());
+        anyhow::bail!(
+            "Bridge path {} does not look like a Unity package",
+            canonical.display()
+        );
     }
 
     Ok(canonical)
@@ -502,10 +521,7 @@ fn file_package_reference(path: PathBuf) -> anyhow::Result<String> {
         normalized = stripped.to_string();
     }
 
-    Ok(format!(
-        "file:{}",
-        normalized
-    ))
+    Ok(format!("file:{}", normalized))
 }
 
 async fn run_embedded_local_install(
@@ -521,8 +537,16 @@ async fn run_embedded_local_install(
 
     if confirm && !ctx.json {
         eprintln!();
-        let bolt = if output::supports_unicode() { "⚡" } else { "*" };
-        let bar = if output::supports_unicode() { "│" } else { "|" };
+        let bolt = if output::supports_unicode() {
+            "⚡"
+        } else {
+            "*"
+        };
+        let bar = if output::supports_unicode() {
+            "│"
+        } else {
+            "|"
+        };
         eprintln!(
             "  {} Mount local UCP bridge into:",
             style(bolt).cyan().bold()
@@ -553,10 +577,13 @@ async fn run_embedded_local_install(
     ensure_local_git_exclude(project_path, ".ucp/")?;
     ensure_local_git_exclude(project_path, "Packages/com.ucp.bridge/")?;
     let mut automation = apply_recommended_player_settings(project_path)?;
-    write_install_state(project_path, InstallState {
-        mode: "embedded-local".to_string(),
-        source: Some(source_path.display().to_string()),
-    })?;
+    write_install_state(
+        project_path,
+        InstallState {
+            mode: "embedded-local".to_string(),
+            source: Some(source_path.display().to_string()),
+        },
+    )?;
 
     if let Some(lock) = previous_lock.as_ref() {
         let _ = request_asset_refresh(lock).await;
@@ -683,15 +710,21 @@ fn is_same_package_source(mount_path: &Path, source_path: &Path) -> anyhow::Resu
         return Ok(false);
     }
 
-    let mount = normalize_windows_path(
-        fs::canonicalize(mount_path)
-            .map_err(|e| anyhow::anyhow!("Failed to resolve embedded package mount {}: {e}", mount_path.display()))?,
-    );
+    let mount = normalize_windows_path(fs::canonicalize(mount_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to resolve embedded package mount {}: {e}",
+            mount_path.display()
+        )
+    })?);
 
     Ok(mount == source_path)
 }
 
-fn replace_embedded_mount(project_path: &Path, mount_path: &Path, source_path: &Path) -> anyhow::Result<()> {
+fn replace_embedded_mount(
+    project_path: &Path,
+    mount_path: &Path,
+    source_path: &Path,
+) -> anyhow::Result<()> {
     if mount_path.exists() {
         if !mount_is_owned_by_ucp(project_path)? {
             anyhow::bail!(
@@ -709,7 +742,12 @@ fn replace_embedded_mount(project_path: &Path, mount_path: &Path, source_path: &
 fn remove_mount_link(mount_path: &Path) -> anyhow::Result<()> {
     fs::remove_dir(mount_path)
         .or_else(|_| fs::remove_file(mount_path))
-        .map_err(|e| anyhow::anyhow!("Failed to remove existing embedded package mount {}: {e}", mount_path.display()))
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to remove existing embedded package mount {}: {e}",
+                mount_path.display()
+            )
+        })
 }
 
 fn create_mount_link(mount_path: &Path, source_path: &Path) -> anyhow::Result<()> {
@@ -722,9 +760,8 @@ fn create_mount_link(mount_path: &Path, source_path: &Path) -> anyhow::Result<()
     {
         let mount = mount_path.display().to_string().replace('\'', "''");
         let source = source_path.display().to_string().replace('\'', "''");
-        let script = format!(
-            "New-Item -ItemType Junction -Path '{mount}' -Target '{source}' | Out-Null"
-        );
+        let script =
+            format!("New-Item -ItemType Junction -Path '{mount}' -Target '{source}' | Out-Null");
         let status = Command::new("powershell")
             .args(["-NoProfile", "-Command", &script])
             .status()
@@ -784,19 +821,19 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
     let mount_path = embedded_package_mount(&project);
 
     if mount_path.exists() && mount_is_owned_by_ucp(&project)? {
-            remove_mount_link(&mount_path)?;
-            clear_install_state(&project)?;
+        remove_mount_link(&mount_path)?;
+        clear_install_state(&project)?;
 
-            if ctx.json {
-                output::print_json(&output::success_json(serde_json::json!({
-                    "uninstalled": true,
-                    "installationMode": "embedded-local"
-                })));
-            } else {
-                output::print_success("Local UCP bridge mount removed");
-            }
+        if ctx.json {
+            output::print_json(&output::success_json(serde_json::json!({
+                "uninstalled": true,
+                "installationMode": "embedded-local"
+            })));
+        } else {
+            output::print_success("Local UCP bridge mount removed");
+        }
 
-            return Ok(());
+        return Ok(());
     }
 
     let manifest_path = project.join("Packages").join("manifest.json");
@@ -810,7 +847,10 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
     }
 
     let mut manifest: serde_json::Value = serde_json::from_str(&content)?;
-    if let Some(deps) = manifest.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+    if let Some(deps) = manifest
+        .get_mut("dependencies")
+        .and_then(|v| v.as_object_mut())
+    {
         deps.remove(PACKAGE_NAME);
     }
 
@@ -822,7 +862,9 @@ pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
     let _ = std::fs::remove_file(lock_path);
 
     if ctx.json {
-        output::print_json(&output::success_json(serde_json::json!({"uninstalled": true})));
+        output::print_json(&output::success_json(
+            serde_json::json!({"uninstalled": true}),
+        ));
     } else {
         output::print_success("UCP bridge uninstalled");
     }
@@ -880,7 +922,10 @@ fn inject_package(manifest_path: &Path, name: &str, url: &str) -> anyhow::Result
     let content = std::fs::read_to_string(manifest_path)?;
     let mut manifest: serde_json::Value = serde_json::from_str(&content)?;
 
-    if let Some(deps) = manifest.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+    if let Some(deps) = manifest
+        .get_mut("dependencies")
+        .and_then(|v| v.as_object_mut())
+    {
         deps.insert(name.to_string(), serde_json::json!(url));
     } else {
         anyhow::bail!("manifest.json has no 'dependencies' object");
@@ -908,7 +953,10 @@ fn remove_local_file_dependency(manifest_path: &Path) -> anyhow::Result<bool> {
         return Ok(false);
     }
 
-    if let Some(deps) = manifest.get_mut("dependencies").and_then(|v| v.as_object_mut()) {
+    if let Some(deps) = manifest
+        .get_mut("dependencies")
+        .and_then(|v| v.as_object_mut())
+    {
         deps.remove(PACKAGE_NAME);
     }
 
@@ -920,14 +968,14 @@ fn remove_local_file_dependency(manifest_path: &Path) -> anyhow::Result<bool> {
 async fn request_asset_refresh(lock: &crate::config::LockFile) -> anyhow::Result<()> {
     let mut client = BridgeClient::connect(lock).await?;
     client.handshake().await?;
-    let _ = client
-        .call("refresh-assets", serde_json::json!({}))
-        .await?;
+    let _ = client.call("refresh-assets", serde_json::json!({})).await?;
     client.close().await;
     Ok(())
 }
 
-fn apply_recommended_player_settings(project_path: &Path) -> anyhow::Result<AutomationSettingsOutcome> {
+fn apply_recommended_player_settings(
+    project_path: &Path,
+) -> anyhow::Result<AutomationSettingsOutcome> {
     let settings_path = project_path.join(PROJECT_SETTINGS_FILE);
     let content = fs::read_to_string(&settings_path).map_err(|error| {
         anyhow::anyhow!(
@@ -951,17 +999,23 @@ fn apply_recommended_player_settings(project_path: &Path) -> anyhow::Result<Auto
             lines.push(updated);
             continue;
         }
-        if let Some(updated) = rewrite_project_setting(line, "defaultScreenWidth", &width, &mut changed) {
+        if let Some(updated) =
+            rewrite_project_setting(line, "defaultScreenWidth", &width, &mut changed)
+        {
             saw_width = true;
             lines.push(updated);
             continue;
         }
-        if let Some(updated) = rewrite_project_setting(line, "defaultScreenHeight", &height, &mut changed) {
+        if let Some(updated) =
+            rewrite_project_setting(line, "defaultScreenHeight", &height, &mut changed)
+        {
             saw_height = true;
             lines.push(updated);
             continue;
         }
-        if let Some(updated) = rewrite_project_setting(line, "defaultIsNativeResolution", "0", &mut changed) {
+        if let Some(updated) =
+            rewrite_project_setting(line, "defaultIsNativeResolution", "0", &mut changed)
+        {
             saw_native_resolution = true;
             lines.push(updated);
             continue;
@@ -981,7 +1035,11 @@ fn apply_recommended_player_settings(project_path: &Path) -> anyhow::Result<Auto
         return Ok(AutomationSettingsOutcome::default());
     }
 
-    let newline = if content.contains("\r\n") { "\r\n" } else { "\n" };
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
     let updated = format!("{}{}", lines.join(newline), newline);
     fs::write(&settings_path, updated).map_err(|error| {
         anyhow::anyhow!(
@@ -1022,8 +1080,14 @@ async fn apply_recommended_player_settings_via_bridge(project_path: &Path) -> an
 
     for (key, value) in [
         ("runInBackground", serde_json::json!(true)),
-        ("defaultScreenWidth", serde_json::json!(AUTOMATION_SCREEN_WIDTH)),
-        ("defaultScreenHeight", serde_json::json!(AUTOMATION_SCREEN_HEIGHT)),
+        (
+            "defaultScreenWidth",
+            serde_json::json!(AUTOMATION_SCREEN_WIDTH),
+        ),
+        (
+            "defaultScreenHeight",
+            serde_json::json!(AUTOMATION_SCREEN_HEIGHT),
+        ),
         ("defaultIsNativeResolution", serde_json::json!(false)),
     ] {
         client
@@ -1061,10 +1125,9 @@ fn print_automation_settings_note(automation: &AutomationSettingsOutcome) {
 #[cfg(test)]
 mod tests {
     use super::{
-        InstallOptions, canonicalize_package_dir, desired_package_reference,
+        InstallOptions, InstallState, canonicalize_package_dir, desired_package_reference,
         file_package_reference, read_install_state, remove_local_file_dependency,
         should_refresh_existing_custom_source, uses_embedded_local_package, write_install_state,
-        InstallState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1082,10 +1145,8 @@ mod tests {
 
     #[test]
     fn file_reference_uses_forward_slashes() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-install-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-install-test-{}", std::process::id()));
         let package_dir = temp_root.join("com.ucp.bridge");
         let _ = fs::remove_dir_all(&temp_root);
         fs::create_dir_all(&package_dir).unwrap();
@@ -1142,17 +1203,18 @@ mod tests {
 
     #[test]
     fn install_state_round_trip() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-install-state-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-install-state-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_root);
         fs::create_dir_all(temp_root.join(".ucp")).unwrap();
 
-        write_install_state(&temp_root, InstallState {
-            mode: "embedded-local".to_string(),
-            source: Some("C:/bridge".to_string()),
-        })
+        write_install_state(
+            &temp_root,
+            InstallState {
+                mode: "embedded-local".to_string(),
+                source: Some("C:/bridge".to_string()),
+            },
+        )
         .unwrap();
 
         let state = read_install_state(&temp_root).unwrap().unwrap();
@@ -1164,10 +1226,8 @@ mod tests {
 
     #[test]
     fn removes_local_file_dependency_from_manifest() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-install-manifest-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-install-manifest-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_root);
         fs::create_dir_all(&temp_root).unwrap();
         let manifest_path = temp_root.join("manifest.json");
