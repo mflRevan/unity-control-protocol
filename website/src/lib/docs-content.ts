@@ -13,6 +13,7 @@ import scriptingMd from '@docs/commands/scripting.md?raw';
 import vcsMd from '@docs/commands/vcs.md?raw';
 import objectsMd from '@docs/commands/objects.md?raw';
 import assetsMd from '@docs/commands/assets.md?raw';
+import packagesMd from '@docs/commands/packages.md?raw';
 import materialsMd from '@docs/commands/materials.md?raw';
 import prefabsMd from '@docs/commands/prefabs.md?raw';
 import settingsMd from '@docs/commands/settings.md?raw';
@@ -42,6 +43,7 @@ export const docsContent: Record<string, string> = {
   'commands/vcs': vcsMd,
   'commands/objects': objectsMd,
   'commands/assets': assetsMd,
+  'commands/packages': packagesMd,
   'commands/materials': materialsMd,
   'commands/prefabs': prefabsMd,
   'commands/settings': settingsMd,

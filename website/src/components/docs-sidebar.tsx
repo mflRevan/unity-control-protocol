@@ -59,6 +59,7 @@ const navigation: NavGroup[] = [
       { title: 'Version Control', href: '/docs/commands/vcs', icon: GitBranch },
       { title: 'Objects & Components', href: '/docs/commands/objects', icon: Box },
       { title: 'Assets', href: '/docs/commands/assets', icon: Package },
+      { title: 'Packages', href: '/docs/commands/packages', icon: Download },
       { title: 'Materials', href: '/docs/commands/materials', icon: Palette },
       { title: 'Prefabs', href: '/docs/commands/prefabs', icon: Puzzle },
       { title: 'Settings', href: '/docs/commands/settings', icon: Settings },

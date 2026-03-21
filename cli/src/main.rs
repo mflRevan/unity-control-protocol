@@ -254,4 +254,56 @@ mod tests {
             _ => panic!("unexpected command variant"),
         }
     }
+
+    #[test]
+    fn parses_packages_add_command() {
+        let cli = Cli::try_parse_from(["ucp", "packages", "add", "com.unity.textmeshpro"])
+            .expect("packages add command should parse");
+
+        match cli.command {
+            commands::Command::Packages {
+                action: commands::packages::PackagesAction::Add { package, no_wait },
+            } => {
+                assert_eq!(package, "com.unity.textmeshpro");
+                assert!(!no_wait);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_unitypackage_import_command_with_selection() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "packages",
+            "unitypackage",
+            "import",
+            "bundle.unitypackage",
+            "--select",
+            "Assets/Keep",
+            "--unselect",
+            "Assets/Keep/Skip",
+        ])
+        .expect("unitypackage import command should parse");
+
+        match cli.command {
+            commands::Command::Packages {
+                action:
+                    commands::packages::PackagesAction::Unitypackage {
+                        action:
+                            commands::packages::UnitypackageAction::Import {
+                                archive,
+                                select,
+                                unselect,
+                                ..
+                            },
+                    },
+            } => {
+                assert_eq!(archive, "bundle.unitypackage");
+                assert_eq!(select, vec!["Assets/Keep"]);
+                assert_eq!(unselect, vec!["Assets/Keep/Skip"]);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
 }

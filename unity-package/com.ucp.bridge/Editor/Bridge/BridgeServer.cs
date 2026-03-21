@@ -159,6 +159,9 @@ namespace UCP.Bridge
 
             // Build Pipeline
             BuildController.Register(s_router);
+
+            // Package management
+            PackagesController.Register(s_router);
         }
 
         private static void StartServer()

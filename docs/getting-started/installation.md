@@ -8,6 +8,13 @@
 npm install -g @mflrevan/ucp
 ```
 
+### Via pnpm
+
+```bash
+pnpm add -g @mflrevan/ucp
+pnpm approve-builds
+```
+
 ### Via Cargo
 
 ```bash
@@ -24,6 +31,23 @@ Available platforms:
 - **macOS (Intel)** - `ucp-x86_64-apple-darwin.tar.gz`
 - **macOS (Apple Silicon)** - `ucp-aarch64-apple-darwin.tar.gz`
 - **Linux** - `ucp-x86_64-unknown-linux-gnu.tar.gz`
+
+## Update the CLI
+
+### Via npm
+
+```bash
+npm update -g @mflrevan/ucp
+```
+
+### Via pnpm
+
+```bash
+pnpm update -g @mflrevan/ucp
+pnpm approve-builds
+```
+
+If you installed UCP from Cargo or prebuilt binaries, update it using the same distribution channel you used originally.
 
 ## Install the Bridge
 

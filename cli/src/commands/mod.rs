@@ -11,6 +11,7 @@ pub mod install;
 pub mod logs;
 pub mod material;
 pub mod object;
+pub mod packages;
 pub mod play;
 pub mod profiler;
 pub mod prefab;
@@ -206,6 +207,11 @@ pub enum Command {
         #[command(subcommand)]
         action: prefab::PrefabAction,
     },
+    /// Unity package management and .unitypackage import workflows
+    Packages {
+        #[command(subcommand)]
+        action: packages::PackagesAction,
+    },
     /// Build pipeline operations
     Build {
         #[command(subcommand)]
@@ -380,6 +386,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Settings { action } => settings::run(action, &ctx).await,
         Command::Material { action } => material::run(action, &ctx).await,
         Command::Prefab { action } => prefab::run(action, &ctx).await,
+        Command::Packages { action } => packages::run(action, &ctx).await,
         Command::Build { action } => build::run(action, &ctx).await,
         Command::Profiler { action } => profiler::run(action, &ctx).await,
     }

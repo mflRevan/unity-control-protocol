@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.2] - 2026-03-21
+
+### Added
+
+- Added a first-class `ucp packages ...` domain for Unity Package Manager search/list/info/install/remove, manifest dependency management, and scoped registry management.
+- Added `ucp packages unitypackage inspect|import` for machine-friendly `.unitypackage` inspection and selective import.
+
+### Changed
+
+- Package-management docs and skills now distinguish between normal `packages add|remove` installs, manifest-driven `packages dependency ...` flows for explicit local `file:` references, and selective `.unitypackage` import workflows.
+- Scoped registry documentation now notes that Unity itself can show an "Importing a scoped registry" popup the first time a new registry is introduced.
+
+### Fixed
+
+- Fixed the missing package-management surface so agents can now browse packages, manage registries/dependencies, and selectively import `.unitypackage` archives without falling back to manual `manifest.json` or archive surgery.
+
 ## [0.4.1] - 2026-03-21
 
 ### Added

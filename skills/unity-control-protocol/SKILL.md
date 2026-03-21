@@ -3,7 +3,7 @@ name: unity-control-protocol
 description: >-
   Programmatic control of the Unity Editor from the terminal via the `ucp` CLI.
   Automate scenes, GameObjects, components, assets, materials, prefabs, build
-  pipelines, settings, tests, and lightweight version-control fallback commands
+  pipelines, settings, tests, packages, selective `.unitypackage` import, debugging and profiling 
   over a WebSocket/JSON-RPC 2.0
   bridge. Use when the user asks to inspect, create, modify, or automate anything
   inside a Unity project without opening the Editor UI.
@@ -24,6 +24,7 @@ UCP and Unity expose a broad command surface. If you are unsure what is availabl
 - The user wants to inspect or modify GameObjects, components, materials, prefabs, or assets
 - The user asks to enter/exit play mode, run tests, capture screenshots, or read logs
 - The user needs to manage scenes, project settings, build pipelines, or scripting defines
+- The user needs to browse/install Unity packages, manage scoped registries, or selectively import `.unitypackage` content
 - The user wants to automate Unity Editor workflows from CI/CD, scripts, or agents
 - The user mentions Plastic SCM / Unity VCS operations and needs a bridge-backed fallback rather than the native `cm` CLI
 
@@ -57,8 +58,11 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
 - For imported assets such as FBX, textures, and audio, prefer `ucp asset import-settings ...` over raw `.meta` file edits.
 - `ucp files write` and `ucp files patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
+- Prefer `ucp packages add|remove` for normal Package Manager installs and `ucp packages dependency ...` for explicit manifest-driven local `file:` references.
+- `ucp packages unitypackage inspect|import` gives a deterministic, agent-friendly path for Asset Store-style archives, including selective folder/asset import.
 - `ucp play` can fail when Unity is blocked by compile errors; fix the errors first, then retry.
 - Prefer `cm` for normal Unity Version Control work; use `ucp vcs` only as a lightweight fallback.
+- Adding a brand-new scoped registry can trigger Unity's own Package Manager security popup (blocking)
 
 ## Scene & editor basics
 
@@ -91,11 +95,15 @@ ucp prefab apply --id -136722
 
 Object reference writes accept `instanceId`, asset `path`, or asset `guid`, and unresolved references fail explicitly.
 
-## Settings, build, logs, tests, profiler, and exec
+## Packages, settings, build, logs, tests, profiler, and exec
 
-Use `ucp settings --help`, `ucp build --help`, `ucp logs --help`, `ucp run-tests --help`, `ucp profiler --help`, and `ucp exec --help` when you need the full surface.
+Use `ucp packages --help`, `ucp settings --help`, `ucp build --help`, `ucp logs --help`, `ucp run-tests --help`, `ucp profiler --help`, and `ucp exec --help` when you need the full surface.
 
 ```bash
+ucp packages add com.unity.cinemachine
+ucp packages dependency set com.company.tooling file:../tooling-package
+ucp packages unitypackage inspect Downloads/EnvironmentPack.unitypackage
+
 ucp settings player
 ucp settings set-player --key runInBackground --value true
 ucp settings set-lighting --key fog --value true
@@ -163,6 +171,22 @@ ucp asset reimport "Assets/Models/Enemy.fbx"
 ```
 
 UCP is unique here because it can bridge Unity-aware apply steps: `ucp compile` handles recompilation after local edits, while `ucp files write` / `patch` automatically reimport eligible assets and `.meta` files unless you intentionally defer with `--no-reimport`.
+
+### Package install and selective import iteration
+
+```bash
+ucp packages search com.unity.cinemachine
+ucp packages add com.unity.cinemachine
+ucp packages info com.unity.cinemachine
+
+ucp packages registries add --name github --url https://npm.pkg.github.com --scope com.company
+ucp packages dependency set com.company.tooling file:../tooling-package
+
+ucp packages unitypackage inspect Downloads/EnvironmentPack.unitypackage
+ucp packages unitypackage import Downloads/EnvironmentPack.unitypackage --select Assets/Environment/Trees
+```
+
+Use `packages add|remove` for normal UPM installs, `packages dependency ...` for explicit manifest references, and `packages unitypackage ...` when you need machine-friendly inspection plus selective import for archive-based content. Scoped registry adds may surface Unity's own security popup the first time a new registry is introduced.
 
 ### Playtest, logging, and failure triage
 

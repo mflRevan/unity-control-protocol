@@ -22,6 +22,8 @@ namespace UCP.Bridge.Tests
         private const string TempScriptPath = "Assets/UcpControllerSmokeComponent.cs";
         private const string TempTexturePath = "Assets/UcpImporterSmoke.png";
         private const string TempProfilerExportPath = "ProfilerCaptures\\smoke-export.json";
+        private const string TempLocalPackageFolder = "TempUcpLocalPackage";
+        private const string TempLocalPackageName = "com.ucp.temp.local";
 
         private CommandRouter _router;
 
@@ -42,6 +44,7 @@ namespace UCP.Bridge.Tests
             BuildController.Register(_router);
             EditorSettingsController.Register(_router);
             SceneController.Register(_router);
+            PackagesController.Register(_router);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             DeleteTempAsset();
             DeleteTempReferenceAsset();
@@ -51,6 +54,8 @@ namespace UCP.Bridge.Tests
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
             DeleteTempProfilerExport();
+            DeleteTempLocalPackage();
+            RemoveTempLocalPackageDependencyIfPresent();
             LogsController.ClearHistoryForTests();
             AssetImportSupport.ClearTestState();
             Profiler.enabled = false;
@@ -70,6 +75,8 @@ namespace UCP.Bridge.Tests
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
             DeleteTempProfilerExport();
+            DeleteTempLocalPackage();
+            RemoveTempLocalPackageDependencyIfPresent();
             LogsController.ClearHistoryForTests();
             AssetImportSupport.ClearTestState();
             Profiler.enabled = false;
@@ -578,6 +585,75 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void PackagesController_DependencySetInfoAndRemove_LocalFilePackage()
+        {
+            CreateTempLocalPackage();
+
+            var set = _router.Dispatch(
+                "packages/dependency/set",
+                1,
+                MiniJson.Serialize(new Dictionary<string, object>
+                {
+                    ["name"] = TempLocalPackageName,
+                    ["reference"] = "file:../" + TempLocalPackageFolder
+                }));
+
+            Assert.That(set.error, Is.Null);
+            var setResult = (Dictionary<string, object>)set.result;
+            Assert.That(setResult["name"], Is.EqualTo(TempLocalPackageName));
+            Assert.That(setResult["reference"], Is.EqualTo("file:../" + TempLocalPackageFolder));
+            Assert.That(Convert.ToBoolean(setResult["changed"]), Is.True);
+
+            var info = _router.Dispatch(
+                "packages/info",
+                1,
+                MiniJson.Serialize(new Dictionary<string, object>
+                {
+                    ["name"] = TempLocalPackageName
+                }));
+
+            Assert.That(info.error, Is.Null);
+            var infoResult = (Dictionary<string, object>)info.result;
+            Assert.That(infoResult["name"], Is.EqualTo(TempLocalPackageName));
+            Assert.That(Convert.ToBoolean(infoResult["installed"]), Is.True);
+            Assert.That(Convert.ToBoolean(infoResult["directDependency"]), Is.True);
+            Assert.That(infoResult["source"], Is.EqualTo("Local"));
+
+            var dependencies = _router.Dispatch("packages/dependencies", 1, "{}");
+            Assert.That(dependencies.error, Is.Null);
+            var dependencyResult = (Dictionary<string, object>)dependencies.result;
+            var entries = (List<object>)dependencyResult["dependencies"];
+            Assert.That(entries.Exists(item =>
+            {
+                var entry = (Dictionary<string, object>)item;
+                return entry["name"].ToString() == TempLocalPackageName
+                    && entry["reference"].ToString() == "file:../" + TempLocalPackageFolder;
+            }), Is.True);
+
+            var remove = _router.Dispatch(
+                "packages/dependency/remove",
+                1,
+                MiniJson.Serialize(new Dictionary<string, object>
+                {
+                    ["name"] = TempLocalPackageName
+                }));
+
+            Assert.That(remove.error, Is.Null);
+            var removeResult = (Dictionary<string, object>)remove.result;
+            Assert.That(removeResult["name"], Is.EqualTo(TempLocalPackageName));
+            Assert.That(removeResult["previousReference"], Is.EqualTo("file:../" + TempLocalPackageFolder));
+
+            var after = _router.Dispatch("packages/dependencies", 1, "{}");
+            Assert.That(after.error, Is.Null);
+            var afterEntries = (List<object>)((Dictionary<string, object>)after.result)["dependencies"];
+            Assert.That(afterEntries.Exists(item =>
+            {
+                var entry = (Dictionary<string, object>)item;
+                return entry["name"].ToString() == TempLocalPackageName;
+            }), Is.False);
+        }
+
+        [Test]
         public void SceneFocus_WithAxis_AlignsSceneCameraTowardTarget()
         {
             var sceneView = EditorWindow.GetWindow<SceneView>();
@@ -840,6 +916,55 @@ namespace UCP.Bridge.Tests
                 File.Delete(fullPath);
         }
 
+        private void RemoveTempLocalPackageDependencyIfPresent()
+        {
+            var manifestPath = ResolveProjectRootRelativePath("Packages/manifest.json");
+            if (!File.Exists(manifestPath))
+                return;
+
+            var manifest = MiniJson.Deserialize(File.ReadAllText(manifestPath)) as Dictionary<string, object>;
+            if (manifest == null
+                || !manifest.TryGetValue("dependencies", out var dependenciesObj)
+                || !(dependenciesObj is Dictionary<string, object> dependencies)
+                || !dependencies.ContainsKey(TempLocalPackageName))
+            {
+                return;
+            }
+
+            var remove = _router.Dispatch(
+                "packages/dependency/remove",
+                1,
+                MiniJson.Serialize(new Dictionary<string, object>
+                {
+                    ["name"] = TempLocalPackageName
+                }));
+
+            Assert.That(remove.error, Is.Null, "Temp local package dependency cleanup should succeed");
+        }
+
+        private static void CreateTempLocalPackage()
+        {
+            DeleteTempLocalPackage();
+            var packageRoot = ResolveProjectRootRelativePath(TempLocalPackageFolder);
+            Directory.CreateDirectory(packageRoot);
+            File.WriteAllText(
+                Path.Combine(packageRoot, "package.json"),
+                "{\n"
+                + "  \"name\": \"" + TempLocalPackageName + "\",\n"
+                + "  \"version\": \"1.0.0\",\n"
+                + "  \"displayName\": \"UCP Temp Local Package\",\n"
+                + "  \"unity\": \"2021.3\",\n"
+                + "  \"description\": \"Temporary local package for controller smoke tests.\"\n"
+                + "}");
+        }
+
+        private static void DeleteTempLocalPackage()
+        {
+            var packageRoot = ResolveProjectRootRelativePath(TempLocalPackageFolder);
+            if (Directory.Exists(packageRoot))
+                Directory.Delete(packageRoot, true);
+        }
+
         private static void CreateTempTextureAsset(Color color)
         {
             DeleteTempTextureAsset();
@@ -867,6 +992,12 @@ namespace UCP.Bridge.Tests
         {
             var projectRoot = Path.GetDirectoryName(Application.dataPath);
             return Path.Combine(projectRoot, assetPath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private static string ResolveProjectRootRelativePath(string relativePath)
+        {
+            var projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.Combine(projectRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
         }
 
         private static string FindFirstFloatOrRangeProperty(Shader shader)

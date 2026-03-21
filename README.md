@@ -20,7 +20,7 @@
   <a href="https://www.npmjs.com/package/@mflrevan/ucp">npm</a>
 </p>
 
-UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows.
+UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows across scenes, objects, assets, importer settings, packages, tests, builds, and profiler inspection.
 
 ## What UCP is
 
@@ -68,6 +68,10 @@ Recommended usage notes:
 
 - Prefer normal workspace file edits plus `ucp compile` for script iteration.
 - Use `ucp files read|write|patch` when you intentionally want bridge-mediated project file I/O.
+- `ucp files write|patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
+- For imported assets such as textures, FBX models, and audio, prefer `ucp asset import-settings ...` over hand-editing `.meta` files.
+- Use `ucp asset reimport <path>` when you intentionally deferred apply work or changed an imported asset on disk outside Unity's importer workflow.
+- Use `ucp packages ...` for Unity Package Manager workflows and `ucp packages unitypackage ...` for selective `.unitypackage` inspection/import.
 - Use `ucp open` when you want an explicit lifecycle step.
 - Use `ucp connect` when you want "make sure Unity is running and verify the bridge is healthy" in one command.
 - Use `ucp scene snapshot` to discover instance IDs, then `ucp scene focus` and `ucp screenshot` for visual iteration loops.
@@ -206,6 +210,7 @@ If the project's configured Unity version is known but not installed, UCP fails 
 
 - `ucp object ...`
 - `ucp asset ...`
+- `ucp packages ...`
 - `ucp material ...`
 - `ucp prefab ...`
 - `ucp settings ...`
@@ -215,6 +220,10 @@ If the project's configured Unity version is known but not installed, UCP fails 
 All commands support `--json`. Most also support `--project`, `--unity`, `--bridge-update-policy`, `--dialog-policy`, `--timeout`, and `--verbose`.
 
 Profiler workflows are safe-by-default for live editor use: new sessions clear stale buffered frames when needed, recent-frame summaries are bounded, heavy flags are restored on stop, and editor-side capture export uses structured JSON snapshots rather than pretending live raw binary capture is available.
+
+Asset workflows are importer-aware: `ucp asset import-settings read|write|write-batch` expose importer settings directly, and `ucp asset reimport` gives an explicit targeted reimport path for assets or their `.meta` files.
+
+Package workflows now cover official Unity packages, manifest dependencies, scoped registries, and selective `.unitypackage` import. For external local packages, prefer `ucp packages dependency set <name> file:...` rather than treating folders under `Packages/` as normal add/remove targets.
 
 ## Practical examples
 
@@ -245,6 +254,38 @@ ucp compile
 ucp run-tests --mode edit
 ucp logs --count 20
 ```
+
+### Imported asset iteration
+
+```bash
+ucp asset import-settings read "Assets/Models/Enemy.fbx"
+ucp asset import-settings write "Assets/Models/Enemy.fbx" --field m_GlobalScale --value 0.5
+ucp asset import-settings write-batch "Assets/Textures/HUD.png" --values '{"m_IsReadable":true,"m_TextureType":8}'
+ucp asset reimport "Assets/Textures/HUD.png.meta"
+```
+
+Use importer-settings commands instead of manually patching `.meta` files when Unity exposes importer-managed settings.
+
+### Package management and selective import
+
+```bash
+ucp packages search com.unity.cinemachine
+ucp packages add com.unity.cinemachine
+ucp packages info com.unity.cinemachine
+
+ucp packages dependency set com.company.tooling file:../tooling-package
+ucp packages registries add --name github --url https://npm.pkg.github.com --scope com.company
+
+ucp packages unitypackage inspect Downloads/EnvironmentPack.unitypackage
+ucp packages unitypackage import Downloads/EnvironmentPack.unitypackage --select Assets/Environment/Trees
+```
+
+Notes:
+
+- `packages add|remove` is the normal UPM install/remove path.
+- `packages dependency ...` is the reliable path for explicit manifest-managed references such as external local `file:` packages.
+- Adding a brand-new scoped registry can trigger Unity's own **Importing a scoped registry** popup.
+- Selective `.unitypackage` import is implemented by archive inspection plus targeted extraction, because Unity does not expose a non-interactive selective import API.
 
 ### Buffered or live logs
 

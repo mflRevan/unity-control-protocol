@@ -36,6 +36,8 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 similar = "2"
 semver = "1"
+flate2 = "1"
+tar = "0.4"
 
 [profile.release]
 strip = true
