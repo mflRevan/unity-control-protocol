@@ -15,10 +15,12 @@ pnpm add -g @mflrevan/ucp
 pnpm approve-builds
 ```
 
-### Via Cargo
+### From source
 
 ```bash
-cargo install ucp
+git clone https://github.com/mflRevan/unity-control-protocol.git
+cd unity-control-protocol/cli
+cargo build --release
 ```
 
 ### Prebuilt Binaries
@@ -47,7 +49,7 @@ pnpm update -g @mflrevan/ucp
 pnpm approve-builds
 ```
 
-If you installed UCP from Cargo or prebuilt binaries, update it using the same distribution channel you used originally.
+If you built UCP from source or installed a prebuilt binary manually, update it using the same distribution channel you used originally.
 
 ## Install the Bridge
 
@@ -74,18 +76,6 @@ Those defaults make unattended screenshots, playmode control, and agent-driven a
 For local bridge development against this repository, use `ucp install --dev` instead. That mounts the repo-local bridge into `Packages/com.ucp.bridge` without changing `Packages/manifest.json`.
 
 Use `ucp install --embedded` or `ucp install --bridge-path <path>` for other explicit local embedded workflows.
-
-### Manual Installation
-
-Add the following to your `Packages/manifest.json`:
-
-```json
-{
-  "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.1"
-  }
-}
-```
 
 ## Verify Installation
 

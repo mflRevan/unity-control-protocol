@@ -66,7 +66,7 @@ const replacements = [
   [
     'README.md',
     (content) => {
-      let next = replaceOne(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
+      let next = replaceIfPresent(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
       next = replaceIfPresent(next, /Release: `.*`/, `Release: \`${version}\``);
       next = replaceIfPresent(next, /### Advanced editor control in `.*`/, `### Advanced editor control in \`${version}\``);
       next = replaceIfPresent(next, /"protocolVersion":".*"/, `"protocolVersion":"${protocolVersion}"`);
@@ -81,13 +81,13 @@ const replacements = [
         /Version `.*` of the Unity Control Protocol CLI\./,
         `Version \`${version}\` of the Unity Control Protocol CLI.`,
       );
-      next = replaceOne(next, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
+      next = replaceIfPresent(next, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`);
       return next;
     },
   ],
   [
     'docs/getting-started/installation.md',
-    (content) => replaceOne(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`),
+    (content) => replaceIfPresent(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`),
   ],
   [
     'docs/commands/connection.md',

@@ -91,10 +91,12 @@ pnpm add -g @mflrevan/ucp
 pnpm approve-builds
 ```
 
-### cargo
+### from source
 
 ```bash
-cargo install --git https://github.com/mflRevan/unity-control-protocol --path cli
+git clone https://github.com/mflRevan/unity-control-protocol.git
+cd unity-control-protocol/cli
+cargo build --release
 ```
 
 ## Install the Unity bridge
@@ -117,16 +119,6 @@ Explicit local bridge development modes:
 - `ucp install --dev`
 - `ucp install --embedded`
 - `ucp install --bridge-path <path>`
-
-Manual manifest dependency:
-
-```json
-{
-  "dependencies": {
-    "com.ucp.bridge": "https://github.com/mflRevan/unity-control-protocol.git?path=unity-package/com.ucp.bridge#v0.4.1"
-  }
-}
-```
 
 ## Lifecycle and bridge behavior
 
