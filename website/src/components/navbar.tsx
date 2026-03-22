@@ -4,6 +4,7 @@ import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import discordIcon from '@/assets/discord.svg';
 
 const navLinks = [
   { label: 'Home', href: '/' },
@@ -91,6 +92,15 @@ export function Navbar() {
               <Github className="h-4 w-4" />
             </Button>
           </a>
+          <a href="https://discord.gg/F4RjhdVTbz" target="_blank" rel="noopener noreferrer">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full border border-[#5865F2]/70 bg-[#5865F2] text-white backdrop-blur-xl hover:border-[#4752C4] hover:bg-[#4752C4]"
+            >
+              <img src={discordIcon} alt="Discord" className="block h-5 w-5 shrink-0" />
+            </Button>
+          </a>
           <Link to="/docs">
             <Button size="sm" className="ml-2 rounded-full px-4 shadow-[0_14px_32px_-18px_rgba(109,40,217,0.9)]">
               Get Started
@@ -129,6 +139,15 @@ export function Navbar() {
               <a href="https://github.com/mflRevan/unity-control-protocol" target="_blank" rel="noopener noreferrer">
                 <Button variant="ghost" size="icon">
                   <Github className="h-4 w-4" />
+                </Button>
+              </a>
+              <a href="https://discord.gg/F4RjhdVTbz" target="_blank" rel="noopener noreferrer">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="border border-[#5865F2]/70 bg-[#5865F2] text-white hover:border-[#4752C4] hover:bg-[#4752C4]"
+                >
+                  <img src={discordIcon} alt="Discord" className="block h-5 w-5 shrink-0" />
                 </Button>
               </a>
             </div>

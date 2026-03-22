@@ -3,6 +3,7 @@ import { ArrowRight, Github } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FadeIn, GlowCard } from '@/components/animations';
 import { TextType } from '@/components/text-type';
+import discordIcon from '@/assets/discord.svg';
 
 export function CTA() {
   return (
@@ -34,6 +35,15 @@ export function CTA() {
                   <Button size="lg" variant="outline" className="gap-2 border-border/60 hover:border-primary/40">
                     <Github className="h-4 w-4" />
                     View Source
+                  </Button>
+                </a>
+                <a href="https://discord.gg/F4RjhdVTbz" target="_blank" rel="noopener noreferrer">
+                  <Button
+                    size="lg"
+                    className="gap-2 border border-[#5865F2]/70 bg-[#5865F2] text-white hover:bg-[#4752C4] hover:border-[#4752C4]"
+                  >
+                    <img src={discordIcon} alt="Discord" className="block h-5 w-5 shrink-0" />
+                    Join Discord
                   </Button>
                 </a>
               </div>
