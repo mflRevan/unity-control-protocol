@@ -11,9 +11,7 @@
 <p align="center">
   <a href="assets/branding/ucp-icon.svg">SVG logo</a>
   |
-  <a href="assets/branding/ucp-icon-128.png">PNG icon (128)</a>
-  |
-  <a href="assets/branding/ucp-icon-512.png">PNG icon (512)</a>
+  <a href="https://discord.gg/F4RjhdVTbz">Discord</a>
   |
   <a href="https://github.com/mflRevan/unity-control-protocol/releases">Releases</a>
   |
