@@ -35,8 +35,6 @@ curl -o skills/unity-control-protocol/SKILL.md \
 
 The agent will automatically discover and load the skill when it encounters Unity-related tasks.
 
-If you also want a release-validation workflow for the bundled dev project and bridge smoke suite, copy `skills/unity-control-protocol-qa/` as well.
-
 ### 2. ClawHub / OpenClaw discovery
 
 The base UCP skill is also published through ClawHub as a marketplace-distributed `SKILL.md`.
@@ -49,12 +47,12 @@ This is the best fit when your runtime follows the OpenClaw / ClawHub skill mode
 
 ### 3. Claude Code marketplace install
 
-Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. UCP now ships a dedicated Claude plugin wrapper that exposes only the base Unity automation skill by default.
+Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. UCP now ships the base Unity automation skill through the repository's canonical root plugin.
 
 For local plugin testing:
 
 ```bash
-claude --plugin-dir ./claude-plugin/ucp
+claude --plugin-dir .
 ```
 
 For marketplace-style install from GitHub:
@@ -67,8 +65,6 @@ For marketplace-style install from GitHub:
 That default Claude install exposes:
 
 - `/ucp:unity-control-protocol`
-
-It does **not** install `unity-control-protocol-qa`; the QA skill is intentionally excluded from the default Claude marketplace package so ordinary installs stay lean.
 
 ## Primary skill preview
 

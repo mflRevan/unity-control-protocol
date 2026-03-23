@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "ucp",
-      "source": "./claude-plugin/ucp",
+      "source": "./",
       "description": "Unity Editor automation via the Unity Control Protocol base skill.",
       "version": "0.4.3",
       "author": {

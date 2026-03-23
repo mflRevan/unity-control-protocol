@@ -104,7 +104,7 @@ This repository is also Claude Code marketplace-compatible.
 For local development or one-off testing:
 
 ```bash
-claude --plugin-dir ./claude-plugin/ucp
+claude --plugin-dir .
 ```
 
 For marketplace-style installation from GitHub:
@@ -118,13 +118,11 @@ The default Claude Code marketplace install exposes only the base Unity automati
 
 - `/ucp:unity-control-protocol`
 
-The QA skill is intentionally not included in that default plugin package so ordinary installs stay lean.
-
 Repository support files for Claude Code users:
 
+- `.claude-plugin/plugin.json`: plugin manifest
 - `.claude-plugin/marketplace.json`: root marketplace catalog
-- `claude-plugin/ucp/.claude-plugin/plugin.json`: base-skill plugin manifest
-- `claude-plugin/ucp/skills/unity-control-protocol/SKILL.md`: base skill shipped to Claude Code
+- `skills/unity-control-protocol/SKILL.md`: base skill shipped to Claude Code
 
 ## Install the Unity bridge
 

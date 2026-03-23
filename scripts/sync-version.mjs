@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const metadataPath = path.join(root, 'version.json');
-const canonicalClaudeSkillPath = path.join(root, 'skills', 'unity-control-protocol', 'SKILL.md');
 
 const rawArgs = process.argv.slice(2);
 const isCheck = rawArgs.includes('--check');
@@ -33,7 +32,7 @@ const replacements = [
       ),
   ],
   ['npm/package.json', (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`)],
-  ['claude-plugin/ucp/.claude-plugin/plugin.json', (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`), { optionalFile: true }],
+  ['.claude-plugin/plugin.json', (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`), { optionalFile: true }],
   [
     '.claude-plugin/marketplace.json',
     (content) => content.replace(/"version": ".*"/g, `"version": "${version}"`),
@@ -115,7 +114,6 @@ const replacements = [
     'skills/unity-control-protocol/SKILL.md',
     (content) => replaceOne(content, /  version: '.*'/, `  version: '${version}'`),
   ],
-  ['claude-plugin/ucp/skills/unity-control-protocol/SKILL.md', () => fs.readFileSync(canonicalClaudeSkillPath, 'utf8'), { optionalFile: true }],
   ['version.json', () => `${JSON.stringify(metadata, null, 2)}\n`],
 ];
 

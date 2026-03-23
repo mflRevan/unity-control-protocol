@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.4] - 2026-03-23
+
+### Changed
+
+- Added a bridge-visible `editor/status` lifecycle surface and a shared CLI editor-settle wait path so relevant mutating commands can wait for Unity's import/update/compile work to finish before reporting success.
+- `ucp files write|patch`, mutating `ucp asset ...` flows, `ucp scene load`, and package-changing `ucp packages ...` flows now keep the editor foregrounded as needed and wait for Unity to settle instead of returning while import/domain-reload work is still deferred in the background.
+- Simplified the skill/plugin layout by restoring the canonical root `.claude-plugin` setup and removing the unused QA skill package.
+
+### Fixed
+
+- Fixed the editor-readiness gap where bridge-mediated writes, importer edits, scene loads, and package changes could appear complete to the agent but still trigger Unity's normal catch-up import/refresh behavior only after the editor window regained focus.
+
 ## [0.4.3] - 2026-03-23
 
 ### Added
@@ -44,6 +56,7 @@
 
 ### Fixed
 
+- Fixed deferred editor catch-up after bridge-mediated writes, importer edits, package changes, and scene loads so relevant commands now wait for Unity to finish its import/compile/update work before returning.
 - Fixed `ucp play` falsely reporting success when Unity blocked play-mode entry because compile-breaking console errors still needed to be resolved.
 - Fixed imported-asset iteration gaps where agents had to patch `.meta` files manually and then remember to reimport assets before changes took effect.
 - Fixed importer-setting workflows for assets such as FBX models and textures by exposing a first-class, importer-aware editing surface instead of raw meta-file surgery.

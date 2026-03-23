@@ -55,7 +55,7 @@ Some parts of the repository are foundational and should stay aligned:
 - `version.json` is the source of truth for release and protocol metadata.
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
 - `skills/unity-control-protocol/` is the canonical ClawHub-ready skill bundle and should stay publishable from repo state.
-- `.claude-plugin/marketplace.json` plus `claude-plugin/ucp/` define the Claude Code marketplace-facing wrapper, with the default Claude install intentionally scoped to the base skill only.
+- `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
 - repo-level docs should reflect the implemented system, not an aspirational redesign.
 
@@ -150,6 +150,7 @@ The Rust CLI should continue to emphasize:
 
 - small command-oriented modules
 - centralized lifecycle and bridge readiness handling
+- mutating commands that leave the Unity editor settled before they report success
 - explicit protocol interactions
 - predictable user and JSON output
 - errors that are useful in automation contexts
