@@ -55,7 +55,7 @@ Some parts of the repository are foundational and should stay aligned:
 - `version.json` is the source of truth for release and protocol metadata.
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
 - `skills/unity-control-protocol/` is the canonical ClawHub-ready skill bundle and should stay publishable from repo state.
-- `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the existing repo skills.
+- `.claude-plugin/marketplace.json` plus `claude-plugin/ucp/` define the Claude Code marketplace-facing wrapper, with the default Claude install intentionally scoped to the base skill only.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
 - repo-level docs should reflect the implemented system, not an aspirational redesign.
 

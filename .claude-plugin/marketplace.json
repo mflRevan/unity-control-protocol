@@ -10,8 +10,8 @@
   "plugins": [
     {
       "name": "ucp",
-      "source": "./",
-      "description": "Unity Editor automation via the Unity Control Protocol skill set.",
+      "source": "./claude-plugin/ucp",
+      "description": "Unity Editor automation via the Unity Control Protocol base skill.",
       "version": "0.4.3",
       "author": {
         "name": "mflRevan"
