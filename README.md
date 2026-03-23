@@ -118,7 +118,7 @@ The default Claude Code marketplace install exposes only the base Unity automati
 
 - `/ucp:unity-control-protocol`
 
-The QA skill is intentionally not included in that default plugin package so ordinary installs stay lean. If we want a Claude-distributed QA package later, it should ship as a separate plugin.
+The QA skill is intentionally not included in that default plugin package so ordinary installs stay lean.
 
 Repository support files for Claude Code users:
 
