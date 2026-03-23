@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.3] - 2026-03-23
+
+### Added
+
+- Added automated ClawHub skill publishing support to the release flow, including a dedicated `publish-clawhub` GitHub Actions job and token-based `clawhub publish` support through `scripts/clawhub-skill.mjs`.
+
+### Changed
+
+- The canonical ClawHub release bundle now stages only `skills/unity-control-protocol/SKILL.md` so marketplace publishing stays aligned with the actual skill source of truth.
+- Release documentation now includes the ClawHub validation, staging, and publishing workflow alongside the existing GitHub release and npm publish steps.
+
 ## [0.4.2] - 2026-03-21
 
 ### Added

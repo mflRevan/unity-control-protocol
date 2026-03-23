@@ -144,3 +144,49 @@ jobs:
         run: cd npm && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-clawhub:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate synced metadata
+        run: node scripts/sync-version.mjs --check "${GITHUB_REF_NAME#v}"
+
+      - name: Validate ClawHub skill bundle
+        run: node scripts/clawhub-skill.mjs validate
+
+      - name: Stage ClawHub skill bundle
+        run: node scripts/clawhub-skill.mjs stage
+
+      - name: Create ClawHub bundle archive
+        run: |
+          cd artifacts/clawhub
+          zip -r ../unity-control-protocol-clawhub.zip unity-control-protocol >/dev/null
+
+      - name: Upload ClawHub bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-control-protocol-clawhub
+          path: |
+            artifacts/clawhub/unity-control-protocol
+            artifacts/unity-control-protocol-clawhub.zip
+
+      - name: Install ClawHub CLI
+        if: ${{ secrets.CLAWHUB_TOKEN != '' }}
+        run: npm install -g clawhub
+
+      - name: Publish skill to ClawHub
+        if: ${{ secrets.CLAWHUB_TOKEN != '' }}
+        run: node scripts/clawhub-skill.mjs publish
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+          CLAWHUB_CONFIG_PATH: ${{ runner.temp }}/clawhub-config.json

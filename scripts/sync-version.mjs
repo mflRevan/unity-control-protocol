@@ -32,6 +32,12 @@ const replacements = [
       ),
   ],
   ['npm/package.json', (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`)],
+  ['.claude-plugin/plugin.json', (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`), { optionalFile: true }],
+  [
+    '.claude-plugin/marketplace.json',
+    (content) => content.replace(/"version": ".*"/g, `"version": "${version}"`),
+    { optionalFile: true },
+  ],
   [
     'unity-package/com.ucp.bridge/package.json',
     (content) => {

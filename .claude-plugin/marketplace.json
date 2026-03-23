@@ -1,0 +1,37 @@
+{
+  "name": "unity-control-protocol",
+  "owner": {
+    "name": "mflRevan"
+  },
+  "metadata": {
+    "description": "Claude Code marketplace catalog for Unity Control Protocol.",
+    "version": "0.4.3"
+  },
+  "plugins": [
+    {
+      "name": "ucp",
+      "source": "./",
+      "description": "Unity Editor automation via the Unity Control Protocol skill set.",
+      "version": "0.4.3",
+      "author": {
+        "name": "mflRevan"
+      },
+      "homepage": "https://github.com/mflRevan/unity-control-protocol",
+      "repository": "https://github.com/mflRevan/unity-control-protocol",
+      "license": "MIT",
+      "keywords": [
+        "unity",
+        "automation",
+        "cli",
+        "agent",
+        "editor"
+      ],
+      "category": "developer-tools",
+      "tags": [
+        "unity",
+        "automation",
+        "gamedev"
+      ]
+    }
+  ]
+}
