@@ -6,7 +6,20 @@ namespace UCP.Bridge
     {
         public static void Register(CommandRouter router)
         {
+            router.Register("editor/status", HandleStatus);
             router.Register("editor/quit", HandleQuit);
+        }
+
+        private static object HandleStatus(string paramsJson)
+        {
+            return new
+            {
+                compiling = EditorApplication.isCompiling,
+                updating = EditorApplication.isUpdating,
+                playing = EditorApplication.isPlaying,
+                willChangePlaymode = EditorApplication.isPlayingOrWillChangePlaymode,
+                timeSinceStartup = EditorApplication.timeSinceStartup
+            };
         }
 
         private static object HandleQuit(string paramsJson)

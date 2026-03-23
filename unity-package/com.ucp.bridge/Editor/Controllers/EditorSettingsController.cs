@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -23,8 +24,14 @@ namespace UCP.Bridge
             router.Register("settings/add-layer", HandleAddLayer);
         }
 
+        private static NamedBuildTarget GetSelectedNamedBuildTarget()
+        {
+            return NamedBuildTarget.FromBuildTargetGroup(EditorUserBuildSettings.selectedBuildTargetGroup);
+        }
+
         private static object HandlePlayerSettings(string paramsJson)
         {
+            var namedTarget = GetSelectedNamedBuildTarget();
             return new Dictionary<string, object>
             {
                 ["companyName"] = PlayerSettings.companyName,
@@ -34,8 +41,10 @@ namespace UCP.Bridge
                 ["runInBackground"] = PlayerSettings.runInBackground,
                 ["colorSpace"] = PlayerSettings.colorSpace.ToString(),
                 ["graphicsApi"] = PlayerSettings.GetGraphicsAPIs(EditorUserBuildSettings.activeBuildTarget)?[0].ToString() ?? "Unknown",
-                ["scriptingBackend"] = PlayerSettings.GetScriptingBackend(EditorUserBuildSettings.selectedBuildTargetGroup).ToString(),
-                ["apiCompatibilityLevel"] = PlayerSettings.GetApiCompatibilityLevel(EditorUserBuildSettings.selectedBuildTargetGroup).ToString(),
+                ["scriptingBackend"] = PlayerSettings.GetScriptingBackend(namedTarget).ToString(),
+                ["apiCompatibilityLevel"] = PlayerSettings.GetApiCompatibilityLevel(namedTarget).ToString(),
+                ["activeInputHandler"] = ReadPlayerSettingInt("activeInputHandler"),
+                ["activeInputHandlerName"] = DescribeActiveInputHandler(ReadPlayerSettingInt("activeInputHandler")),
                 ["targetFrameRate"] = Application.targetFrameRate,
                 ["defaultScreenWidth"] = PlayerSettings.defaultScreenWidth,
                 ["defaultScreenHeight"] = PlayerSettings.defaultScreenHeight
@@ -79,6 +88,11 @@ namespace UCP.Bridge
                 case "colorSpace":
                     if (Enum.TryParse<ColorSpace>(value.ToString(), out var cs))
                         PlayerSettings.colorSpace = cs;
+                    break;
+                case "activeInputHandler":
+                case "activeInputHandling":
+                case "inputHandling":
+                    WritePlayerSettingInt("activeInputHandler", ParseActiveInputHandler(value));
                     break;
                 default:
                     throw new ArgumentException($"Unknown player setting: {key}");
@@ -146,6 +160,81 @@ namespace UCP.Bridge
             }
 
             return new Dictionary<string, object> { ["status"] = "ok", ["key"] = key };
+        }
+
+        private static int ReadPlayerSettingInt(string propertyName)
+        {
+            var serialized = new SerializedObject(GetPlayerSettingsAsset());
+            var property = serialized.FindProperty(propertyName);
+            if (property == null)
+                throw new ArgumentException($"Unknown serialized player setting: {propertyName}");
+
+            return property.intValue;
+        }
+
+        private static void WritePlayerSettingInt(string propertyName, int value)
+        {
+            var serialized = new SerializedObject(GetPlayerSettingsAsset());
+            var property = serialized.FindProperty(propertyName);
+            if (property == null)
+                throw new ArgumentException($"Unknown serialized player setting: {propertyName}");
+
+            property.intValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+        }
+
+        private static UnityEngine.Object GetPlayerSettingsAsset()
+        {
+            var asset = Unsupported.GetSerializedAssetInterfaceSingleton("PlayerSettings");
+            if (asset == null)
+                throw new InvalidOperationException("Unable to resolve PlayerSettings serialized asset");
+
+            return asset;
+        }
+
+        private static int ParseActiveInputHandler(object value)
+        {
+            if (value == null)
+                throw new ArgumentException("Input handling value cannot be null");
+
+            if (int.TryParse(value.ToString(), out var numeric))
+            {
+                if (numeric < 0 || numeric > 2)
+                    throw new ArgumentException("activeInputHandler must be 0 (Old), 1 (Input System), or 2 (Both)");
+                return numeric;
+            }
+
+            switch (value.ToString().Trim().ToLowerInvariant())
+            {
+                case "old":
+                case "legacy":
+                case "inputmanager":
+                    return 0;
+                case "new":
+                case "inputsystem":
+                case "inputsystempackage":
+                    return 1;
+                case "both":
+                    return 2;
+                default:
+                    throw new ArgumentException("activeInputHandler must be one of: old, inputsystem, both, 0, 1, 2");
+            }
+        }
+
+        private static string DescribeActiveInputHandler(int value)
+        {
+            switch (value)
+            {
+                case 0:
+                    return "Old";
+                case 1:
+                    return "InputSystemPackage";
+                case 2:
+                    return "Both";
+                default:
+                    return $"Unknown({value})";
+            }
         }
 
         private static object HandlePhysicsSettings(string paramsJson)

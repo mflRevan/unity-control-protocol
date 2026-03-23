@@ -94,6 +94,12 @@ pub async fn run(
         anyhow::bail!("manifest.json not found at {}", manifest_path.display());
     }
 
+    super::enforce_active_scene_guard_for_project(
+        &project_path,
+        super::ActiveSceneGuardPolicy::block_if_dirty("install or update the UCP package"),
+    )
+    .await?;
+
     if let Some(source_path) = desired_embedded_package_source(&options)? {
         return run_embedded_local_install(
             &project_path,

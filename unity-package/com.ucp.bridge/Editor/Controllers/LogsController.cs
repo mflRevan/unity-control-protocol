@@ -23,6 +23,7 @@ namespace UCP.Bridge
             router.Register("logs/tail", HandleTail);
             router.Register("logs/search", HandleSearch);
             router.Register("logs/get", HandleGet);
+            router.Register("logs/status", HandleStatus);
         }
 
         public static Dictionary<string, object> RecordLog(string message, string stackTrace, LogType type)
@@ -74,6 +75,86 @@ namespace UCP.Bridge
             }
         }
 
+        private static object HandleStatus(string paramsJson)
+        {
+            lock (s_historyLock)
+            {
+                var ordered = s_history.OrderBy(entry => entry.Id).ToList();
+                var byLevel = new Dictionary<string, object>
+                {
+                    ["info"] = ordered.Count(entry => entry.Level == "info"),
+                    ["warning"] = ordered.Count(entry => entry.Level == "warning"),
+                    ["error"] = ordered.Count(entry => entry.Level == "error"),
+                    ["exception"] = ordered.Count(entry => entry.Level == "exception")
+                };
+
+                var grouped = ordered
+                    .GroupBy(entry => $"{entry.Level}|{Fingerprint(entry.Message)}")
+                    .Select(group =>
+                    {
+                        var first = group.First();
+                        var last = group.Last();
+                        return new Dictionary<string, object>
+                        {
+                            ["level"] = first.Level,
+                            ["fingerprint"] = Fingerprint(first.Message),
+                            ["sampleMessage"] = Preview(first.Message, MaxPreviewLength),
+                            ["count"] = group.Count(),
+                            ["firstTimestamp"] = first.Timestamp,
+                            ["lastTimestamp"] = last.Timestamp,
+                            ["latestId"] = last.Id
+                        };
+                    })
+                    .OrderByDescending(entry => Convert.ToInt32(entry["count"]))
+                    .ThenBy(entry => entry["sampleMessage"].ToString())
+                    .ToList();
+
+                var result = new Dictionary<string, object>
+                {
+                    ["total"] = ordered.Count,
+                    ["byLevel"] = byLevel,
+                    ["uniqueCount"] = grouped.Count,
+                    ["topCategories"] = grouped.Take(8).Cast<object>().ToList()
+                };
+
+                if (ordered.Count > 0)
+                {
+                    var first = ordered.First();
+                    var last = ordered.Last();
+                    result["firstTimestamp"] = first.Timestamp;
+                    result["lastTimestamp"] = last.Timestamp;
+                    result["historyWindowSeconds"] = Math.Max(0d, (last.TimestampUtc - first.TimestampUtc).TotalSeconds);
+                    result["latestId"] = last.Id;
+                }
+
+                var playSession = PlayModeController.GetSessionSnapshot();
+                result["play"] = SerializePlaySession(playSession);
+
+                if (playSession.LastEnteredPlayAtUtc.HasValue)
+                {
+                    var sessionEnd = playSession.Playing
+                        ? DateTime.UtcNow
+                        : (playSession.LastExitedPlayAtUtc ?? DateTime.UtcNow);
+                    var sessionLogs = ordered
+                        .Where(entry => entry.TimestampUtc >= playSession.LastEnteredPlayAtUtc.Value
+                            && entry.TimestampUtc <= sessionEnd)
+                        .ToList();
+
+                    result["lastPlayWindow"] = new Dictionary<string, object>
+                    {
+                        ["startedAt"] = playSession.LastEnteredPlayAtUtc.Value.ToString("o"),
+                        ["endedAt"] = sessionEnd.ToString("o"),
+                        ["durationSeconds"] = Math.Max(0d, (sessionEnd - playSession.LastEnteredPlayAtUtc.Value).TotalSeconds),
+                        ["total"] = sessionLogs.Count,
+                        ["warnings"] = sessionLogs.Count(entry => entry.Level == "warning"),
+                        ["errors"] = sessionLogs.Count(entry => entry.Level == "error" || entry.Level == "exception")
+                    };
+                }
+
+                return result;
+            }
+        }
+
         private static Dictionary<string, object> RecordLog(string level, string message, string stackTrace)
         {
             lock (s_historyLock)
@@ -84,8 +165,9 @@ namespace UCP.Bridge
                     Level = NormalizeLevel(level),
                     Message = message ?? string.Empty,
                     StackTrace = stackTrace ?? string.Empty,
-                    Timestamp = DateTime.UtcNow.ToString("o")
+                    TimestampUtc = DateTime.UtcNow
                 };
+                entry.Timestamp = entry.TimestampUtc.ToString("o");
 
                 s_history.Add(entry);
                 if (s_history.Count > MaxHistoryEntries)
@@ -259,6 +341,44 @@ namespace UCP.Bridge
             return value.Substring(0, maxChars) + "...";
         }
 
+        private static string Fingerprint(string message)
+        {
+            var firstLine = (message ?? string.Empty)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault() ?? string.Empty;
+            var normalized = firstLine.Trim();
+            normalized = Regex.Replace(normalized, @"0x[0-9a-fA-F]+", "<hex>");
+            normalized = Regex.Replace(normalized, @"\b\d+\b", "<n>");
+            normalized = Regex.Replace(normalized, @"\s+", " ");
+            return normalized;
+        }
+
+        private static Dictionary<string, object> SerializePlaySession(PlayModeController.SessionSnapshot snapshot)
+        {
+            var result = new Dictionary<string, object>
+            {
+                ["playing"] = snapshot.Playing,
+                ["paused"] = snapshot.Paused,
+                ["willChange"] = snapshot.WillChange,
+                ["compiling"] = snapshot.Compiling
+            };
+
+            if (snapshot.LastPlayRequestedAtUtc.HasValue)
+                result["lastPlayRequestedAt"] = snapshot.LastPlayRequestedAtUtc.Value.ToString("o");
+            if (snapshot.LastEnteredPlayAtUtc.HasValue)
+                result["lastEnteredPlayAt"] = snapshot.LastEnteredPlayAtUtc.Value.ToString("o");
+            if (snapshot.LastStopRequestedAtUtc.HasValue)
+                result["lastStopRequestedAt"] = snapshot.LastStopRequestedAtUtc.Value.ToString("o");
+            if (snapshot.LastExitedPlayAtUtc.HasValue)
+                result["lastExitedPlayAt"] = snapshot.LastExitedPlayAtUtc.Value.ToString("o");
+            if (snapshot.Playing && snapshot.LastEnteredPlayAtUtc.HasValue)
+                result["currentPlayDurationSeconds"] = Math.Max(0d, (DateTime.UtcNow - snapshot.LastEnteredPlayAtUtc.Value).TotalSeconds);
+            if (snapshot.LastEnteredPlayAtUtc.HasValue && snapshot.LastExitedPlayAtUtc.HasValue)
+                result["lastPlayDurationSeconds"] = Math.Max(0d, (snapshot.LastExitedPlayAtUtc.Value - snapshot.LastEnteredPlayAtUtc.Value).TotalSeconds);
+
+            return result;
+        }
+
         private sealed class LogRecord
         {
             public long Id;
@@ -266,6 +386,7 @@ namespace UCP.Bridge
             public string Message;
             public string StackTrace;
             public string Timestamp;
+            public DateTime TimestampUtc;
         }
 
         private sealed class LogQuery

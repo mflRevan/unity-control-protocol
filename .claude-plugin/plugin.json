@@ -1,6 +1,6 @@
 {
   "name": "ucp",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Unity Editor automation plugin powered by the Unity Control Protocol base skill.",
   "author": {
     "name": "mflRevan",

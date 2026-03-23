@@ -1,7 +1,7 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 #[derive(Subcommand)]
 pub enum BuildAction {
@@ -40,9 +40,11 @@ pub enum BuildAction {
 }
 
 pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    super::enforce_active_scene_guard(&mut client, build_preflight_policy(&action)).await?;
+
+    let mut result = match &action {
         BuildAction::Targets => client.call("build/targets", serde_json::json!({})).await?,
         BuildAction::ActiveTarget => {
             client
@@ -86,6 +88,16 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
     };
 
     client.close().await;
+
+    let lifecycle = super::await_unity_lifecycle(
+        &project,
+        Some(&lock),
+        build_lifecycle_policy(&action, &result),
+        ctx,
+    )
+    .await?;
+
+    result = super::attach_lifecycle_log_status(result, &lifecycle);
 
     if ctx.json {
         output::print_json(&output::success_json(result));
@@ -175,4 +187,55 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn build_preflight_policy(action: &BuildAction) -> super::ActiveSceneGuardPolicy {
+    match action {
+        BuildAction::SetTarget { .. } => {
+            super::ActiveSceneGuardPolicy::block_if_dirty("switch the active build target")
+        }
+        BuildAction::SetDefines { .. } => {
+            super::ActiveSceneGuardPolicy::block_if_dirty("change scripting define symbols")
+        }
+        BuildAction::Targets
+        | BuildAction::ActiveTarget
+        | BuildAction::Scenes
+        | BuildAction::SetScenes { .. }
+        | BuildAction::Start { .. }
+        | BuildAction::Defines => super::ActiveSceneGuardPolicy::None,
+    }
+}
+
+fn build_lifecycle_policy(
+    action: &BuildAction,
+    result: &serde_json::Value,
+) -> UnityLifecyclePolicy {
+    match action {
+        BuildAction::Targets
+        | BuildAction::ActiveTarget
+        | BuildAction::Scenes
+        | BuildAction::Start { .. }
+        | BuildAction::Defines => UnityLifecyclePolicy::None,
+        BuildAction::SetScenes { .. } => UnityLifecyclePolicy::editor_settle(
+            "Waiting for Unity to finish applying build settings...",
+            "build settings processing",
+        ),
+        BuildAction::SetTarget { .. } => {
+            let succeeded = result.get("status").and_then(|v| v.as_str()) == Some("ok");
+            if succeeded {
+                UnityLifecyclePolicy::restart_then_settle(
+                    "Waiting for Unity to finish switching build target...",
+                    "build target switch",
+                    120,
+                )
+            } else {
+                UnityLifecyclePolicy::None
+            }
+        }
+        BuildAction::SetDefines { .. } => UnityLifecyclePolicy::restart_then_settle(
+            "Waiting for Unity to finish applying scripting define changes...",
+            "scripting define processing",
+            120,
+        ),
+    }
 }

@@ -5,6 +5,12 @@ use super::Context;
 pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::Result<()> {
     let (_, _, mut client) = super::connect_client(ctx).await?;
 
+    super::enforce_active_scene_guard(
+        &mut client,
+        super::ActiveSceneGuardPolicy::block_if_dirty("run Unity tests"),
+    )
+    .await?;
+
     if !ctx.json {
         output::print_info(&format!("Running {mode}-mode tests..."));
     }

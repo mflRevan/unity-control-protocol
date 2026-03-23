@@ -1,7 +1,7 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 const MAX_COLLECTION_ITEMS: usize = 20;
 const MAX_STRING_LEN: usize = 120;
@@ -51,6 +51,9 @@ pub enum SettingsAction {
         /// Setting value (as JSON)
         #[arg(long)]
         value: String,
+        /// Save the active scene after applying the change
+        #[arg(long)]
+        save: bool,
     },
     /// List tags and layers
     TagsLayers,
@@ -70,9 +73,11 @@ pub enum SettingsAction {
 }
 
 pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    super::enforce_active_scene_guard(&mut client, settings_preflight_policy(&action)).await?;
+
+    let mut result = match &action {
         SettingsAction::Player => {
             client
                 .call("settings/player", serde_json::json!({}))
@@ -123,7 +128,7 @@ pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
                 .call("settings/lighting", serde_json::json!({}))
                 .await?
         }
-        SettingsAction::SetLighting { key, value } => {
+        SettingsAction::SetLighting { key, value, .. } => {
             let parsed: serde_json::Value = serde_json::from_str(value)
                 .unwrap_or_else(|_| serde_json::Value::String(value.clone()));
             client
@@ -152,7 +157,17 @@ pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
         }
     };
 
+    if settings_should_save(&action) {
+        super::save_active_scene(&mut client, ctx).await?;
+    }
+
     client.close().await;
+
+    let lifecycle =
+        super::await_unity_lifecycle(&project, Some(&lock), settings_lifecycle_policy(&action), ctx)
+            .await?;
+
+    result = super::attach_lifecycle_log_status(result, &lifecycle);
 
     if ctx.json {
         output::print_json(&output::success_json(result));
@@ -278,5 +293,47 @@ fn truncate_string(value: &str) -> String {
     } else {
         let truncated: String = value.chars().take(MAX_STRING_LEN).collect();
         format!("{truncated}...")
+    }
+}
+
+fn settings_lifecycle_policy(action: &SettingsAction) -> UnityLifecyclePolicy {
+    match action {
+        SettingsAction::Player
+        | SettingsAction::Quality
+        | SettingsAction::Physics
+        | SettingsAction::Lighting
+        | SettingsAction::TagsLayers => UnityLifecyclePolicy::None,
+        SettingsAction::SetPlayer { .. }
+        | SettingsAction::SetQuality { .. }
+        | SettingsAction::SetPhysics { .. }
+        | SettingsAction::SetLighting { .. }
+        | SettingsAction::AddTag { .. }
+        | SettingsAction::AddLayer { .. } => UnityLifecyclePolicy::editor_settle(
+            "Waiting for Unity to finish applying project settings changes...",
+            "project settings processing",
+        ),
+    }
+}
+
+fn settings_preflight_policy(action: &SettingsAction) -> super::ActiveSceneGuardPolicy {
+    match action {
+        SettingsAction::Player
+        | SettingsAction::SetPlayer { .. }
+        | SettingsAction::Quality
+        | SettingsAction::SetQuality { .. }
+        | SettingsAction::Physics
+        | SettingsAction::SetPhysics { .. }
+        | SettingsAction::TagsLayers
+        | SettingsAction::AddTag { .. }
+        | SettingsAction::AddLayer { .. }
+        | SettingsAction::Lighting => super::ActiveSceneGuardPolicy::None,
+        SettingsAction::SetLighting { .. } => super::ActiveSceneGuardPolicy::None,
+    }
+}
+
+fn settings_should_save(action: &SettingsAction) -> bool {
+    match action {
+        SettingsAction::SetLighting { save, .. } => *save,
+        _ => false,
     }
 }

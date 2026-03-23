@@ -2,17 +2,59 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
+using System;
 
 namespace UCP.Bridge
 {
     public static class PlayModeController
     {
+        public sealed class SessionSnapshot
+        {
+            public bool Playing;
+            public bool Paused;
+            public bool WillChange;
+            public bool Compiling;
+            public DateTime? LastPlayRequestedAtUtc;
+            public DateTime? LastEnteredPlayAtUtc;
+            public DateTime? LastStopRequestedAtUtc;
+            public DateTime? LastExitedPlayAtUtc;
+        }
+
+        private static readonly object s_sessionLock = new object();
+        private static DateTime? s_lastPlayRequestedAtUtc;
+        private static DateTime? s_lastEnteredPlayAtUtc;
+        private static DateTime? s_lastStopRequestedAtUtc;
+        private static DateTime? s_lastExitedPlayAtUtc;
+
+        static PlayModeController()
+        {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
         public static void Register(CommandRouter router)
         {
             router.Register("play", HandlePlay);
             router.Register("play/status", HandleStatus);
             router.Register("stop", HandleStop);
             router.Register("pause", HandlePause);
+        }
+
+        public static SessionSnapshot GetSessionSnapshot()
+        {
+            lock (s_sessionLock)
+            {
+                return new SessionSnapshot
+                {
+                    Playing = EditorApplication.isPlaying,
+                    Paused = EditorApplication.isPaused,
+                    WillChange = EditorApplication.isPlayingOrWillChangePlaymode,
+                    Compiling = EditorApplication.isCompiling,
+                    LastPlayRequestedAtUtc = s_lastPlayRequestedAtUtc,
+                    LastEnteredPlayAtUtc = s_lastEnteredPlayAtUtc,
+                    LastStopRequestedAtUtc = s_lastStopRequestedAtUtc,
+                    LastExitedPlayAtUtc = s_lastExitedPlayAtUtc
+                };
+            }
         }
 
         private static object HandlePlay(string paramsJson)
@@ -24,19 +66,17 @@ namespace UCP.Bridge
             var discardUntitled = GetBoolParam(paramsJson, "discardUntitled", true);
             SaveDirtyScenesIfRequested(saveDirtyScenes, discardUntitled);
 
+            lock (s_sessionLock)
+            {
+                s_lastPlayRequestedAtUtc = DateTime.UtcNow;
+            }
             EditorApplication.isPlaying = true;
             return new { status = "ok" };
         }
 
         private static object HandleStatus(string paramsJson)
         {
-            return new
-            {
-                playing = EditorApplication.isPlaying,
-                paused = EditorApplication.isPaused,
-                willChange = EditorApplication.isPlayingOrWillChangePlaymode,
-                compiling = EditorApplication.isCompiling
-            };
+            return SerializeSessionSnapshot(GetSessionSnapshot());
         }
 
         private static bool GetBoolParam(string paramsJson, string key, bool defaultValue)
@@ -72,6 +112,8 @@ namespace UCP.Bridge
 
                 if (!EditorSceneManager.SaveScene(scene))
                     throw new System.InvalidOperationException($"Failed to auto-save dirty scene: {scene.path}");
+
+                SceneChangeTracker.ClearScene(scene);
             }
 
             if (requiresUntitledDiscard)
@@ -83,6 +125,10 @@ namespace UCP.Bridge
             if (!EditorApplication.isPlaying)
                 return new { status = "already_stopped" };
 
+            lock (s_sessionLock)
+            {
+                s_lastStopRequestedAtUtc = DateTime.UtcNow;
+            }
             EditorApplication.isPlaying = false;
             return new { status = "ok" };
         }
@@ -91,6 +137,52 @@ namespace UCP.Bridge
         {
             EditorApplication.isPaused = !EditorApplication.isPaused;
             return new { status = "ok", paused = EditorApplication.isPaused };
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            lock (s_sessionLock)
+            {
+                switch (state)
+                {
+                    case PlayModeStateChange.EnteredPlayMode:
+                        s_lastEnteredPlayAtUtc = DateTime.UtcNow;
+                        s_lastExitedPlayAtUtc = null;
+                        break;
+                    case PlayModeStateChange.EnteredEditMode:
+                        s_lastExitedPlayAtUtc = DateTime.UtcNow;
+                        break;
+                }
+            }
+        }
+
+        private static object SerializeSessionSnapshot(SessionSnapshot snapshot)
+        {
+            var now = DateTime.UtcNow;
+            var result = new Dictionary<string, object>
+            {
+                ["playing"] = snapshot.Playing,
+                ["paused"] = snapshot.Paused,
+                ["willChange"] = snapshot.WillChange,
+                ["compiling"] = snapshot.Compiling
+            };
+
+            if (snapshot.LastPlayRequestedAtUtc.HasValue)
+                result["lastPlayRequestedAt"] = snapshot.LastPlayRequestedAtUtc.Value.ToString("o");
+            if (snapshot.LastEnteredPlayAtUtc.HasValue)
+                result["lastEnteredPlayAt"] = snapshot.LastEnteredPlayAtUtc.Value.ToString("o");
+            if (snapshot.LastStopRequestedAtUtc.HasValue)
+                result["lastStopRequestedAt"] = snapshot.LastStopRequestedAtUtc.Value.ToString("o");
+            if (snapshot.LastExitedPlayAtUtc.HasValue)
+                result["lastExitedPlayAt"] = snapshot.LastExitedPlayAtUtc.Value.ToString("o");
+
+            if (snapshot.Playing && snapshot.LastEnteredPlayAtUtc.HasValue)
+                result["currentPlayDurationSeconds"] = Math.Max(0d, (now - snapshot.LastEnteredPlayAtUtc.Value).TotalSeconds);
+
+            if (snapshot.LastEnteredPlayAtUtc.HasValue && snapshot.LastExitedPlayAtUtc.HasValue)
+                result["lastPlayDurationSeconds"] = Math.Max(0d, (snapshot.LastExitedPlayAtUtc.Value - snapshot.LastEnteredPlayAtUtc.Value).TotalSeconds);
+
+            return result;
         }
     }
 }

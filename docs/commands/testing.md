@@ -30,6 +30,8 @@ ucp run-tests --json
 
 `--filter` uses Unity Test Runner semantics rather than a UCP-defined regex engine. Prefer fully qualified test names when you need precise selection.
 
+`ucp run-tests` now also blocks when the active scene has unsaved changes, so automated test runs do not fall through to Unity-owned save prompts during play-mode or recompilation-heavy test setup.
+
 ## CI/CD Integration
 
 UCP's test runner is designed for CI pipelines. Use `--json` output and the exit code to determine pass/fail:

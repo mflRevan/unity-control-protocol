@@ -1,4 +1,3 @@
-use crate::bridge_lifecycle::{self, WaitMode, WaitStatus};
 use crate::output;
 use anyhow::Context as AnyhowContext;
 use clap::Subcommand;
@@ -10,7 +9,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use tar::Archive;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 const DEFAULT_SEARCH_RESULTS: usize = 50;
 
@@ -271,7 +270,10 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
                     if json {
                         output::print_json(&output::success_json(result));
                     } else {
-                        let removed = result.get("name").and_then(|v| v.as_str()).unwrap_or("package");
+                        let removed = result
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("package");
                         output::print_success(&format!("Removed {removed}"));
                     }
                 },
@@ -309,7 +311,10 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
                         if json {
                             output::print_json(&output::success_json(result));
                         } else {
-                            let dep = result.get("name").and_then(|v| v.as_str()).unwrap_or("dependency");
+                            let dep = result
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dependency");
                             output::print_success(&format!("Set dependency {dep}"));
                         }
                     },
@@ -326,7 +331,10 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
                         if json {
                             output::print_json(&output::success_json(result));
                         } else {
-                            let dep = result.get("name").and_then(|v| v.as_str()).unwrap_or("dependency");
+                            let dep = result
+                                .get("name")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("dependency");
                             output::print_success(&format!("Removed dependency {dep}"));
                         }
                     },
@@ -400,7 +408,9 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
             }
         },
         PackagesAction::Unitypackage { action } => match action {
-            UnitypackageAction::Inspect { archive } => inspect_unitypackage_command(&archive, ctx).await,
+            UnitypackageAction::Inspect { archive } => {
+                inspect_unitypackage_command(&archive, ctx).await
+            }
             UnitypackageAction::Import {
                 archive,
                 select,
@@ -426,12 +436,32 @@ where
     F: FnOnce(serde_json::Value, bool),
 {
     let (project, lock, mut client) = super::connect_client(ctx).await?;
-    let result = client.call(method, params).await?;
+
+    if wait_for_settle.is_some() {
+        super::enforce_active_scene_guard(
+            &mut client,
+            super::ActiveSceneGuardPolicy::block_if_dirty("change package dependencies"),
+        )
+        .await?;
+    }
+
+    let mut result = client.call(method, params).await?;
     client.close().await;
 
     if let Some(no_wait) = wait_for_settle {
         if !no_wait {
-            wait_for_package_settle(&project, &lock, ctx).await?;
+            let lifecycle = super::await_unity_lifecycle(
+                &project,
+                Some(&lock),
+                UnityLifecyclePolicy::restart_then_settle(
+                    "Waiting for Unity package import/resolve...",
+                    "package processing",
+                    120,
+                ),
+                ctx,
+            )
+            .await?;
+            result = super::attach_lifecycle_log_status(result, &lifecycle);
         }
     }
 
@@ -439,33 +469,6 @@ where
     Ok(())
 }
 
-async fn wait_for_package_settle(
-    project: &Path,
-    lock: &crate::config::LockFile,
-    ctx: &Context,
-) -> anyhow::Result<()> {
-    if !ctx.json {
-        output::print_info("Waiting for Unity package import/resolve...");
-    }
-
-    let wait_outcome = bridge_lifecycle::wait_for_bridge(
-        project,
-        Some(lock),
-        ctx.timeout.max(120),
-        ctx.dialog_policy,
-        WaitMode::RestartOptional,
-    )
-    .await?;
-
-    if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
-        anyhow::bail!(
-            "Unity editor exited before package processing finished for {}",
-            project.display()
-        );
-    }
-
-    Ok(())
-}
 
 async fn inspect_unitypackage_command(archive: &str, ctx: &Context) -> anyhow::Result<()> {
     let archive_path = PathBuf::from(archive);
@@ -507,6 +510,13 @@ async fn import_unitypackage_command(
     }
 
     let project = super::resolve_project_path(ctx)?;
+    if !dry_run && !no_reimport {
+        super::enforce_active_scene_guard_for_project(
+            &project,
+            super::ActiveSceneGuardPolicy::block_if_dirty("import package assets"),
+        )
+        .await?;
+    }
     let written_paths = if dry_run {
         Vec::new()
     } else {
@@ -523,11 +533,21 @@ async fn import_unitypackage_command(
         let (_, lock, mut client) = super::connect_client(ctx).await?;
         let refresh_result = client.call("refresh-assets", serde_json::json!({})).await?;
         client.close().await;
-        wait_for_package_settle(&project, &lock, ctx).await?;
+        let lifecycle = super::await_unity_lifecycle(
+            &project,
+            Some(&lock),
+            UnityLifecyclePolicy::restart_then_settle(
+                "Waiting for Unity package import/resolve...",
+                "package processing",
+                120,
+            ),
+            ctx,
+        )
+        .await?;
         serde_json::json!({
             "performed": true,
             "skipped": false,
-            "result": refresh_result
+            "result": super::attach_lifecycle_log_status(refresh_result, &lifecycle)
         })
     };
 
@@ -591,8 +611,12 @@ struct UnitypackageInspection {
 }
 
 fn inspect_unitypackage(archive_path: &Path) -> anyhow::Result<UnitypackageInspection> {
-    let file = File::open(archive_path)
-        .with_context(|| format!("Failed to open .unitypackage archive {}", archive_path.display()))?;
+    let file = File::open(archive_path).with_context(|| {
+        format!(
+            "Failed to open .unitypackage archive {}",
+            archive_path.display()
+        )
+    })?;
     let decoder = GzDecoder::new(file);
     let mut archive = Archive::new(decoder);
     let mut entries: HashMap<String, UnitypackageEntryState> = HashMap::new();
@@ -657,10 +681,17 @@ fn select_unitypackage_items(
     include: &[String],
     exclude: &[String],
 ) -> HashSet<String> {
-    let normalized_include: Vec<String> = include.iter().map(|path| normalize_asset_path(path)).collect();
-    let normalized_exclude: Vec<String> = exclude.iter().map(|path| normalize_asset_path(path)).collect();
+    let normalized_include: Vec<String> = include
+        .iter()
+        .map(|path| normalize_asset_path(path))
+        .collect();
+    let normalized_exclude: Vec<String> = exclude
+        .iter()
+        .map(|path| normalize_asset_path(path))
+        .collect();
 
-    items.iter()
+    items
+        .iter()
         .filter(|item| matches_selection(&item.path, &normalized_include, &normalized_exclude))
         .map(|item| item.archive_root.clone())
         .collect()
@@ -670,9 +701,14 @@ fn matches_selection(path: &str, include: &[String], exclude: &[String]) -> bool
     let included = if include.is_empty() {
         true
     } else {
-        include.iter().any(|prefix| path_matches_prefix(path, prefix))
+        include
+            .iter()
+            .any(|prefix| path_matches_prefix(path, prefix))
     };
-    included && !exclude.iter().any(|prefix| path_matches_prefix(path, prefix))
+    included
+        && !exclude
+            .iter()
+            .any(|prefix| path_matches_prefix(path, prefix))
 }
 
 fn path_matches_prefix(path: &str, prefix: &str) -> bool {
@@ -711,7 +747,10 @@ fn extract_unitypackage_selection(
 
         let destination = match item_name {
             "asset" => Some(resolve_safe_project_path(project_root, asset_path)?),
-            "asset.meta" => Some(resolve_safe_project_path(project_root, &format!("{asset_path}.meta"))?),
+            "asset.meta" => Some(resolve_safe_project_path(
+                project_root,
+                &format!("{asset_path}.meta"),
+            )?),
             _ => None,
         };
         let Some(destination) = destination else {
@@ -736,7 +775,10 @@ fn resolve_safe_project_path(project_root: &Path, relative_path: &str) -> anyhow
         anyhow::bail!("Archive asset path must be relative: {}", relative_path);
     }
     for component in relative.components() {
-        if matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_)) {
+        if matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        ) {
             anyhow::bail!("Archive asset path escapes project root: {}", relative_path);
         }
     }
@@ -760,10 +802,13 @@ fn build_hierarchy(items: &[UnitypackageItem]) -> Vec<UnitypackageTreeNode> {
                 current_path.push('/');
             }
             current_path.push_str(segment);
-            current = current.children.entry((*segment).to_string()).or_insert_with(|| Tree {
-                path: current_path.clone(),
-                ..Tree::default()
-            });
+            current = current
+                .children
+                .entry((*segment).to_string())
+                .or_insert_with(|| Tree {
+                    path: current_path.clone(),
+                    ..Tree::default()
+                });
             if index == segments.len() - 1 {
                 current.is_asset = true;
             }
@@ -776,7 +821,11 @@ fn build_hierarchy(items: &[UnitypackageItem]) -> Vec<UnitypackageTreeNode> {
             .map(|(name, child)| UnitypackageTreeNode {
                 name,
                 path: child.path.clone(),
-                kind: if child.is_asset { "asset".to_string() } else { "folder".to_string() },
+                kind: if child.is_asset {
+                    "asset".to_string()
+                } else {
+                    "folder".to_string()
+                },
                 children: to_nodes(child),
             })
             .collect()
@@ -801,12 +850,17 @@ fn print_package_list(result: &serde_json::Value, include_indirect: bool) {
         .unwrap_or_default();
     let count = packages.len();
     if include_indirect {
-        output::print_success(&format!("{count} package(s) including indirect dependencies"));
+        output::print_success(&format!(
+            "{count} package(s) including indirect dependencies"
+        ));
     } else {
         output::print_success(&format!("{count} direct package(s)"));
     }
     for package in packages {
-        let name = package.get("name").and_then(|value| value.as_str()).unwrap_or("?");
+        let name = package
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("?");
         let version = package
             .get("version")
             .and_then(|value| value.as_str())
@@ -832,7 +886,10 @@ fn print_package_search(result: &serde_json::Value) {
         .unwrap_or_default();
     output::print_success(&format!("{} package(s) found", packages.len()));
     for package in packages {
-        let name = package.get("name").and_then(|value| value.as_str()).unwrap_or("?");
+        let name = package
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("?");
         let display_name = package
             .get("displayName")
             .and_then(|value| value.as_str())
@@ -846,7 +903,10 @@ fn print_package_search(result: &serde_json::Value) {
 }
 
 fn print_package_info(result: &serde_json::Value) {
-    let name = result.get("name").and_then(|value| value.as_str()).unwrap_or("?");
+    let name = result
+        .get("name")
+        .and_then(|value| value.as_str())
+        .unwrap_or("?");
     let version = result
         .get("version")
         .and_then(|value| value.as_str())
@@ -870,7 +930,10 @@ fn print_package_info(result: &serde_json::Value) {
             eprintln!("  Description: {description}");
         }
     }
-    if let Some(dependencies) = result.get("dependencies").and_then(|value| value.as_array()) {
+    if let Some(dependencies) = result
+        .get("dependencies")
+        .and_then(|value| value.as_array())
+    {
         eprintln!("  Dependencies: {}", dependencies.len());
         for dependency in dependencies {
             let dep_name = dependency
@@ -894,7 +957,10 @@ fn print_dependencies(result: &serde_json::Value) {
         .unwrap_or_default();
     output::print_success(&format!("{} manifest dependenc(ies)", dependencies.len()));
     for dependency in dependencies {
-        let name = dependency.get("name").and_then(|value| value.as_str()).unwrap_or("?");
+        let name = dependency
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("?");
         let reference = dependency
             .get("reference")
             .and_then(|value| value.as_str())
@@ -911,8 +977,14 @@ fn print_registries(result: &serde_json::Value) {
         .unwrap_or_default();
     output::print_success(&format!("{} scoped registr(ies)", registries.len()));
     for registry in registries {
-        let name = registry.get("name").and_then(|value| value.as_str()).unwrap_or("?");
-        let url = registry.get("url").and_then(|value| value.as_str()).unwrap_or("?");
+        let name = registry
+            .get("name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("?");
+        let url = registry
+            .get("url")
+            .and_then(|value| value.as_str())
+            .unwrap_or("?");
         let scopes = registry
             .get("scopes")
             .and_then(|value| value.as_array())
@@ -934,8 +1006,8 @@ fn print_registries(result: &serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::io::Cursor;
     use tar::Builder;
 
@@ -992,7 +1064,8 @@ mod tests {
             ("root-a", "Assets/Test/Keep.txt", b"hello", b"meta-a"),
             ("root-b", "Assets/Test/Sub/Skip.txt", b"world", b"meta-b"),
         ]);
-        let temp_root = std::env::temp_dir().join(format!("ucp-unitypackage-extract-{}", uuid::Uuid::new_v4()));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-unitypackage-extract-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_root).unwrap();
         let mut selected = HashSet::new();
         selected.insert(String::from("root-a"));
@@ -1000,22 +1073,46 @@ mod tests {
         let written = extract_unitypackage_selection(&archive_path, &temp_root, &selected)
             .expect("extract unitypackage selection");
         assert_eq!(written, vec![String::from("Assets/Test/Keep.txt")]);
-        assert!(temp_root.join("Assets").join("Test").join("Keep.txt").is_file());
-        assert!(temp_root.join("Assets").join("Test").join("Keep.txt.meta").is_file());
-        assert!(!temp_root.join("Assets").join("Test").join("Sub").join("Skip.txt").exists());
+        assert!(
+            temp_root
+                .join("Assets")
+                .join("Test")
+                .join("Keep.txt")
+                .is_file()
+        );
+        assert!(
+            temp_root
+                .join("Assets")
+                .join("Test")
+                .join("Keep.txt.meta")
+                .is_file()
+        );
+        assert!(
+            !temp_root
+                .join("Assets")
+                .join("Test")
+                .join("Sub")
+                .join("Skip.txt")
+                .exists()
+        );
 
         let _ = std::fs::remove_file(archive_path);
         let _ = std::fs::remove_dir_all(temp_root);
     }
 
     fn write_test_unitypackage(entries: &[(&str, &str, &[u8], &[u8])]) -> PathBuf {
-        let archive_path = std::env::temp_dir().join(format!("ucp-test-{}.unitypackage", uuid::Uuid::new_v4()));
+        let archive_path =
+            std::env::temp_dir().join(format!("ucp-test-{}.unitypackage", uuid::Uuid::new_v4()));
         let file = File::create(&archive_path).unwrap();
         let encoder = GzEncoder::new(file, Compression::default());
         let mut builder = Builder::new(encoder);
 
         for (root, pathname, asset, meta) in entries {
-            append_tar_file(&mut builder, &format!("{root}/pathname"), pathname.as_bytes());
+            append_tar_file(
+                &mut builder,
+                &format!("{root}/pathname"),
+                pathname.as_bytes(),
+            );
             append_tar_file(&mut builder, &format!("{root}/asset"), asset);
             append_tar_file(&mut builder, &format!("{root}/asset.meta"), meta);
         }

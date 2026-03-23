@@ -36,6 +36,26 @@ That flow should remain easy to follow. Future work should preserve a clear sepa
 - Unity-side execution
 - presentation and documentation
 
+## Unity Interaction Lifecycle Policy
+
+Unity automation is only polished when a command leaves the editor genuinely ready for the next step. In practice, many Unity APIs return before the editor has finished import, metadata generation, serialization, compilation, or domain reload work.
+
+UCP therefore treats Unity-facing commands as lifecycle categories, not just RPC calls:
+
+- **Read-only inspection**: queries such as status, reads, search, snapshots, and logs. These do not wait after the call.
+- **Editor-settle mutations**: scene/object/material/prefab/settings/file/asset operations that can trigger asset refresh, metadata writes, serialization, or other editor background work. These must wait for the editor to settle before reporting success.
+- **Restart-then-settle mutations**: compile-heavy or package-heavy operations that can restart the bridge or trigger a domain reload, such as package changes, explicit recompilation, scripting-define changes, and build-target switches. These must survive bridge restart and then wait for editor settle.
+- **Custom confirmation flows**: commands whose completion is defined by a domain-specific signal rather than generic editor settle, such as play-mode entry confirmation, test-run notifications, or build completion reports.
+
+This policy is a core architectural rule, not a UX nicety. A mutating command should not claim success while Unity still has deferred catch-up work that will only surface later when the editor regains focus.
+
+The same policy now also distinguishes between scene-editing mutations and scene-disruptive mutations:
+
+- **Scene-editing mutations**: object, prefab, and scene-lighting operations can intentionally leave the active scene dirty. These surfaces should expose an explicit `--save` option rather than silently persisting scene changes.
+- **Scene-disruptive mutations**: commands that can close the editor, switch scenes, enter play mode, trigger recompilation/domain reloads, or kick off package/build-target/define refresh flows must preflight the active scene first. If the active scene is dirty, they should fail with a concise scene-change summary instead of letting Unity show its native save dialog.
+
+That separation is a core operability contract for autonomous Unity work: edits may stay unsaved by default, but disruptive transitions must never surprise the user with an unmanaged modal.
+
 ## Repository Shape
 
 The current repository has a clear top-level split:
@@ -106,6 +126,13 @@ That means maintainability includes:
 
 Features that make the system more powerful but harder to operate should be treated carefully.
 
+For Unity-facing mutations, operational clarity specifically means:
+
+- the command chooses the correct lifecycle category up front
+- post-action waits stay centralized instead of being reimplemented ad hoc
+- the CLI reports success only after the category's readiness guarantee is satisfied
+- future commands extend the same lifecycle framework instead of inventing local exceptions
+
 ### 5. Favor stable internal conventions over cleverness
 
 The codebase already benefits from recurring patterns in both the Rust CLI and the Unity bridge. Future work should continue that direction.
@@ -151,6 +178,7 @@ The Rust CLI should continue to emphasize:
 - small command-oriented modules
 - centralized lifecycle and bridge readiness handling
 - mutating commands that leave the Unity editor settled before they report success
+- a shared lifecycle-policy layer that classifies Unity mutations into read-only, settle, restart-then-settle, or custom-confirmation flows
 - explicit protocol interactions
 - predictable user and JSON output
 - errors that are useful in automation contexts

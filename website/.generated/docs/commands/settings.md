@@ -6,7 +6,7 @@ Read and modify Unity project settings: PlayerSettings, QualitySettings, Physics
 
 ### `ucp settings player`
 
-Read PlayerSettings values. Returns company name, product name, default icon, and all `#define` symbols.
+Read PlayerSettings values. This includes runtime-facing values such as screen defaults, `runInBackground`, and the serialized `activeInputHandler` mode (`Old`, `InputSystemPackage`, or `Both`).
 
 ```bash
 ucp settings player
@@ -18,7 +18,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.4.3
+  Version: 0.4.4
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 
@@ -34,6 +34,7 @@ ucp settings set-player --key runInBackground --value true
 ucp settings set-player --key defaultScreenWidth --value 1920
 ucp settings set-player --key defaultScreenHeight --value 1080
 ucp settings set-player --key defaultIsNativeResolution --value false
+ucp settings set-player --key activeInputHandler --value both
 ```
 
 | Flag             | Description                  |
@@ -98,7 +99,7 @@ ucp settings lighting
 Modify lighting settings for the active scene.
 
 ```bash
-ucp settings set-lighting --key ambientIntensity --value 1.2
+ucp settings set-lighting --key ambientIntensity --value 1.2 --save
 ucp settings set-lighting --key fog --value true
 ```
 
@@ -138,7 +139,9 @@ ucp settings add-layer "Gameplay" --index 12
 ## Notes
 
 - `player` and `quality` read project-wide settings, not per-scene
+- `set-player --key activeInputHandler --value <old|inputsystem|both|0|1|2>` updates Unity's serialized input-handling mode without marking the active scene dirty
 - `lighting` reads the active scene's render settings
 - Tags and layers are project-wide and persist across scenes
-- Changes made via `set-*` commands take effect immediately in the editor
+- Mutating settings commands wait for Unity to finish applying and serializing the project/scene setting change before reporting success
+- `set-lighting` edits the active scene's render settings; add `--save` when that change should be persisted immediately
 - `ucp install` enables `runInBackground`, `1920x1080` defaults, and `defaultIsNativeResolution = false` automatically for automation-friendly projects

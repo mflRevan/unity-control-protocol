@@ -48,6 +48,9 @@ ucp build set-target Android
 
 > **Note:** Switching build targets can take significant time as Unity reimports assets for the new platform.
 
+UCP waits for the resulting platform-switch/domain-reload work to finish before `set-target` reports success.
+If the active scene is dirty, `set-target` fails first with a concise unsaved-scene summary instead of letting Unity prompt for a save.
+
 ### `ucp build scenes`
 
 List all scenes in the Build Settings, including their enabled status and index.
@@ -74,6 +77,8 @@ ucp build set-scenes "Assets/Scenes/MainMenu.unity,Assets/Scenes/World.unity"
 ```
 
 All listed scenes will be enabled by default.
+
+`set-scenes` waits for Unity to finish applying the updated build-settings asset before returning.
 
 ### `ucp build start`
 
@@ -121,6 +126,9 @@ ucp build set-defines "UNITY_POST_PROCESSING;ENABLE_LOGGING;MY_CUSTOM_DEFINE"
 
 > **Note:** Changing defines triggers a full script recompilation.
 
+`set-defines` follows the restart-then-settle policy: it waits through the compilation/domain-reload cycle and only reports success once the editor is ready again.
+If the active scene is dirty, `set-defines` blocks first and asks you to save explicitly.
+
 ## Typical Workflow
 
 ```bash
@@ -143,3 +151,4 @@ ucp build start --output "Builds/Windows/Game.exe"
 - `set-defines` replaces all defines, so include existing ones you want to keep
 - `start` blocks until the build completes (or fails)
 - Build output path is relative to the Unity project root
+- `set-target`, `set-scenes`, and `set-defines` all use lifecycle-aware waits before reporting success

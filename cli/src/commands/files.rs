@@ -3,6 +3,7 @@ use clap::Subcommand;
 
 use super::Context;
 use super::compile;
+use super::UnityLifecyclePolicy;
 
 #[derive(Subcommand)]
 pub enum FilesAction {
@@ -93,15 +94,38 @@ pub async fn write(
         }
     };
 
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = client
+    let mut result = client
         .call(
             "file/write",
             serde_json::json!({ "path": path, "content": content, "noReimport": no_reimport }),
         )
         .await?;
     client.close().await;
+
+    let should_settle = !do_compile
+        && result
+            .get("reimport")
+            .and_then(|value| value.get("reimported"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+
+    if do_compile {
+        compile::run(false, ctx).await?;
+    } else if should_settle {
+        let lifecycle = super::await_unity_lifecycle(
+            &project,
+            Some(&lock),
+            UnityLifecyclePolicy::editor_settle(
+                "Waiting for Unity to finish importing and compiling...",
+                "write/import processing",
+            ),
+            ctx,
+        )
+        .await?;
+        result = super::attach_lifecycle_log_status(result, &lifecycle);
+    }
 
     if ctx.json && !do_compile {
         output::print_json(&output::success_json(result));
@@ -111,10 +135,6 @@ pub async fn write(
         } else {
             output::print_success(&format!("Written: {path}"));
         }
-    }
-
-    if do_compile {
-        compile::run(false, ctx).await?;
     }
 
     Ok(())
@@ -130,9 +150,9 @@ pub async fn patch(
     let find = find.ok_or_else(|| anyhow::anyhow!("--find is required for files patch"))?;
     let replace = replace.unwrap_or_default();
 
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = client
+    let mut result = client
         .call(
             "file/patch",
             serde_json::json!({
@@ -143,6 +163,26 @@ pub async fn patch(
         )
         .await?;
     client.close().await;
+
+    let should_settle = result
+        .get("reimport")
+        .and_then(|value| value.get("reimported"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+
+    if should_settle {
+        let lifecycle = super::await_unity_lifecycle(
+            &project,
+            Some(&lock),
+            UnityLifecyclePolicy::editor_settle(
+                "Waiting for Unity to finish importing and compiling...",
+                "write/import processing",
+            ),
+            ctx,
+        )
+        .await?;
+        result = super::attach_lifecycle_log_status(result, &lifecycle);
+    }
 
     if ctx.json {
         output::print_json(&output::success_json(result));

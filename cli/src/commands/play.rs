@@ -7,11 +7,25 @@ use super::Context;
 pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<()> {
     let (_, _, mut client) = super::connect_client(ctx).await?;
 
+    if method == "play" {
+        super::enforce_active_scene_guard(
+            &mut client,
+            super::ActiveSceneGuardPolicy::block_if_dirty("enter play mode"),
+        )
+        .await?;
+    }
+
     let mut result = client.call(method, payload).await?;
-    client.close().await;
 
     if method == "play" {
+        client.close().await;
         result = confirm_play_mode_entry(ctx, result).await?;
+    } else if method == "stop" {
+        let log_status = crate::commands::logs::fetch_status(&mut client).await?;
+        result["logStatus"] = log_status;
+        client.close().await;
+    } else {
+        client.close().await;
     }
 
     if ctx.json {
@@ -24,6 +38,11 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
             _ => "Done",
         };
         output::print_success(label);
+        if method == "stop" {
+            if let Some(log_status) = result.get("logStatus") {
+                crate::commands::logs::print_status(log_status, ctx);
+            }
+        }
     }
 
     Ok(())

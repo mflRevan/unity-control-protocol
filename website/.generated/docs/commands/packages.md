@@ -4,6 +4,10 @@ Browse Unity packages, manage manifest dependencies and scoped registries, and i
 
 Use `ucp packages add|remove` for normal Unity Package Manager installs such as official Unity packages, registry packages, or Git references. For explicit manifest editing and external local `file:` references, prefer `ucp packages dependency ...`.
 
+Unless you opt into `--no-wait`, package-changing commands wait for Unity's package resolve/import/editor settle work before returning so the editor is ready for immediate follow-up automation.
+
+Package-changing commands also preflight the active scene. If the scene is dirty, they fail early with a concise summary instead of falling through to Unity's native save prompt during package refresh or domain reload work.
+
 ## Commands
 
 ### `ucp packages list`

@@ -1,6 +1,6 @@
 # @mflrevan/ucp
 
-Version `0.4.3` of the Unity Control Protocol CLI.
+Version `0.4.4` of the Unity Control Protocol CLI.
 
 This package installs the `ucp` command, downloads the matching published binary for your platform during `postinstall`, and ships the matching Unity bridge payload inside the npm package.
 

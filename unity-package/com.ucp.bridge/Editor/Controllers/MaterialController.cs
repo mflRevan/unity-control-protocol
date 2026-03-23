@@ -10,12 +10,48 @@ namespace UCP.Bridge
     {
         public static void Register(CommandRouter router)
         {
+            router.Register("material/create", HandleCreate);
             router.Register("material/get-properties", HandleGetProperties);
             router.Register("material/get-property", HandleGetProperty);
             router.Register("material/set-property", HandleSetProperty);
             router.Register("material/get-keywords", HandleGetKeywords);
             router.Register("material/set-keyword", HandleSetKeyword);
             router.Register("material/set-shader", HandleSetShader);
+        }
+
+        private static object HandleCreate(string paramsJson)
+        {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (p == null || !p.TryGetValue("path", out var pathObj) || pathObj == null)
+                throw new ArgumentException("Missing 'path' parameter");
+
+            string path = pathObj.ToString();
+            string shaderName = p.TryGetValue("shader", out var shaderObj) && shaderObj != null
+                ? shaderObj.ToString()
+                : null;
+
+            var shader = ResolveCreateShader(shaderName);
+            if (shader == null)
+                throw new ArgumentException("Could not resolve a shader for material creation");
+
+            string dir = System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir) && !AssetDatabase.IsValidFolder(dir))
+            {
+                CreateFoldersRecursive(dir);
+            }
+
+            var material = new Material(shader);
+            AssetDatabase.CreateAsset(material, path);
+            AssetDatabase.SaveAssets();
+
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["path"] = path,
+                ["name"] = material.name,
+                ["shader"] = shader.name,
+                ["instanceId"] = material.GetInstanceID()
+            };
         }
 
         private static object HandleGetProperties(string paramsJson)
@@ -192,7 +228,7 @@ namespace UCP.Bridge
             if (p.TryGetValue("instanceId", out var idObj))
             {
                 int instanceId = Convert.ToInt32(idObj);
-                var obj = EditorUtility.InstanceIDToObject(instanceId);
+                var obj = EditorUtility.EntityIdToObject(instanceId);
 
                 if (obj is Material directMat)
                     return directMat;
@@ -208,6 +244,16 @@ namespace UCP.Bridge
             }
 
             throw new ArgumentException("Provide 'path' or 'instanceId' to identify the material");
+        }
+
+        private static Shader ResolveCreateShader(string shaderName)
+        {
+            if (!string.IsNullOrWhiteSpace(shaderName))
+                return Shader.Find(shaderName);
+
+            return Shader.Find("Universal Render Pipeline/Lit")
+                ?? Shader.Find("Standard")
+                ?? Shader.Find("Sprites/Default");
         }
 
         private static object ReadMaterialValue(Material mat, string propName, UnityEngine.Rendering.ShaderPropertyType propType)
@@ -284,11 +330,24 @@ namespace UCP.Bridge
                         }
                         else if (texDict.TryGetValue("instanceId", out var tid))
                         {
-                            var tex = EditorUtility.InstanceIDToObject(Convert.ToInt32(tid)) as Texture;
+                            var tex = EditorUtility.EntityIdToObject(Convert.ToInt32(tid)) as Texture;
                             mat.SetTexture(propName, tex);
                         }
                     }
                     break;
+            }
+        }
+
+        private static void CreateFoldersRecursive(string path)
+        {
+            var parts = path.Replace("\\", "/").Split('/');
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = current + "/" + parts[i];
+                if (!AssetDatabase.IsValidFolder(next))
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                current = next;
             }
         }
     }

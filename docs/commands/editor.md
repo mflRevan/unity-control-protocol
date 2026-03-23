@@ -26,12 +26,16 @@ ucp editor close --force
 
 UCP first requests a graceful shutdown through the bridge, then falls back to a window-close request, and finally uses forced termination when `--force` is supplied or graceful shutdown times out. If shutdown is still in progress when the timeout expires, the command now reports that the process is still closing instead of claiming success.
 
+If the active scene has unsaved changes, `close` now blocks first and asks you to save explicitly.
+
 ### `ucp editor restart`
 
 ```bash
 ucp editor restart
 ucp editor restart --force
 ```
+
+Like `close`, `restart` now refuses to proceed while the active scene is dirty.
 
 ### `ucp editor status`
 

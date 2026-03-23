@@ -20,6 +20,16 @@ Get the currently active scene.
 ucp scene active
 ```
 
+### `ucp scene save`
+
+Save the active scene explicitly.
+
+```bash
+ucp scene save
+```
+
+Use this after a series of scene edits when you want later disruptive commands such as `ucp play`, `ucp compile`, `ucp scene load`, `ucp editor restart`, or package/build-target/define changes to proceed without dirty-scene blocking.
+
 ### `ucp scene focus`
 
 Focus the Scene view camera on a GameObject. This is the recommended visual iteration loop for autonomous in-scene work: focus a target, capture a scene screenshot, adjust transforms or lighting, then focus and capture again.
@@ -47,6 +57,10 @@ Load a scene by path.
 ```bash
 ucp scene load Assets/Scenes/Level1.unity
 ```
+
+After `scene load`, UCP waits for Unity's scene-processing work to settle before returning so the newly loaded scene is ready for immediate inspection or follow-up edits.
+
+If the active scene has unsaved changes, `scene load` now fails before the transition and reports a concise dirty-scene summary. Save first with `ucp scene save`, or rerun your scene-editing command with `--save`.
 
 ### `ucp scene snapshot`
 

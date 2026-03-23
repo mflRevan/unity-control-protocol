@@ -106,6 +106,17 @@ ucp asset create-so -t GameConfig "Assets/Configs/NewConfig.asset"
 | ------------------- | --------------------------- |
 | `-t, --type <type>` | ScriptableObject class name |
 
+### `ucp asset delete <path>`
+
+Delete an asset or folder through Unity's asset database.
+
+```bash
+ucp asset delete "Assets/UcpTemp/UcpPrefabVariantSmoke.prefab"
+ucp asset delete "Assets/UcpTemp"
+```
+
+Use this instead of deleting Unity-managed assets directly on disk when the asset is already known to the editor. That keeps the asset database, meta handling, and import lifecycle coherent.
+
 ### `ucp asset reimport <path>`
 
 Force Unity to reimport a specific asset. The path may point to either the asset itself or its `.meta` file.
@@ -115,7 +126,7 @@ ucp asset reimport "Assets/Models/Agent.fbx"
 ucp asset reimport "Assets/Textures/HUD.png.meta"
 ```
 
-Use this when you intentionally skipped an automatic reimport, or when you updated an asset on disk outside the importer-settings workflow and want Unity to apply it immediately.
+Use this when you intentionally skipped an automatic reimport, or when you updated an asset on disk outside the importer-settings workflow and want Unity to apply it immediately. UCP waits for Unity to finish the resulting asset-processing work before the command returns.
 
 ### `ucp asset import-settings read <path>`
 
@@ -142,7 +153,7 @@ ucp asset import-settings write "Assets/Textures/HUD.png" --field m_IsReadable -
 ucp asset import-settings write "Assets/Models/Agent.fbx" --field m_GlobalScale --value 0.5
 ```
 
-Importer writes reimport the asset automatically by default so Unity applies the updated import settings immediately.
+Importer writes reimport the asset automatically by default so Unity applies the updated import settings immediately. By default, UCP also waits for Unity to finish the resulting import work so the editor is ready for follow-up commands right away.
 
 | Flag                  | Description                                                     |
 | --------------------- | --------------------------------------------------------------- |
@@ -163,3 +174,5 @@ ucp asset import-settings write-batch "Assets/Models/Agent.fbx" --values '{"m_Gl
 | --------------------- | -------------------------------------------------------- |
 | `--values <json>`     | JSON object of importer field/value pairs                |
 | `--no-reimport`       | Update importer settings without immediately reimporting |
+
+Batch importer writes follow the same settle behavior: unless you pass `--no-reimport`, UCP waits for Unity to finish applying the importer changes before returning.

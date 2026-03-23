@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
@@ -190,7 +191,8 @@ namespace UCP.Bridge
         private static object HandleDefines(string paramsJson)
         {
             var group = EditorUserBuildSettings.selectedBuildTargetGroup;
-            string defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(group);
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(group);
+            string defines = PlayerSettings.GetScriptingDefineSymbols(namedTarget);
 
             return new Dictionary<string, object>
             {
@@ -217,7 +219,8 @@ namespace UCP.Bridge
             else
                 defines = defObj.ToString();
 
-            PlayerSettings.SetScriptingDefineSymbolsForGroup(group, defines);
+            var namedTarget = NamedBuildTarget.FromBuildTargetGroup(group);
+            PlayerSettings.SetScriptingDefineSymbols(namedTarget, defines);
 
             return new Dictionary<string, object>
             {

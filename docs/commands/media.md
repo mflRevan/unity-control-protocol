@@ -41,12 +41,16 @@ ucp screenshot
 
 ### `ucp logs`
 
-Use the logs command in two modes:
+Use the logs command in three modes:
 
 - live follow mode for incoming logs
 - buffered history mode for tail/search/get operations against logs captured since the bridge started
+- curated status mode for a quick summary of buffered log health and recent play-session activity
 
 ```bash
+# Summarize the current buffered log state
+ucp logs status
+
 # Stream all new logs
 ucp logs --follow
 
@@ -80,3 +84,7 @@ ucp logs --pattern "warning|error" --json
 | `--after-id <logId>`          | Restrict buffered reads to ids higher than this value                                      |
 
 Bulk history reads are intentionally capped to `10` returned entries even if more logs match. Use the returned ids with `ucp logs --id <logId>` or narrow the search space further.
+
+`ucp logs status` reports total buffered entries, per-level counts, collapsed category counts, the buffered-history window, and play-session timing/log counts when applicable.
+
+The same curated summary is also appended automatically by blocking lifecycle commands that wait for Unity to settle after reimport, compilation, or domain reload work.

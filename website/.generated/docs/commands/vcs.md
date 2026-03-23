@@ -16,6 +16,8 @@ Running `ucp vcs` prints the currently available fallback subcommands and flags.
 
 Typical fallback usage includes lightweight status, checkout, revert, commit, diff, history, lock, unlock, update, and conflict-resolution actions. For richer Unity Version Control workflows, use `cm`.
 
+When fallback VCS actions change local file contents in ways Unity may need to reimport (`revert`, `update`, `resolve`), UCP now waits for the editor to process those workspace changes before returning.
+
 ## Requirements
 
 Version control commands require Unity Version Control (Plastic SCM) to be configured in your project.

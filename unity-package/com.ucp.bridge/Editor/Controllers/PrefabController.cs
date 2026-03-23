@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace UCP.Bridge
 {
@@ -24,7 +26,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -61,7 +63,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -70,6 +72,8 @@ namespace UCP.Bridge
 
             string assetPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(go);
             PrefabUtility.ApplyPrefabInstance(go, InteractionMode.AutomatedAction);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "Prefab");
 
             return new Dictionary<string, object>
             {
@@ -84,7 +88,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -92,6 +96,8 @@ namespace UCP.Bridge
                 throw new ArgumentException("Object is not a prefab instance");
 
             PrefabUtility.RevertPrefabInstance(go, InteractionMode.AutomatedAction);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "Prefab");
 
             return new Dictionary<string, object>
             {
@@ -110,7 +116,7 @@ namespace UCP.Bridge
             if (p.TryGetValue("completely", out var compObj))
                 completely = Convert.ToBoolean(compObj);
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -122,6 +128,8 @@ namespace UCP.Bridge
                 : PrefabUnpackMode.OutermostRoot;
 
             PrefabUtility.UnpackPrefabInstance(go, mode, InteractionMode.AutomatedAction);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "Prefab");
 
             return new Dictionary<string, object>
             {
@@ -139,7 +147,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("path", out var pathObj))
                 throw new ArgumentException("Missing 'path' parameter");
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -153,17 +161,27 @@ namespace UCP.Bridge
             }
 
             bool success;
-            var prefab = PrefabUtility.SaveAsPrefabAsset(go, savePath, out success);
+            var prefab = PrefabUtility.SaveAsPrefabAssetAndConnect(
+                go,
+                savePath,
+                InteractionMode.AutomatedAction,
+                out success
+            );
 
             if (!success || prefab == null)
                 throw new InvalidOperationException($"Failed to create prefab at {savePath}");
+
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "Prefab");
 
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
                 ["path"] = savePath,
                 ["name"] = prefab.name,
-                ["instanceId"] = prefab.GetInstanceID()
+                ["instanceId"] = prefab.GetInstanceID(),
+                ["sceneInstanceId"] = go.GetInstanceID(),
+                ["isPrefabInstance"] = PrefabUtility.IsPartOfPrefabInstance(go)
             };
         }
 
@@ -173,7 +191,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.InstanceIDToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 

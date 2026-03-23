@@ -43,6 +43,9 @@ ucp compile
 # Read recent logs
 ucp logs --count 10
 
+# Or get a quick curated overview
+ucp logs status
+
 # Or follow new error logs live
 ucp logs --follow --level error
 

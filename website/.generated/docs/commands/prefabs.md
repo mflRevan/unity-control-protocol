@@ -23,17 +23,19 @@ ucp prefab status --id -136722
 Apply overrides from a prefab instance back to the prefab asset.
 
 ```bash
-ucp prefab apply --id -136722
+ucp prefab apply --id -136722 --save
 ```
 
 This saves any modifications you've made on the instance (component values, added components, etc.) to the source prefab asset.
+
+Mutating prefab commands wait for Unity to finish applying the prefab/scene/asset changes before returning.
 
 ### `ucp prefab revert`
 
 Revert a prefab instance to match its source prefab, discarding any overrides.
 
 ```bash
-ucp prefab revert --id -136722
+ucp prefab revert --id -136722 --save
 ```
 
 ### `ucp prefab unpack`
@@ -42,10 +44,10 @@ Unpack a prefab instance, converting it into a regular GameObject. Use `--comple
 
 ```bash
 # Unpack one level
-ucp prefab unpack --id -136722
+ucp prefab unpack --id -136722 --save
 
 # Fully unpack (including nested prefabs)
-ucp prefab unpack --id -136722 --completely true
+ucp prefab unpack --id -136722 --completely true --save
 ```
 
 ### `ucp prefab create`
@@ -53,7 +55,7 @@ ucp prefab unpack --id -136722 --completely true
 Create a new prefab asset from an existing GameObject in the scene.
 
 ```bash
-ucp prefab create --id -136722 --path "Assets/Prefabs/NewPrefab.prefab"
+ucp prefab create --id -136722 --path "Assets/Prefabs/NewPrefab.prefab" --save
 ```
 
 | Flag                 | Description                          |
@@ -84,3 +86,5 @@ ucp prefab overrides --id -136722
 - `apply` and `revert` only work on connected prefab instances
 - `unpack` with `--completely true` recursively unpacks all nested prefabs
 - `create` will overwrite an existing prefab at the target path
+- `apply`, `revert`, `unpack`, and `create` follow the editor-settle policy before reporting success
+- Add `--save` when the prefab operation should also persist the active scene immediately; otherwise the scene stays dirty until `ucp scene save`

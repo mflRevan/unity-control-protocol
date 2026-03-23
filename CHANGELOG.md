@@ -5,12 +5,24 @@
 ### Changed
 
 - Added a bridge-visible `editor/status` lifecycle surface and a shared CLI editor-settle wait path so relevant mutating commands can wait for Unity's import/update/compile work to finish before reporting success.
-- `ucp files write|patch`, mutating `ucp asset ...` flows, `ucp scene load`, and package-changing `ucp packages ...` flows now keep the editor foregrounded as needed and wait for Unity to settle instead of returning while import/domain-reload work is still deferred in the background.
+- Standardized Unity interaction handling around explicit lifecycle categories: read-only, editor-settle, restart-then-settle, and custom-confirmation flows.
+- `ucp files write|patch`, mutating `ucp asset ...` flows, `ucp scene load`, mutating `ucp object ...`, `ucp material ...`, `ucp prefab ...`, `ucp settings ...`, `ucp build set-*`, file-mutating fallback `ucp vcs ...`, and package-changing `ucp packages ...` flows now keep the editor foregrounded as needed and wait for Unity to settle instead of returning while import/domain-reload work is still deferred in the background.
+- Blocking settle/reload commands now append the curated `ucp logs status` summary automatically so warnings and errors stay visible at the moment lifecycle work finishes.
+- `PROJECT.md`, `CONTRIBUTING.md`, and command docs now document the lifecycle-policy framework so future command surfaces extend the same readiness guarantees instead of adding ad hoc waits.
+- Added active-scene dirty tracking plus explicit scene-save policy primitives so disruptive commands can fail early with a concise unsaved-scene summary instead of letting Unity raise its native save dialog.
+- Added `ucp scene save`, `--save` support on scene-editing object/prefab/lighting commands, and first-class `ucp material create`.
+- Added `ucp logs status` for a curated buffered-log overview with per-level counts, collapsed categories, and recent play-session timing/log summaries.
 - Simplified the skill/plugin layout by restoring the canonical root `.claude-plugin` setup and removing the unused QA skill package.
 
 ### Fixed
 
 - Fixed the editor-readiness gap where bridge-mediated writes, importer edits, scene loads, and package changes could appear complete to the agent but still trigger Unity's normal catch-up import/refresh behavior only after the editor window regained focus.
+- Fixed the play/compile/package/editor-transition workflow gap where unsaved active-scene changes could still fall through to Unity-owned save prompts instead of being surfaced deterministically in CLI output.
+- Fixed prefab creation so `ucp prefab create` now creates real prefab-connected scene instances via Unity's `SaveAsPrefabAssetAndConnect(...)` path instead of leaving the source object decoupled from the saved asset.
+- Fixed prefab/asset cleanup workflows by adding Unity-managed `ucp asset delete`, avoiding raw on-disk deletions that could desynchronize Unity's asset database and trigger import-worker errors.
+- Fixed stop/play awareness by appending curated log-status output on `ucp stop` and exposing serialized `activeInputHandler` read/write support so input-system mismatches can be diagnosed and corrected from the CLI.
+- Fixed scene-property workflows so renderer material arrays can now be assigned through `ucp object set-property`, enabling command-palette-driven category material assignment for live scene hierarchy iteration.
+- Fixed the main Unity 6 bridge deprecation surface in source by migrating repeated `InstanceIDToObject(int)` and `BuildTargetGroup` PlayerSettings usage to their newer APIs.
 
 ## [0.4.3] - 2026-03-23
 

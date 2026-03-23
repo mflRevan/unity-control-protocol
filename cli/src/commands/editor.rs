@@ -96,6 +96,11 @@ async fn open(ctx: &Context) -> anyhow::Result<()> {
 
 async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
+    super::enforce_active_scene_guard_for_project(
+        &project,
+        super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
+    )
+    .await?;
     let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
 
     if ctx.json {
@@ -120,6 +125,11 @@ async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
 
 async fn restart(ctx: &Context, force: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
+    super::enforce_active_scene_guard_for_project(
+        &project,
+        super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
+    )
+    .await?;
     let _ = editor_runtime::close_editor(&project, ctx, force).await?;
     open(ctx).await
 }

@@ -66,6 +66,28 @@ Contributions should keep that in mind by preserving:
 - clear failure behavior
 - compatibility with ordinary Unity editor workflows
 
+### Classify Unity interactions before coding them
+
+Do not treat a bridge RPC as "done" just because the immediate Unity API call returned.
+
+Every Unity-facing command should be placed into a lifecycle category before implementation:
+
+- **Read-only**: no post-action wait
+- **Editor-settle mutation**: wait for Unity to finish import/update/serialization work
+- **Restart-then-settle mutation**: wait for bridge restart or domain reload and then for editor settle
+- **Custom confirmation**: use a domain-specific completion signal such as play-mode state or test notifications
+
+When in doubt, bias toward the stricter category until a concrete reason exists not to.
+
+Contributors should use the shared CLI lifecycle-policy helpers for this. Do not add new ad hoc sleep loops, focus nudges, or one-off bridge wait logic inside individual commands unless the command truly has a unique completion model.
+
+For scene-affecting commands, also classify whether the command is:
+
+- a **scene edit** that may leave the active scene dirty and therefore should expose an explicit `--save` flag instead of auto-saving, or
+- a **scene-disruptive transition** that must block on unsaved active-scene changes and surface a concise summary before Unity can show its own save prompt.
+
+When adding a new command, decide both classifications up front: lifecycle category and scene-save policy. The correct implementation should normally reuse the shared CLI helpers for editor settle, dirty-scene preflight, and explicit active-scene save.
+
 ## Tech-Stack Guidance
 
 ### Rust CLI
@@ -75,6 +97,7 @@ Contributions to the Rust CLI should aim for:
 - focused modules
 - explicit context and input handling
 - clean separation between orchestration, transport, and presentation
+- centralized lifecycle-policy selection for Unity mutations
 - output that remains usable for both humans and automation
 
 The CLI should stay readable as an orchestration layer even as the command surface grows.
@@ -96,6 +119,8 @@ The bridge should remain robust and understandable, not over-abstracted.
 Documentation and release metadata are part of the maintenance surface.
 
 If a change affects the public surface, architecture, workflow, or packaging model, update the relevant docs and metadata in the same workstream.
+
+If a change introduces a new Unity mutation surface, update the docs to explain its lifecycle behavior when that behavior is meaningful to users or future contributors.
 
 ## Pull Request Guidance
 
@@ -136,6 +161,7 @@ When reviewing contributions, the main questions are:
 - does it preserve clear ownership and boundaries?
 - does it make future work easier in the same area?
 - does it keep the product understandable for both humans and automation?
+- does it put the command in the correct Unity lifecycle category and reuse the shared readiness policy?
 
 ## Final Rule
 

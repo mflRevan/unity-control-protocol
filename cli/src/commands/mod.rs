@@ -22,14 +22,16 @@ pub mod snapshot;
 pub mod tests;
 pub mod vcs;
 
-use crate::bridge_lifecycle::{self, WaitMode, WaitStatus};
+use crate::bridge_lifecycle::{self, EditorSettleStatus, WaitMode, WaitStatus};
 use crate::bridge_package;
 use crate::client::BridgeClient;
 use crate::config::{self, LockFile};
 use crate::discovery;
 use crate::editor_runtime;
+use crate::error::UcpError;
 use crate::output;
 use clap::Subcommand;
+use serde::Deserialize;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -45,6 +47,113 @@ pub struct Context {
     pub verbose: bool,
     pub bridge_update_policy: config::BridgeUpdatePolicy,
     pub dialog_policy: config::StartupDialogPolicy,
+}
+
+/// Standard post-action lifecycle policy for Unity-facing commands.
+///
+/// Every command should classify itself into one of these buckets:
+/// - `None` for read-only operations or commands with their own bespoke confirmation loop
+/// - `EditorSettle` for mutations that can trigger asset refresh, metadata generation,
+///   serialization, or other editor-side background processing
+/// - `RestartThenSettle` for mutations that can restart the bridge or trigger domain reloads,
+///   such as package changes, script recompilation, build target switches, or define changes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnityLifecyclePolicy {
+    None,
+    EditorSettle {
+        progress_message: &'static str,
+        failure_context: &'static str,
+        min_timeout_secs: u64,
+    },
+    RestartThenSettle {
+        progress_message: &'static str,
+        failure_context: &'static str,
+        min_timeout_secs: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnityLifecycleOutcome {
+    pub bridge_status: Option<WaitStatus>,
+    pub editor_status: Option<EditorSettleStatus>,
+    pub log_status: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActiveSceneGuardPolicy {
+    None,
+    BlockIfDirty {
+        command_label: &'static str,
+        max_entries: usize,
+    },
+}
+
+impl ActiveSceneGuardPolicy {
+    pub const fn block_if_dirty(command_label: &'static str) -> Self {
+        Self::BlockIfDirty {
+            command_label,
+            max_entries: 8,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ActiveSceneDirtySummary {
+    #[serde(rename = "isDirty")]
+    is_dirty: bool,
+    name: String,
+    #[serde(default)]
+    path: String,
+    #[serde(default, rename = "modifications")]
+    changes: Vec<ActiveSceneDirtyChange>,
+    #[serde(default, rename = "omittedCount")]
+    omitted_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct ActiveSceneDirtyChange {
+    #[serde(rename = "instanceId")]
+    instance_id: Option<i64>,
+    name: String,
+    #[serde(default)]
+    components: Vec<String>,
+}
+
+impl UnityLifecyclePolicy {
+    pub const fn editor_settle(
+        progress_message: &'static str,
+        failure_context: &'static str,
+    ) -> Self {
+        Self::EditorSettle {
+            progress_message,
+            failure_context,
+            min_timeout_secs: 5,
+        }
+    }
+
+    pub const fn editor_settle_with_timeout(
+        progress_message: &'static str,
+        failure_context: &'static str,
+        min_timeout_secs: u64,
+    ) -> Self {
+        Self::EditorSettle {
+            progress_message,
+            failure_context,
+            min_timeout_secs,
+        }
+    }
+
+    pub const fn restart_then_settle(
+        progress_message: &'static str,
+        failure_context: &'static str,
+        min_timeout_secs: u64,
+    ) -> Self {
+        Self::RestartThenSettle {
+            progress_message,
+            failure_context,
+            min_timeout_secs,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -141,27 +250,10 @@ pub enum Command {
     },
     /// Stream console logs
     Logs {
-        /// Filter by level: info, warn, error
-        #[arg(long)]
-        level: Option<String>,
-        /// Read up to N buffered logs when searching or tailing, or stop after N live logs when following
-        #[arg(long)]
-        count: Option<u32>,
-        /// Search buffered logs by regex pattern
-        #[arg(long)]
-        pattern: Option<String>,
-        /// Read one buffered log entry by id
-        #[arg(long)]
-        id: Option<u64>,
-        /// Restrict buffered reads to log ids lower than this value
-        #[arg(long, value_name = "ID")]
-        before_id: Option<u64>,
-        /// Restrict buffered reads to log ids higher than this value
-        #[arg(long, value_name = "ID")]
-        after_id: Option<u64>,
-        /// Follow live log notifications instead of reading buffered history
-        #[arg(long)]
-        follow: bool,
+        #[command(subcommand)]
+        action: Option<logs::LogsAction>,
+        #[command(flatten)]
+        args: logs::LogsArgs,
     },
     /// Run tests
     RunTests {
@@ -315,6 +407,257 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
     Ok((project, lock, client))
 }
 
+pub async fn await_unity_lifecycle(
+    project: &std::path::Path,
+    previous_lock: Option<&LockFile>,
+    policy: UnityLifecyclePolicy,
+    ctx: &Context,
+) -> anyhow::Result<UnityLifecycleOutcome> {
+    let (progress_message, failure_context, min_timeout_secs, restart_first) = match policy {
+        UnityLifecyclePolicy::None => {
+            return Ok(UnityLifecycleOutcome {
+                bridge_status: None,
+                editor_status: None,
+                log_status: None,
+            });
+        }
+        UnityLifecyclePolicy::EditorSettle {
+            progress_message,
+            failure_context,
+            min_timeout_secs,
+        } => (progress_message, failure_context, min_timeout_secs, false),
+        UnityLifecyclePolicy::RestartThenSettle {
+            progress_message,
+            failure_context,
+            min_timeout_secs,
+        } => (progress_message, failure_context, min_timeout_secs, true),
+    };
+
+    if !ctx.json {
+        output::print_info(progress_message);
+    }
+
+    let timeout_secs = ctx.timeout.max(min_timeout_secs);
+    let mut bridge_status = None;
+
+    if restart_first {
+        let wait_outcome = bridge_lifecycle::wait_for_bridge(
+            project,
+            previous_lock,
+            timeout_secs,
+            ctx.dialog_policy,
+            if previous_lock.is_some() {
+                WaitMode::RestartOptional
+            } else {
+                WaitMode::FirstAvailable
+            },
+        )
+        .await?;
+
+        if matches!(wait_outcome.status, WaitStatus::EditorNotRunning) {
+            anyhow::bail!(
+                "Unity editor exited before {} finished for {}",
+                failure_context,
+                project.display()
+            );
+        }
+
+        bridge_status = Some(wait_outcome.status);
+    }
+
+    let settle = bridge_lifecycle::wait_for_editor_settle(
+        project,
+        previous_lock,
+        timeout_secs,
+        ctx.dialog_policy,
+    )
+    .await?;
+
+    if matches!(settle.status, EditorSettleStatus::EditorNotRunning) {
+        anyhow::bail!(
+            "Unity editor exited before {} finished for {}",
+            failure_context,
+            project.display()
+        );
+    }
+
+    let log_status = fetch_lifecycle_log_status(project).await;
+
+    if !ctx.json {
+        if let Some(status) = &log_status {
+            crate::commands::logs::print_status(status, ctx);
+        }
+    }
+
+    Ok(UnityLifecycleOutcome {
+        bridge_status,
+        editor_status: Some(settle.status),
+        log_status,
+    })
+}
+
+async fn fetch_lifecycle_log_status(project: &std::path::Path) -> Option<serde_json::Value> {
+    let lock = discovery::read_lock_file(project).ok()?;
+    let mut client = BridgeClient::connect(&lock).await.ok()?;
+    if client.handshake().await.is_err() {
+        client.close().await;
+        return None;
+    }
+
+    let status = crate::commands::logs::fetch_status(&mut client).await.ok();
+    client.close().await;
+    status
+}
+
+pub fn attach_lifecycle_log_status(
+    mut result: serde_json::Value,
+    outcome: &UnityLifecycleOutcome,
+) -> serde_json::Value {
+    if let Some(status) = &outcome.log_status {
+        result["logStatus"] = status.clone();
+    }
+    result
+}
+
+pub async fn enforce_active_scene_guard(
+    client: &mut BridgeClient,
+    policy: ActiveSceneGuardPolicy,
+) -> anyhow::Result<()> {
+    let ActiveSceneGuardPolicy::BlockIfDirty {
+        command_label,
+        max_entries,
+    } = policy
+    else {
+        return Ok(());
+    };
+
+    let result = match client
+        .call(
+            "scene/dirty-summary",
+            serde_json::json!({ "maxEntries": max_entries }),
+        )
+        .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return Err(map_bridge_method_error(
+                err,
+                "scene/dirty-summary",
+                "dirty-scene preflight",
+            ));
+        }
+    };
+    let summary: ActiveSceneDirtySummary = serde_json::from_value(result)
+        .map_err(|err| anyhow::anyhow!("Invalid scene/dirty-summary payload: {err}"))?;
+
+    if !summary.is_dirty {
+        return Ok(());
+    }
+
+    anyhow::bail!("{}", format_active_scene_guard_message(command_label, &summary));
+}
+
+pub async fn enforce_active_scene_guard_for_project(
+    project: &std::path::Path,
+    policy: ActiveSceneGuardPolicy,
+) -> anyhow::Result<()> {
+    if matches!(policy, ActiveSceneGuardPolicy::None) {
+        return Ok(());
+    }
+
+    let Ok(lock) = discovery::read_lock_file(project) else {
+        return Ok(());
+    };
+
+    let Ok(mut client) = BridgeClient::connect(&lock).await else {
+        return Ok(());
+    };
+    let handshake_ok = client.handshake().await.is_ok();
+    if !handshake_ok {
+        client.close().await;
+        return Ok(());
+    }
+
+    let result = enforce_active_scene_guard(&mut client, policy).await;
+    client.close().await;
+    result
+}
+
+pub async fn save_active_scene(
+    client: &mut BridgeClient,
+    ctx: &Context,
+) -> anyhow::Result<serde_json::Value> {
+    if !ctx.json {
+        output::print_info("Saving active scene...");
+    }
+
+    match client.call("scene/save-active", serde_json::json!({})).await {
+        Ok(value) => Ok(value),
+        Err(err) => Err(map_bridge_method_error(
+            err,
+            "scene/save-active",
+            "active-scene save support",
+        )),
+    }
+}
+
+pub fn map_bridge_method_error(
+    err: UcpError,
+    method: &str,
+    capability: &str,
+) -> anyhow::Error {
+    match err {
+        UcpError::BridgeError { code, message }
+            if code == -32601 && message.contains(method) =>
+        {
+            anyhow::anyhow!(
+                "The connected Unity bridge does not expose `{method}` yet, so {capability} is unavailable. Refresh or update the bridge package, then let Unity finish recompiling before retrying."
+            )
+        }
+        other => other.into(),
+    }
+}
+
+fn format_active_scene_guard_message(
+    command_label: &str,
+    summary: &ActiveSceneDirtySummary,
+) -> String {
+    let scene_path = if summary.path.is_empty() {
+        "<untitled scene>".to_string()
+    } else {
+        summary.path.clone()
+    };
+
+    let mut lines = vec![format!(
+        "Cannot {command_label} while the active scene has unsaved changes: {} ({scene_path})",
+        summary.name
+    )];
+
+    if summary.changes.is_empty() {
+        lines.push("Modified objects: unavailable".to_string());
+    } else {
+        lines.push("Modified objects:".to_string());
+        for change in &summary.changes {
+            let id = change
+                .instance_id
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            let component_summary = if change.components.is_empty() {
+                "Unknown".to_string()
+            } else {
+                change.components.join(", ")
+            };
+            lines.push(format!("  {id} {} [{component_summary}]", change.name));
+        }
+        if summary.omitted_count > 0 {
+            lines.push(format!("  ... {} more object(s) modified", summary.omitted_count));
+        }
+    }
+
+    lines.push("Run `ucp scene save` to persist the active scene, or re-run the scene-editing command with `--save` if supported.".to_string());
+    lines.join("\n")
+}
+
 pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
     match cmd {
         Command::Install {
@@ -366,15 +709,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             height,
             output,
         } => screenshot::run(&view, width, height, output, &ctx).await,
-        Command::Logs {
-            level,
-            count,
-            pattern,
-            id,
-            before_id,
-            after_id,
-            follow,
-        } => logs::run(level, count, pattern, id, before_id, after_id, follow, &ctx).await,
+        Command::Logs { action, args } => logs::run(action, args, &ctx).await,
         Command::RunTests { mode, filter } => tests::run(&mode, filter, &ctx).await,
         Command::Exec { action } => match action {
             ExecAction::List => exec::list(&ctx).await,

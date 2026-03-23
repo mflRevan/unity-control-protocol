@@ -4,6 +4,8 @@ UCP provides a comprehensive set of commands organized by domain. All commands s
 
 Without `--json`, commands use human mode: terminal-friendly summaries optimized for interactive use. Human mode intentionally truncates broad reads so scenes, settings, and logs stay inspectable without overwhelming the terminal or an agent context window.
 
+Blocking Unity mutation commands that wait for reimport, compilation, or domain reload completion now also append the same curated `ucp logs status` summary in human mode. That keeps warnings/errors visible at the exact point a long-running command finishes instead of requiring a separate manual log poll.
+
 ## Global Flags
 
 | Flag                            | Description                                               |
@@ -83,7 +85,7 @@ When a project declares a Unity version that is not installed, UCP reports the i
 | Command                                  | Description                                    |
 | ---------------------------------------- | ---------------------------------------------- |
 | `ucp screenshot [--view] [--output]`     | Capture game or scene view screenshot          |
-| `ucp logs [--follow] [--pattern] [--id]` | Follow live logs or query buffered log history |
+| `ucp logs [status\|--follow\|--pattern\|--id]` | Follow live logs, query buffered history, or print a curated log-status summary |
 
 ### Testing
 

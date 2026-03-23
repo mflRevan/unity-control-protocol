@@ -13,6 +13,8 @@ namespace UCP.Bridge
             router.Register("scene/list", HandleList);
             router.Register("scene/load", HandleLoad);
             router.Register("scene/active", HandleActive);
+            router.Register("scene/save-active", HandleSaveActive);
+            router.Register("scene/dirty-summary", HandleDirtySummary);
             router.Register("scene/focus", HandleFocus);
         }
 
@@ -90,10 +92,56 @@ namespace UCP.Bridge
 
                 if (!EditorSceneManager.SaveScene(scene))
                     throw new System.InvalidOperationException($"Failed to auto-save dirty scene: {scene.path}");
+
+                SceneChangeTracker.ClearScene(scene);
             }
 
             if (requiresUntitledDiscard)
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        }
+
+        private static object HandleSaveActive(string paramsJson)
+        {
+            var scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid() || !scene.isLoaded)
+                throw new System.InvalidOperationException("No active loaded scene to save");
+
+            if (string.IsNullOrEmpty(scene.path))
+                throw new System.InvalidOperationException("Active scene is untitled and cannot be auto-saved");
+
+            if (!scene.isDirty)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["status"] = "ok",
+                    ["saved"] = false,
+                    ["name"] = scene.name,
+                    ["path"] = scene.path
+                };
+            }
+
+            if (!EditorSceneManager.SaveScene(scene))
+                throw new System.InvalidOperationException($"Failed to save active scene: {scene.path}");
+
+            SceneChangeTracker.ClearScene(scene);
+
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["saved"] = true,
+                ["name"] = scene.name,
+                ["path"] = scene.path
+            };
+        }
+
+        private static object HandleDirtySummary(string paramsJson)
+        {
+            var parameters = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            var maxEntries = 8;
+            if (parameters != null && parameters.TryGetValue("maxEntries", out var valueObj) && valueObj != null)
+                maxEntries = Mathf.Max(1, System.Convert.ToInt32(valueObj));
+
+            return SceneChangeTracker.DescribeActiveSceneChanges(maxEntries);
         }
 
         private static object HandleActive(string paramsJson)
@@ -225,7 +273,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var direct = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var direct = EditorUtility.EntityIdToObject(instanceId) as GameObject;
             if (direct != null)
                 return direct;
 
@@ -267,3 +315,4 @@ namespace UCP.Bridge
         }
     }
 }
+

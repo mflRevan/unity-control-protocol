@@ -41,7 +41,7 @@ Write a property value. Values are provided as JSON.
 
 ```bash
 # Set a boolean
-ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
+ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true --save
 
 # Set a number
 ucp object set-property --id 46894 --component Camera --property m_Depth --value "2"
@@ -54,12 +54,16 @@ ucp object set-property --id 46894 --component Camera --property m_Depth --value
 | `--property <name>`  | Property/field name |
 | `--value <json>`     | Value as JSON       |
 
+Mutating object commands now wait for Unity to finish applying the scene/object change before returning, so follow-up automation sees a settled editor instead of deferred hierarchy or serialization work.
+
+Add `--save` to any mutating object command when you want the active scene persisted immediately instead of left dirty.
+
 ### `ucp object set-active`
 
 Enable or disable a GameObject.
 
 ```bash
-ucp object set-active --id 46894 --active false
+ucp object set-active --id 46894 --active false --save
 ucp object set-active --id 46894 --active true
 ```
 
@@ -68,7 +72,7 @@ ucp object set-active --id 46894 --active true
 Rename a GameObject.
 
 ```bash
-ucp object set-name --id 46894 --name "Player Camera"
+ucp object set-name --id 46894 --name "Player Camera" --save
 ```
 
 ### `ucp object create`
@@ -80,7 +84,7 @@ Create a new empty GameObject.
 ucp object create "MyObject"
 
 # Create as child
-ucp object create "Child" --parent 46894
+ucp object create "Child" --parent 46894 --save
 ```
 
 ### `ucp object delete`
@@ -88,7 +92,7 @@ ucp object create "Child" --parent 46894
 Delete a GameObject and all its children.
 
 ```bash
-ucp object delete --id -15774
+ucp object delete --id -15774 --save
 ```
 
 ### `ucp object reparent`
@@ -97,7 +101,7 @@ Move a GameObject in the hierarchy.
 
 ```bash
 # Move under a parent
-ucp object reparent --id -15774 --parent 46894
+ucp object reparent --id -15774 --parent 46894 --save
 
 # Move to root
 ucp object reparent --id -15774
@@ -115,7 +119,7 @@ Instantiate a prefab or clone a scene object.
 ucp object instantiate "Assets/Prefabs/Enemy.prefab" --name "Enemy1"
 
 # With parent
-ucp object instantiate "Assets/Prefabs/UI/Button.prefab" --parent 46900
+ucp object instantiate "Assets/Prefabs/UI/Button.prefab" --parent 46900 --save
 ```
 
 ### `ucp object add-component`
@@ -123,7 +127,7 @@ ucp object instantiate "Assets/Prefabs/UI/Button.prefab" --parent 46900
 Add a component to a GameObject.
 
 ```bash
-ucp object add-component --id -15774 --component BoxCollider
+ucp object add-component --id -15774 --component BoxCollider --save
 ucp object add-component --id -15774 --component Rigidbody
 ```
 
@@ -132,7 +136,7 @@ ucp object add-component --id -15774 --component Rigidbody
 Remove a component from a GameObject.
 
 ```bash
-ucp object remove-component --id -15774 --component BoxCollider
+ucp object remove-component --id -15774 --component BoxCollider --save
 ```
 
 ## Notes
@@ -142,3 +146,5 @@ ucp object remove-component --id -15774 --component BoxCollider
 - Use `ucp scene snapshot` to discover instance IDs for existing scene objects.
 - Treat instance IDs as short-lived editor handles. Re-run `ucp scene snapshot` after compilation, domain reloads, package refreshes, scene loads, or test runs before issuing object-level commands.
 - `ucp object get-fields` in human mode intentionally prints only a bounded field list. Use `ucp object get-property` or `--json` when you need deeper inspection.
+- `set-property`, `set-active`, `set-name`, `create`, `delete`, `reparent`, `instantiate`, `add-component`, and `remove-component` all follow the editor-settle policy before reporting success.
+- Use `--save` when the object edit should persist immediately; otherwise the active scene remains dirty until you run `ucp scene save`.

@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.4.3'
+  version: '0.4.4'
   clawdbot:
     emoji: '🎮'
 ---
@@ -65,33 +65,6 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 - `ucp packages unitypackage inspect|import` gives a deterministic, agent-friendly path for Asset Store-style archives, including selective folder/asset import.
 - `ucp play` can fail when Unity is blocked by compile errors; fix the errors first, then retry.
 - Prefer `cm` for normal Unity Version Control work; use `ucp vcs` only as a lightweight fallback.
-- Adding a brand-new scoped registry can trigger Unity's own Package Manager security popup (blocking)
-
-## External Endpoints
-
-This ClawHub bundle ships documentation only. It does not include helper scripts and it does not make any automatic network calls by itself. When an agent follows this skill, the surrounding `ucp` toolchain can reach the following endpoints as part of explicit user-requested workflows:
-
-| Endpoint                                                                 | Used by                                                      | Data sent                                                                                                                                   |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ws://127.0.0.1:<dynamic-port>`                                          | `ucp` CLI talking to the local Unity bridge                  | JSON-RPC requests and responses describing the target Unity project's scenes, objects, assets, settings, tests, builds, and profiler state. |
-| `https://github.com/mflRevan/unity-control-protocol.git`                 | `ucp install` tracked bridge dependency installs and updates | Normal git package fetch metadata for the bridge package version requested by the operator.                                                 |
-| `https://packages.unity.com` and any user-configured scoped registry URL | `ucp packages ...` workflows                                 | Package names, versions, registry URLs, and standard Unity Package Manager traffic needed for explicit package search/install/update work.  |
-
-## Security & Privacy
-
-- This skill bundle contains only markdown documentation. It does not ship shell scripts, binaries, auto-downloaders, or persistence hooks.
-- The primary runtime path is the local `ucp` CLI talking to a Unity bridge over localhost WebSocket; that traffic stays on the machine unless the operator explicitly invokes package or install commands that contact remote registries.
-- When the skill is used, an agent may inspect or mutate the local Unity project through `ucp`, which means Unity scene names, asset paths, component data, logs, test results, and build settings can move between the local editor and the local CLI process.
-- Remote traffic is workflow-dependent and opt-in: package installs, bridge dependency installs, and user-chosen registries can receive package names, versions, and repository refs needed to fulfill the requested action.
-- If the project contains secrets or sensitive assets, prefer `--json` plus narrow commands, review intended commands before execution, and avoid registry/install operations you do not trust.
-
-## Model Invocation Note
-
-Autonomous invocation of this skill is expected in OpenClaw/ClawHub-style environments when the user asks for Unity Editor automation. If the user wants filesystem-only edits or does not want bridge-backed automation, they should explicitly say not to use UCP and the agent should stay within normal workspace tools.
-
-## Trust Statement
-
-By using this skill, you are trusting the `ucp` CLI, the local Unity project it operates on, and any package registries or git remotes you intentionally invoke through UCP. Only install or enable this skill if you trust this repository, the local machine context, and the remote package sources involved in your workflow.
 
 ## Scene & editor basics
 
@@ -169,7 +142,7 @@ ucp object set-property --id 46900 --component Rigidbody --property m_Mass --val
 ucp screenshot --view scene --output after.png
 ```
 
-Use this when an agent needs scene-aware iteration, not just raw file editing. Snapshot gives live instance IDs, focus aligns the Scene view for repeatable screenshots, and property changes apply through Unity immediately.
+Use this for scene-aware iteration, not just raw file editing. Snapshot gives live instance IDs, focus aligns the Scene view for repeatable screenshots, and property changes apply through Unity immediately.
 
 ### Build a scene object into a prefab workflow
 
@@ -222,12 +195,12 @@ Use `packages add|remove` for normal UPM installs, `packages dependency ...` for
 ```bash
 ucp compile
 ucp play
-ucp screenshot --output playtest.png
-ucp logs --pattern "Exception|Error" --count 50
+ucp logs status
+ucp logs --pattern "Exception|Error" --count 15
 ucp stop
 ```
 
-Use this loop for autonomous playtesting. If `ucp play` fails, fix compile or console-blocking errors first, then retry. Use logs for buffered inspection without needing to stream the entire editor log.
+Use this loop for autonomous playtesting. If `ucp play` fails, fix compile or console-blocking errors first, then retry. Use logs for buffered inspection without needing to stream the entire editor log. `ucp logs status` returns curated/collapsed stats.
 
 ### Profiling and debugging
 

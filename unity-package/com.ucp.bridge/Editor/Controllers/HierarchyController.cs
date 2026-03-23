@@ -56,6 +56,7 @@ namespace UCP.Bridge
             }
 
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "GameObject");
 
             return new Dictionary<string, object>
             {
@@ -74,9 +75,11 @@ namespace UCP.Bridge
             int instanceId = Convert.ToInt32(idObj);
             var go = FindGameObject(instanceId);
             string name = go.name;
+            var scene = go.scene;
 
             Undo.DestroyObjectImmediate(go);
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordDeletedObject(scene, instanceId, name, "GameObject");
 
             return new Dictionary<string, object>
             {
@@ -112,6 +115,7 @@ namespace UCP.Bridge
             }
 
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "Transform");
 
             return new Dictionary<string, object>
             {
@@ -183,6 +187,7 @@ namespace UCP.Bridge
             }
 
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(instance, "GameObject");
 
             return new Dictionary<string, object>
             {
@@ -211,6 +216,7 @@ namespace UCP.Bridge
 
             var comp = Undo.AddComponent(go, compType);
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, comp.GetType().Name);
 
             return new Dictionary<string, object>
             {
@@ -251,6 +257,7 @@ namespace UCP.Bridge
 
             Undo.DestroyObjectImmediate(target);
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, typeName);
 
             return new Dictionary<string, object>
             {
@@ -288,7 +295,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var obj = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var obj = EditorUtility.EntityIdToObject(instanceId) as GameObject;
             if (obj != null) return obj;
 
             for (int i = 0; i < SceneManager.sceneCount; i++)

@@ -1,12 +1,20 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 const MAX_PROPERTIES: usize = 40;
 
 #[derive(Subcommand)]
 pub enum MaterialAction {
+    /// Create a new material asset
+    Create {
+        /// Asset path to create at
+        path: String,
+        /// Optional shader name; defaults to a common lit shader if omitted
+        #[arg(long)]
+        shader: Option<String>,
+    },
     /// List all properties on a material
     GetProperties {
         /// Asset path to the material
@@ -64,9 +72,25 @@ pub enum MaterialAction {
 }
 
 pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    let mut result = match &action {
+        MaterialAction::Create { path, shader } => {
+            let mut params = serde_json::json!({ "path": path });
+            if let Some(shader_name) = shader {
+                params["shader"] = serde_json::json!(shader_name);
+            }
+            match client.call("material/create", params).await {
+                Ok(value) => value,
+                Err(err) => {
+                    return Err(super::map_bridge_method_error(
+                        err,
+                        "material/create",
+                        "material creation",
+                    ));
+                }
+            }
+        }
         MaterialAction::GetProperties { path } => {
             client
                 .call(
@@ -126,10 +150,20 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
 
     client.close().await;
 
+    let lifecycle =
+        super::await_unity_lifecycle(&project, Some(&lock), material_lifecycle_policy(&action), ctx)
+            .await?;
+
+    result = super::attach_lifecycle_log_status(result, &lifecycle);
+
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
+            MaterialAction::Create { path, .. } => {
+                let shader = result.get("shader").and_then(|v| v.as_str()).unwrap_or("?");
+                output::print_success(&format!("Created material: {path} ({shader})"));
+            }
             MaterialAction::GetProperties { .. } => {
                 let mat_name = result
                     .get("material")
@@ -189,4 +223,22 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn material_lifecycle_policy(action: &MaterialAction) -> UnityLifecyclePolicy {
+    match action {
+        MaterialAction::Create { .. } => UnityLifecyclePolicy::editor_settle(
+            "Waiting for Unity to finish creating the material asset...",
+            "material processing",
+        ),
+        MaterialAction::GetProperties { .. }
+        | MaterialAction::GetProperty { .. }
+        | MaterialAction::Keywords { .. } => UnityLifecyclePolicy::None,
+        MaterialAction::SetProperty { .. }
+        | MaterialAction::SetKeyword { .. }
+        | MaterialAction::SetShader { .. } => UnityLifecyclePolicy::editor_settle(
+            "Waiting for Unity to finish applying material changes...",
+            "material processing",
+        ),
+    }
 }

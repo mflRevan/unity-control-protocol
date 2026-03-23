@@ -306,4 +306,17 @@ mod tests {
             _ => panic!("unexpected command variant"),
         }
     }
+
+    #[test]
+    fn parses_logs_status_command() {
+        let cli =
+            Cli::try_parse_from(["ucp", "logs", "status"]).expect("logs status command should parse");
+
+        match cli.command {
+            commands::Command::Logs { action, .. } => {
+                assert!(matches!(action, Some(commands::logs::LogsAction::Status)));
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
 }

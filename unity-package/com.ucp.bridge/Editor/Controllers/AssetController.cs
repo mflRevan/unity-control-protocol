@@ -16,6 +16,7 @@ namespace UCP.Bridge
             router.Register("asset/write", HandleWriteScriptableObject);
             router.Register("asset/write-batch", HandleWriteScriptableObjectBatch);
             router.Register("asset/create-so", HandleCreateScriptableObject);
+            router.Register("asset/delete", HandleDeleteAsset);
         }
 
         private static object HandleSearch(string paramsJson)
@@ -306,6 +307,30 @@ namespace UCP.Bridge
                 ["path"] = assetPath,
                 ["type"] = soType.Name,
                 ["instanceId"] = instance.GetInstanceID()
+            };
+        }
+
+        private static object HandleDeleteAsset(string paramsJson)
+        {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (p == null || !p.TryGetValue("path", out var pathObj) || pathObj == null)
+                throw new ArgumentException("Missing 'path' parameter");
+
+            string assetPath = pathObj.ToString();
+            var normalizedPath = assetPath.Replace("\\", "/");
+            if (!AssetDatabase.AssetPathExists(normalizedPath))
+                throw new ArgumentException($"Asset not found: {normalizedPath}");
+
+            if (!AssetDatabase.DeleteAsset(normalizedPath))
+                throw new InvalidOperationException($"Failed to delete asset: {normalizedPath}");
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["path"] = normalizedPath
             };
         }
 

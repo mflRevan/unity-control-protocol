@@ -1,7 +1,7 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 use super::snapshot;
 
 #[derive(Subcommand)]
@@ -20,6 +20,8 @@ pub enum SceneAction {
     },
     /// Get active scene info
     Active,
+    /// Save the active scene
+    Save,
     /// Focus the Scene view camera on a GameObject
     Focus {
         /// Instance ID of the target GameObject
@@ -45,9 +47,11 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
         return snapshot::run(filter, depth, ctx).await;
     }
 
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    super::enforce_active_scene_guard(&mut client, scene_preflight_policy(&action)).await?;
+
+    let mut result = match &action {
         SceneAction::List => client.call("scene/list", serde_json::json!({})).await?,
         SceneAction::Load {
             path,
@@ -66,6 +70,7 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                 .await?
         }
         SceneAction::Active => client.call("scene/active", serde_json::json!({})).await?,
+        SceneAction::Save => super::save_active_scene(&mut client, ctx).await?,
         SceneAction::Focus { id, axis } => {
             let mut params = serde_json::json!({ "instanceId": id });
             if let Some(axis_values) = axis {
@@ -77,6 +82,22 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
     };
 
     client.close().await;
+
+    let should_settle = matches!(action, SceneAction::Load { .. });
+
+    if should_settle {
+        let lifecycle = super::await_unity_lifecycle(
+            &project,
+            Some(&lock),
+            UnityLifecyclePolicy::editor_settle(
+                "Waiting for Unity to finish scene processing...",
+                "scene processing",
+            ),
+            ctx,
+        )
+        .await?;
+        result = super::attach_lifecycle_log_status(result, &lifecycle);
+    }
 
     if ctx.json {
         output::print_json(&output::success_json(result));
@@ -118,6 +139,15 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
+            SceneAction::Save => {
+                let path = result.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                let saved = result.get("saved").and_then(|v| v.as_bool()).unwrap_or(true);
+                if saved {
+                    output::print_success(&format!("Saved active scene: {path}"));
+                } else {
+                    output::print_success(&format!("Active scene already saved: {path}"));
+                }
+            }
             SceneAction::Focus { id, .. } => {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("Focused Scene view on {name} ({id})"));
@@ -127,4 +157,15 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn scene_preflight_policy(action: &SceneAction) -> super::ActiveSceneGuardPolicy {
+    match action {
+        SceneAction::Load { .. } => super::ActiveSceneGuardPolicy::block_if_dirty("load another scene"),
+        SceneAction::List
+        | SceneAction::Active
+        | SceneAction::Save
+        | SceneAction::Focus { .. }
+        | SceneAction::Snapshot { .. } => super::ActiveSceneGuardPolicy::None,
+    }
 }

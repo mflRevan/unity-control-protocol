@@ -3,7 +3,7 @@ use crate::output;
 use clap::Subcommand;
 use console::style;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 #[derive(Subcommand)]
 pub enum VcsAction {
@@ -80,7 +80,8 @@ pub enum VcsAction {
 }
 
 pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
+    let lifecycle_policy = vcs_lifecycle_policy(&action);
 
     match action {
         VcsAction::Info => cmd_info(&mut client, ctx).await,
@@ -103,6 +104,7 @@ pub async fn run(action: VcsAction, ctx: &Context) -> anyhow::Result<()> {
     }?;
 
     client.close().await;
+    super::await_unity_lifecycle(&project, Some(&lock), lifecycle_policy, ctx).await?;
     Ok(())
 }
 
@@ -470,4 +472,32 @@ fn compact_state(state: &str) -> &str {
         return "Lr";
     }
     "?"
+}
+
+fn vcs_lifecycle_policy(action: &VcsAction) -> UnityLifecyclePolicy {
+    match action {
+        VcsAction::Revert { keep_local, .. } if !keep_local => {
+            UnityLifecyclePolicy::editor_settle_with_timeout(
+                "Waiting for Unity to finish processing version-control file changes...",
+                "version-control file processing",
+                30,
+            )
+        }
+        VcsAction::Update | VcsAction::Resolve { .. } => UnityLifecyclePolicy::editor_settle_with_timeout(
+            "Waiting for Unity to finish processing version-control file changes...",
+            "version-control file processing",
+            30,
+        ),
+        VcsAction::Info
+        | VcsAction::Status { .. }
+        | VcsAction::Checkout { .. }
+        | VcsAction::Revert { .. }
+        | VcsAction::Commit { .. }
+        | VcsAction::Diff { .. }
+        | VcsAction::Incoming
+        | VcsAction::Branches
+        | VcsAction::Lock { .. }
+        | VcsAction::Unlock { .. }
+        | VcsAction::History { .. } => UnityLifecyclePolicy::None,
+    }
 }

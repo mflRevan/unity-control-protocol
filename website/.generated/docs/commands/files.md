@@ -40,6 +40,8 @@ ucp files write Assets/Textures/HUD.png.meta --content "..." --no-reimport
 
 Writes and patches now reimport the edited Unity asset automatically for `Assets/` and `Packages/` paths, including `.meta` file edits. This keeps imported assets and importer changes applied immediately without a separate manual step.
 
+When a write or patch triggers Unity-side reimport or script compilation, UCP now waits for Unity to finish that background work before returning. That means the editor is already caught up instead of deferring import/compile/domain-reload work until the window regains focus.
+
 ### `ucp files patch <path>`
 
 Apply a find/replace patch to a file.

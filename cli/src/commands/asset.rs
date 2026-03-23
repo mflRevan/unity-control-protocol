@@ -2,7 +2,7 @@ use crate::output;
 use clap::Subcommand;
 use std::path::Path;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 const MAX_ASSET_FIELDS: usize = 40;
 
@@ -63,6 +63,11 @@ pub enum AssetAction {
         /// Asset path to create at
         path: String,
     },
+    /// Delete an asset or folder through Unity
+    Delete {
+        /// Asset path
+        path: String,
+    },
     /// Reimport an asset or meta file through Unity
     Reimport {
         /// Asset path or .meta path
@@ -113,9 +118,9 @@ pub enum ImportSettingsAction {
 }
 
 pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    let mut result = match &action {
         AssetAction::Search {
             r#type,
             name,
@@ -177,6 +182,11 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                 )
                 .await?
         }
+        AssetAction::Delete { path } => {
+            client
+                .call("asset/delete", serde_json::json!({ "path": path }))
+                .await?
+        }
         AssetAction::Reimport { path } => {
             client
                 .call("asset/reimport", serde_json::json!({ "path": path }))
@@ -233,6 +243,22 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
     };
 
     client.close().await;
+
+    let should_settle = should_wait_for_settle(&action, &result);
+
+    if should_settle {
+        let lifecycle = super::await_unity_lifecycle(
+            &project,
+            Some(&lock),
+            UnityLifecyclePolicy::editor_settle(
+                "Waiting for Unity to finish applying asset changes...",
+                "asset processing",
+            ),
+            ctx,
+        )
+        .await?;
+        result = super::attach_lifecycle_log_status(result, &lifecycle);
+    }
 
     if ctx.json {
         output::print_json(&output::success_json(result));
@@ -301,6 +327,9 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             }
             AssetAction::CreateSo { r#type, path } => {
                 output::print_success(&format!("Created {} at {path}", r#type));
+            }
+            AssetAction::Delete { path } => {
+                output::print_success(&format!("Deleted asset: {path}"));
             }
             AssetAction::Reimport { .. } => {
                 let asset_path = result
@@ -390,4 +419,29 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
 
 fn parse_json_or_string(value: &str) -> serde_json::Value {
     serde_json::from_str(value).unwrap_or_else(|_| serde_json::Value::String(value.to_owned()))
+}
+
+fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> bool {
+    match action {
+        AssetAction::Write { .. }
+        | AssetAction::WriteBatch { .. }
+        | AssetAction::CreateSo { .. }
+        | AssetAction::Delete { .. } => true,
+        AssetAction::Reimport { .. } => true,
+        AssetAction::ImportSettings { action } => match action {
+            ImportSettingsAction::Read { .. } => false,
+            ImportSettingsAction::Write { no_reimport, .. }
+            | ImportSettingsAction::WriteBatch { no_reimport, .. } => {
+                !*no_reimport
+                    && result
+                        .get("reimport")
+                        .and_then(|value| value.get("reimported"))
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false)
+            }
+        },
+        AssetAction::Search { .. }
+        | AssetAction::Info { .. }
+        | AssetAction::Read { .. } => false,
+    }
 }

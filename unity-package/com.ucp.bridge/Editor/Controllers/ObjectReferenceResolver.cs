@@ -65,7 +65,7 @@ namespace UCP.Bridge
 
         private static UnityEngine.Object ResolveByInstanceId(int instanceId, string propertyName)
         {
-            var resolved = EditorUtility.InstanceIDToObject(instanceId);
+            var resolved = EditorUtility.EntityIdToObject(instanceId);
             if (resolved == null)
                 throw new ArgumentException($"Object reference for '{propertyName}' could not resolve instance id {instanceId}");
 

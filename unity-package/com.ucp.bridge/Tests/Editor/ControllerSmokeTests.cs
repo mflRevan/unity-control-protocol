@@ -371,7 +371,7 @@ namespace UCP.Bridge.Tests
             );
             Assert.That(getPosition.error, Is.Null);
 
-            var updated = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var updated = EditorUtility.EntityIdToObject(instanceId) as GameObject;
             Assert.That(updated, Is.Not.Null);
             var localPosition = updated.transform.localPosition;
             Assert.That(localPosition.x, Is.EqualTo(1f).Within(0.001f));
@@ -383,7 +383,7 @@ namespace UCP.Bridge.Tests
 
             var delete = _router.Dispatch("object/delete", 1, "{\"instanceId\":" + instanceId + "}");
             Assert.That(delete.error, Is.Null);
-            Assert.That(EditorUtility.InstanceIDToObject(instanceId), Is.Null);
+            Assert.That(EditorUtility.EntityIdToObject(instanceId), Is.Null);
         }
 
         [Test]
@@ -406,6 +406,32 @@ namespace UCP.Bridge.Tests
             Assert.That(response.error, Is.Null);
             Assert.That(component.referenceAsset, Is.Not.Null);
             Assert.That(AssetDatabase.GetAssetPath(component.referenceAsset), Is.EqualTo(TempReferenceAssetPath));
+        }
+
+        [Test]
+        public void ObjectSetProperty_AssignsRendererMaterialArrayByAssetPath()
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            Assert.That(shader, Is.Not.Null, "Expected a lit shader to exist for the material smoke test");
+
+            var material = new Material(shader) { name = "UcpControllerSmokeMat" };
+            AssetDatabase.CreateAsset(material, TempMaterialPath);
+            AssetDatabase.SaveAssets();
+
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var renderer = cube.GetComponent<MeshRenderer>();
+            Assert.That(renderer, Is.Not.Null);
+
+            var response = _router.Dispatch(
+                "object/set-property",
+                1,
+                "{\"instanceId\":" + cube.GetInstanceID() + ",\"component\":\"MeshRenderer\",\"property\":\"m_Materials\",\"value\":[{\"path\":\"" + TempMaterialPath + "\"}]}"
+            );
+
+            Assert.That(response.error, Is.Null);
+            Assert.That(renderer.sharedMaterials, Has.Length.EqualTo(1));
+            Assert.That(renderer.sharedMaterials[0], Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(renderer.sharedMaterials[0]), Is.EqualTo(TempMaterialPath));
         }
 
         [Test]

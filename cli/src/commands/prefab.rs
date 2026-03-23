@@ -1,7 +1,7 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::Context;
+use super::{Context, UnityLifecyclePolicy};
 
 const MAX_PREFAB_OVERRIDES: usize = 20;
 const MAX_PREFAB_COMPONENT_CHANGES: usize = 20;
@@ -19,12 +19,18 @@ pub enum PrefabAction {
         /// Instance ID of the prefab instance root
         #[arg(long, allow_hyphen_values = true)]
         id: i64,
+        /// Save the active scene after applying the change
+        #[arg(long)]
+        save: bool,
     },
     /// Revert prefab instance to match the asset
     Revert {
         /// Instance ID of the prefab instance root
         #[arg(long, allow_hyphen_values = true)]
         id: i64,
+        /// Save the active scene after applying the change
+        #[arg(long)]
+        save: bool,
     },
     /// Unpack a prefab instance
     Unpack {
@@ -34,6 +40,9 @@ pub enum PrefabAction {
         /// Unpack completely (all nested prefabs)
         #[arg(long, action = clap::ArgAction::Set)]
         completely: bool,
+        /// Save the active scene after applying the change
+        #[arg(long)]
+        save: bool,
     },
     /// Create a prefab asset from a scene object
     Create {
@@ -43,6 +52,9 @@ pub enum PrefabAction {
         /// Asset path to save the prefab
         #[arg(long)]
         path: String,
+        /// Save the active scene after applying the change
+        #[arg(long)]
+        save: bool,
     },
     /// List property overrides on a prefab instance
     Overrides {
@@ -53,25 +65,27 @@ pub enum PrefabAction {
 }
 
 pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
 
-    let result = match &action {
+    super::enforce_active_scene_guard(&mut client, prefab_preflight_policy(&action)).await?;
+
+    let mut result = match &action {
         PrefabAction::Status { id } => {
             client
                 .call("prefab/status", serde_json::json!({ "instanceId": id }))
                 .await?
         }
-        PrefabAction::Apply { id } => {
+        PrefabAction::Apply { id, .. } => {
             client
                 .call("prefab/apply", serde_json::json!({ "instanceId": id }))
                 .await?
         }
-        PrefabAction::Revert { id } => {
+        PrefabAction::Revert { id, .. } => {
             client
                 .call("prefab/revert", serde_json::json!({ "instanceId": id }))
                 .await?
         }
-        PrefabAction::Unpack { id, completely } => {
+        PrefabAction::Unpack { id, completely, .. } => {
             client
                 .call(
                     "prefab/unpack",
@@ -79,7 +93,7 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
                 )
                 .await?
         }
-        PrefabAction::Create { id, path } => {
+        PrefabAction::Create { id, path, .. } => {
             client
                 .call(
                     "prefab/create",
@@ -94,7 +108,17 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
         }
     };
 
+    if prefab_should_save(&action) {
+        super::save_active_scene(&mut client, ctx).await?;
+    }
+
     client.close().await;
+
+    let lifecycle =
+        super::await_unity_lifecycle(&project, Some(&lock), prefab_lifecycle_policy(&action), ctx)
+            .await?;
+
+    result = super::attach_lifecycle_log_status(result, &lifecycle);
 
     if ctx.json {
         output::print_json(&output::success_json(result));
@@ -186,4 +210,36 @@ pub async fn run(action: PrefabAction, ctx: &Context) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn prefab_lifecycle_policy(action: &PrefabAction) -> UnityLifecyclePolicy {
+    match action {
+        PrefabAction::Status { .. } | PrefabAction::Overrides { .. } => UnityLifecyclePolicy::None,
+        PrefabAction::Apply { .. }
+        | PrefabAction::Revert { .. }
+        | PrefabAction::Unpack { .. }
+        | PrefabAction::Create { .. } => UnityLifecyclePolicy::editor_settle(
+            "Waiting for Unity to finish applying prefab changes...",
+            "prefab processing",
+        ),
+    }
+}
+
+fn prefab_preflight_policy(action: &PrefabAction) -> super::ActiveSceneGuardPolicy {
+    match action {
+        PrefabAction::Status { .. } | PrefabAction::Overrides { .. } => {
+            super::ActiveSceneGuardPolicy::None
+        }
+        _ => super::ActiveSceneGuardPolicy::None,
+    }
+}
+
+fn prefab_should_save(action: &PrefabAction) -> bool {
+    match action {
+        PrefabAction::Apply { save, .. }
+        | PrefabAction::Revert { save, .. }
+        | PrefabAction::Unpack { save, .. }
+        | PrefabAction::Create { save, .. } => *save,
+        PrefabAction::Status { .. } | PrefabAction::Overrides { .. } => false,
+    }
 }

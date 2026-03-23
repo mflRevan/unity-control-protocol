@@ -1,7 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -106,6 +108,8 @@ namespace UCP.Bridge
             Undo.RecordObject(comp, $"UCP Set {propName}");
             SetPropertyValue(comp, propName, p["value"]);
             EditorUtility.SetDirty(comp);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, comp.GetType().Name);
 
             return new Dictionary<string, object>
             {
@@ -130,6 +134,8 @@ namespace UCP.Bridge
             Undo.RecordObject(go, "UCP Set Active");
             go.SetActive(Convert.ToBoolean(activeObj));
             EditorUtility.SetDirty(go);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "GameObject");
 
             return new Dictionary<string, object>
             {
@@ -153,6 +159,8 @@ namespace UCP.Bridge
             Undo.RecordObject(go, "UCP Rename");
             go.name = nameObj.ToString();
             EditorUtility.SetDirty(go);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            SceneChangeTracker.RecordGameObjectChange(go, "GameObject");
 
             return new Dictionary<string, object>
             {
@@ -321,6 +329,12 @@ namespace UCP.Bridge
 
         private static void SetSerializedPropertyValue(SerializedProperty prop, object value)
         {
+            if (prop.isArray && prop.propertyType == SerializedPropertyType.Generic)
+            {
+                SetSerializedArrayValue(prop, value);
+                return;
+            }
+
             switch (prop.propertyType)
             {
                 case SerializedPropertyType.Integer:
@@ -427,6 +441,19 @@ namespace UCP.Bridge
             }
         }
 
+        private static void SetSerializedArrayValue(SerializedProperty prop, object value)
+        {
+            if (!(value is IList items))
+                throw new ArgumentException($"Property '{prop.displayName}' expects an array value");
+
+            prop.arraySize = items.Count;
+            for (var index = 0; index < items.Count; index++)
+            {
+                var element = prop.GetArrayElementAtIndex(index);
+                SetSerializedPropertyValue(element, items[index]);
+            }
+        }
+
         private static object ConvertToJson(object value)
         {
             if (value == null) return null;
@@ -475,7 +502,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var obj = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var obj = EditorUtility.EntityIdToObject(instanceId) as GameObject;
             if (obj != null) return obj;
 
             // Search in loaded scenes
@@ -531,3 +558,6 @@ namespace UCP.Bridge
         }
     }
 }
+
+
+

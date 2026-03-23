@@ -4,6 +4,17 @@ Inspect and modify material properties, shader keywords, and shaders.
 
 ## Commands
 
+### `ucp material create <path>`
+
+Create a new material asset.
+
+```bash
+ucp material create "Assets/Materials/Agent.mat"
+ucp material create "Assets/Materials/FXGlow.mat" --shader "Universal Render Pipeline/Lit"
+```
+
+If `--shader` is omitted, UCP prefers a common lit shader available in the project and still waits for Unity to finish the resulting asset import before returning.
+
 ### `ucp material get-properties`
 
 List all properties on a material, including their types and current values.
@@ -48,6 +59,8 @@ ucp material set-property --path "Assets/Materials/Agent.mat" --property _BaseCo
 | `--path <assetPath>` | Path to the material asset                   |
 | `--property <name>`  | Property name (e.g. \_BaseColor, \_Metallic) |
 | `--value <json>`     | New value as JSON                            |
+
+Mutating material commands wait for Unity to finish applying the material/shader-side change before returning.
 
 ### `ucp material keywords`
 
