@@ -180,13 +180,14 @@ jobs:
             artifacts/clawhub/unity-control-protocol
             artifacts/unity-control-protocol-clawhub.zip
 
-      - name: Install ClawHub CLI
-        if: ${{ secrets.CLAWHUB_TOKEN != '' }}
-        run: npm install -g clawhub
-
       - name: Publish skill to ClawHub
-        if: ${{ secrets.CLAWHUB_TOKEN != '' }}
-        run: node scripts/clawhub-skill.mjs publish
+        run: |
+          if [ -z "${CLAWHUB_TOKEN}" ]; then
+            echo "CLAWHUB_TOKEN is not configured; skipping ClawHub publish."
+            exit 0
+          fi
+          npm install -g clawhub
+          node scripts/clawhub-skill.mjs publish
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
           CLAWHUB_CONFIG_PATH: ${{ runner.temp }}/clawhub-config.json
