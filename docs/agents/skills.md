@@ -10,11 +10,17 @@ Agent Skills is a standardized format for packaging tool-specific instructions t
 
 Agent Skills are supported by a growing number of AI coding tools:
 
-- **Claude Code** - Place the skill directory in your project and Claude will discover it automatically
+- **Claude Code** - Install the dedicated UCP plugin from the repository marketplace, or test it locally with `claude --plugin-dir`
 - **Cursor / Windsurf / Copilot** - Agents in VS Code-based editors can load skills from the workspace
 - **Custom agent frameworks** - Any agent that follows the Agent Skills specification can consume `SKILL.md` files
 
 ## How to install
+
+There are now three main distribution paths, depending on the tool you are using.
+
+### 1. Manual workspace install
+
+Use this when your agent tooling expects raw `skills/` folders in the workspace.
 
 Copy the `skills/unity-control-protocol/` directory into your Unity project (or any workspace where you want agents to have UCP access):
 
@@ -30,6 +36,39 @@ curl -o skills/unity-control-protocol/SKILL.md \
 The agent will automatically discover and load the skill when it encounters Unity-related tasks.
 
 If you also want a release-validation workflow for the bundled dev project and bridge smoke suite, copy `skills/unity-control-protocol-qa/` as well.
+
+### 2. ClawHub / OpenClaw discovery
+
+The base UCP skill is also published through ClawHub as a marketplace-distributed `SKILL.md`.
+
+- Discover it through ClawHub or OpenClaw skill search
+- Install/update it through the ClawHub/OpenClaw skill workflow instead of manually copying files
+- The ClawHub package is intentionally minimal and ships only the canonical base `SKILL.md`
+
+This is the best fit when your runtime follows the OpenClaw / ClawHub skill model rather than Claude Code plugins.
+
+### 3. Claude Code marketplace install
+
+Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. UCP now ships a dedicated Claude plugin wrapper that exposes only the base Unity automation skill by default.
+
+For local plugin testing:
+
+```bash
+claude --plugin-dir ./claude-plugin/ucp
+```
+
+For marketplace-style install from GitHub:
+
+```text
+/plugin marketplace add mflRevan/unity-control-protocol
+/plugin install ucp@unity-control-protocol
+```
+
+That default Claude install exposes:
+
+- `/ucp:unity-control-protocol`
+
+It does **not** install `unity-control-protocol-qa`; the QA skill is intentionally excluded from the default Claude marketplace package so ordinary installs stay lean.
 
 ## Primary skill preview
 
