@@ -16,7 +16,7 @@ Agent Skills are supported by a growing number of AI coding tools:
 
 ## How to install
 
-There are now three main distribution paths, depending on the tool you are using.
+There are two main distribution paths, depending on the tool you are using.
 
 ### 1. Manual workspace install
 
@@ -35,17 +35,7 @@ curl -o skills/unity-control-protocol/SKILL.md \
 
 The agent will automatically discover and load the skill when it encounters Unity-related tasks.
 
-### 2. ClawHub / OpenClaw discovery
-
-The base UCP skill is also published through ClawHub as a marketplace-distributed `SKILL.md`.
-
-- Discover it through ClawHub or OpenClaw skill search
-- Install/update it through the ClawHub/OpenClaw skill workflow instead of manually copying files
-- The ClawHub package is intentionally minimal and ships only the canonical base `SKILL.md`
-
-This is the best fit when your runtime follows the OpenClaw / ClawHub skill model rather than Claude Code plugins.
-
-### 3. Claude Code marketplace install
+### 2. Claude Code marketplace install
 
 Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. UCP now ships the base Unity automation skill through the repository's canonical root plugin.
 

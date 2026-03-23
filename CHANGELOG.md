@@ -13,6 +13,7 @@
 - Added `ucp scene save`, `--save` support on scene-editing object/prefab/lighting commands, and first-class `ucp material create`.
 - Added `ucp logs status` for a curated buffered-log overview with per-level counts, collapsed categories, and recent play-session timing/log summaries.
 - Simplified the skill/plugin layout by restoring the canonical root `.claude-plugin` setup and removing the unused QA skill package.
+- Removed the external skill publishing pipeline and related release/docs references so skill distribution now follows the repo and Claude Code marketplace surfaces only.
 
 ### Fixed
 
@@ -28,12 +29,11 @@
 
 ### Added
 
-- Added automated ClawHub skill publishing support to the release flow, including a dedicated `publish-clawhub` GitHub Actions job and token-based `clawhub publish` support through `scripts/clawhub-skill.mjs`.
+- Added release-metadata wiring for the repository skill and Claude Code marketplace surfaces so distribution metadata stayed aligned with the main release flow.
 
 ### Changed
 
-- The canonical ClawHub release bundle now stages only `skills/unity-control-protocol/SKILL.md` so marketplace publishing stays aligned with the actual skill source of truth.
-- Release documentation now includes the ClawHub validation, staging, and publishing workflow alongside the existing GitHub release and npm publish steps.
+- Updated skill distribution documentation and release metadata handling alongside the repository's marketplace-facing surfaces.
 
 ## [0.4.2] - 2026-03-21
 

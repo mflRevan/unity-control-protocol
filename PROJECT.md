@@ -63,7 +63,7 @@ The current repository has a clear top-level split:
 - `cli/` contains the Rust command-line product.
 - `unity-package/com.ucp.bridge/` contains the Unity bridge package.
 - `npm/` packages the released CLI and bridge payload for JavaScript users.
-- `docs/`, `website/`, and `skills/` describe and expose the system externally, including the publishable ClawHub skill bundle.
+- `docs/`, `website/`, and `skills/` describe and expose the system externally.
 - `scripts/` and `version.json` support release and metadata consistency.
 
 This separation is useful and should be preserved. Code should generally evolve deeper within the right layer rather than by adding new cross-cutting entrypoints or parallel structures.
@@ -74,7 +74,7 @@ Some parts of the repository are foundational and should stay aligned:
 
 - `version.json` is the source of truth for release and protocol metadata.
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
-- `skills/unity-control-protocol/` is the canonical ClawHub-ready skill bundle and should stay publishable from repo state.
+- `skills/unity-control-protocol/` is the canonical agent skill source used by docs and the Claude Code plugin wrapper.
 - `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
 - repo-level docs should reflect the implemented system, not an aspirational redesign.
@@ -201,9 +201,7 @@ The bridge should stay pragmatic and reliable. It should not become harder to ev
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.
 
-Skill marketplace metadata should follow the same rule: the canonical `skills/unity-control-protocol/` bundle should be generated and published from repository truth, not hand-edited or repackaged outside the release flow.
-
-Claude Code plugin metadata should also stay version-aligned with the same source of truth so marketplace installs track the same release identity as the CLI, bridge, npm package, docs, and ClawHub skill.
+Claude Code plugin metadata should also stay version-aligned with the same source of truth so marketplace installs track the same release identity as the CLI, bridge, npm package, docs, and agent skill.
 
 This matters because UCP ships through multiple channels and the cost of drift is high.
 

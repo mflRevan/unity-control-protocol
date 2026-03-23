@@ -12,8 +12,6 @@ compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and th
 metadata:
   author: mflRevan
   version: '0.4.4'
-  clawdbot:
-    emoji: '🎮'
 ---
 
 # Unity Control Protocol (UCP)

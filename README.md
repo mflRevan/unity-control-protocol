@@ -341,26 +341,13 @@ Or use the helper scripts:
 
 - `version.json` is the metadata source of truth
 - `scripts/sync-version.mjs --check <version>` validates synced version-bearing files
-- `node scripts/clawhub-skill.mjs validate` validates the canonical ClawHub skill bundle in `skills/unity-control-protocol/`
-- `node scripts/clawhub-skill.mjs stage` stages a clean ClawHub publish directory containing only `SKILL.md`
 - `claude plugin validate .` validates the Claude Code plugin and marketplace metadata under `.claude-plugin/`
 - pushing a tag matching `v*` runs `.github/workflows/release.yml`
 - the workflow builds Linux, macOS, and Windows binaries
 - the same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
-- the release workflow also uploads a staged ClawHub `SKILL.md` artifact and publishes the canonical skill to ClawHub when the `CLAWHUB_TOKEN` repository secret is configured
 - the repo root also acts as a Claude Code plugin source through `.claude-plugin/plugin.json`, with `.claude-plugin/marketplace.json` available for marketplace-style installs from GitHub
 - released npm packages bundle the bridge payload
 - GitHub release archives include the CLI binary plus `bridge/com.ucp.bridge`
-
-Local ClawHub publish workflow:
-
-```bash
-node scripts/sync-version.mjs --check
-node scripts/clawhub-skill.mjs validate
-claude plugin validate .
-node scripts/clawhub-skill.mjs stage
-CLAWHUB_TOKEN=... node scripts/clawhub-skill.mjs publish
-```
 
 ## Repository map
 
