@@ -15,6 +15,8 @@
   |
   <a href="https://github.com/mflRevan/unity-control-protocol/releases">Releases</a>
   |
+  <a href="https://unityctl.dev/docs">Docs</a>
+  |
   <a href="https://www.npmjs.com/package/@mflrevan/ucp">npm</a>
 </p>
 
