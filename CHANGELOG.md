@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.5] - 2026-03-25
+
+### Added
+
+- Added lightweight CLI release-awareness so interactive non-JSON commands can surface a cached notice when a newer UCP release is available.
+
+### Changed
+
+- `ucp doctor` now checks the latest GitHub release tag, reports whether the installed CLI is behind, and includes update guidance for the local CLI install plus the usual Unity bridge follow-up (`ucp doctor` / `ucp bridge update`).
+- Release checks now use a local TTL-backed cache so normal CLI usage is not blocked by repeated network requests and transient upstream failures degrade gracefully.
+- The npm package now publishes the bundled Unity bridge payload explicitly and its postinstall step always refreshes the matching platform binary instead of trusting any stale workspace-local `native/` artifact.
+
+### Fixed
+
+- Fixed npm release packaging so local workspace binaries can no longer leak into `npm pack` / publish output and override the expected release-download install path.
+
 ## [0.4.4] - 2026-03-23
 
 ### Changed

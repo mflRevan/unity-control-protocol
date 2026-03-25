@@ -8,6 +8,7 @@ mod editor_runtime;
 mod error;
 mod output;
 mod protocol;
+mod release_check;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -116,6 +117,10 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or_default(),
         dialog_policy: cli.dialog_policy.unwrap_or_default(),
     };
+
+    if !ctx.json && !matches!(cli.command, commands::Command::Doctor) {
+        release_check::maybe_print_update_notice().await;
+    }
 
     let json_output = ctx.json;
     if let Err(e) = commands::run(cli.command, ctx).await {

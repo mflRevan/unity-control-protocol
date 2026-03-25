@@ -30,12 +30,6 @@ fs.mkdirSync(nativeDir, { recursive: true });
 const ext = process.platform === 'win32' ? '.exe' : '';
 const dest = path.join(nativeDir, `ucp${ext}`);
 
-// Skip download if binary already exists (local dev / rebuild)
-if (fs.existsSync(dest)) {
-  console.log('ucp binary already present, skipping download.');
-  process.exit(0);
-}
-
 // Allow local binary override via env var (for local testing)
 if (process.env.UCP_LOCAL_BINARY) {
   const src = path.resolve(process.env.UCP_LOCAL_BINARY);
@@ -52,6 +46,10 @@ if (process.env.UCP_LOCAL_BINARY) {
 const url = `https://github.com/mflRevan/unity-control-protocol/releases/download/v${version}/${artifact}`;
 console.log(`Downloading ucp v${version} for ${key}...`);
 console.log(`  ${url}`);
+
+if (fs.existsSync(dest)) {
+  fs.rmSync(dest, { force: true });
+}
 
 download(url, dest, (err) => {
   if (err) {

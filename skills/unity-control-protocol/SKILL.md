@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.4.4'
+  version: '0.4.5'
 ---
 
 # Unity Control Protocol (UCP)

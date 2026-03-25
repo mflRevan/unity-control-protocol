@@ -4,12 +4,14 @@ use crate::config;
 use crate::discovery;
 use crate::editor_runtime;
 use crate::output;
+use crate::release_check;
 use console::style;
 
 use super::Context;
 
 pub async fn run(ctx: &Context) -> anyhow::Result<()> {
     let mut issues: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     let mut checks: Vec<(&str, bool, String)> = Vec::new();
 
     // 1. CLI version
@@ -18,6 +20,33 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         true,
         format!("v{}", env!("CARGO_PKG_VERSION")),
     ));
+
+    match release_check::check_for_update().await {
+        Ok(Some(status)) if status.update_available => {
+            checks.push((
+                "CLI release",
+                true,
+                format!(
+                    "Update available: v{} (installed v{})",
+                    status.latest_version, status.current_version
+                ),
+            ));
+            warnings.extend(status.warning_lines());
+        }
+        Ok(Some(status)) => {
+            checks.push((
+                "CLI release",
+                true,
+                format!("Up to date with v{}", status.latest_version),
+            ));
+        }
+        Ok(None) => {
+            checks.push(("CLI release", true, "No release metadata available".into()));
+        }
+        Err(error) => {
+            checks.push(("CLI release", true, format!("Not checked ({error})")));
+        }
+    }
 
     // 2. Project detection
     let project = match discovery::resolve_project(ctx.project.as_deref()) {
@@ -166,6 +195,7 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
             "checks": checks.iter().map(|(name, ok, detail)| {
                 serde_json::json!({"name": name, "pass": ok, "detail": detail})
             }).collect::<Vec<_>>(),
+            "warnings": warnings,
             "healthy": issues.is_empty(),
         });
         output::print_json(&output::success_json(data));
@@ -202,6 +232,13 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
                     "->"
                 };
                 eprintln!("    {arrow} {issue}");
+            }
+        }
+
+        if !warnings.is_empty() {
+            eprintln!();
+            for warning in &warnings {
+                output::print_warn(warning);
             }
         }
         eprintln!();
