@@ -1,7 +1,9 @@
 {
   "name": "UCP.Bridge.Editor",
   "rootNamespace": "UCP.Bridge",
-  "references": [],
+  "references": [
+    "UnityEditor.TestRunner"
+  ],
   "includePlatforms": [
     "Editor"
   ],

@@ -23,5 +23,7 @@
   "type": "tool",
   "documentationUrl": "https://github.com/mflRevan/unity-control-protocol/blob/main/README.md",
   "changelogUrl": "https://github.com/mflRevan/unity-control-protocol/blob/main/unity-package/com.ucp.bridge/CHANGELOG.md",
-  "dependencies": {}
+  "dependencies": {
+    "com.unity.test-framework": "1.1.31"
+  }
 }
