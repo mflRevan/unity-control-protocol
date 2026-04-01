@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.6] - 2026-04-01
 
 ### Added
 
@@ -18,13 +18,14 @@
 - QA harness (`scripts/qa-playground.ps1`) hardened with `Test-UcpSuccess` helper, durable per-step JSON progress tracking, scene loading, editor force-close, and `-SkipInstall` support for matrix runs.
 - CLI `run-tests` command now enforces a 10-minute timeout on bridge test-result notifications to prevent infinite hangs.
 - Bridge lifecycle now provides editor-log feedback when bridge startup times out.
-- Updated release/testing documentation to describe the Unity matrix strategy, sequential single-project execution, and the shared validation flow.
+- Updated `PROJECT.md` with comprehensive pipeline documentation: validation commands, matrix runner usage, QA harness details, dialog handling reference, release flow steps, and cross-version compatibility notes.
 
 ### Fixed
 
 - Fixed `PropertyController.SetPropertyValue` crash on Unity 6000.4 caused by missing `SerializedObject.Update()` call.
 - Fixed manifest sanitization removing `com.unity.modules.adaptiveperformance` and `com.unity.modules.vectorgraphics` for Unity versions below 6000.3 where those modules don't exist.
 - Fixed `ControllerSmokeTests` using internal `UnityObjectCompat` across assembly boundaries; tests now use `EditorUtility.InstanceIDToObject()` directly.
+- Fixed release and validate workflows trying to run the Unity compatibility matrix on CI runners that lack Unity installs; the matrix is now local-only.
 
 ## [0.4.5] - 2026-03-25
 

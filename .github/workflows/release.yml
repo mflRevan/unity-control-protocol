@@ -24,13 +24,11 @@ jobs:
 
       - name: Release preflight validation
         shell: pwsh
-        run: >
-          .\scripts\validate-release.ps1
-          -Version "${env:GITHUB_REF_NAME}".TrimStart('v')
-          -Project "unity-project-dev\ucp-dev"
-          -UnitySlots 6000.0,6000.1,6000.2,6000.3,6000.4
-          -TimeoutSeconds 180
-          -SkipWebsite
+        run: |
+          .\scripts\validate-release.ps1 `
+            -Version "${env:GITHUB_REF_NAME}".TrimStart('v') `
+            -SkipWebsite `
+            -SkipUnityMatrix
 
   build:
     needs: validate

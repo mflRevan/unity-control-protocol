@@ -203,15 +203,131 @@ The bridge should stay pragmatic and reliable. It should not become harder to ev
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.
 
-Release hardening now also depends on a shared validation path:
-
-- pull requests and `main` pushes run `.github/workflows/validate.yml`
-- tag releases run the same preflight before binary packaging and npm publish
-- Unity compatibility testing should prefer one canonical dev project source plus disposable per-run copies, rather than maintaining long-lived per-version project clones
-
 Claude Code plugin metadata should also stay version-aligned with the same source of truth so marketplace installs track the same release identity as the CLI, bridge, npm package, docs, and agent skill.
 
 This matters because UCP ships through multiple channels and the cost of drift is high.
+
+### Validation And Release Pipeline
+
+#### Local Validation Commands
+
+```powershell
+# CLI compile check and unit tests (43 tests)
+cargo test --manifest-path cli\Cargo.toml
+
+# Version metadata sync check
+node scripts/sync-version.mjs --check <version>
+
+# Website build validation
+Push-Location website; npm run sync-content && npm run build; Pop-Location
+
+# Single-version QA against the dev project (runs all 52 bridge exercise steps)
+.\scripts\qa-playground.ps1 -Project unity-project-dev\ucp-dev -TimeoutSeconds 180
+
+# Full Unity compatibility matrix (6000.0 through 6000.4)
+.\scripts\unity-version-matrix.ps1 -Project 'unity-project-dev\ucp-dev' `
+    -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4') `
+    -TimeoutSeconds 180 -Run
+
+# Shared preflight entrypoint (runs cargo test + version check + website build)
+.\scripts\validate-release.ps1 -Version <version>
+```
+
+#### Unity Compatibility Matrix (`scripts/unity-version-matrix.ps1`)
+
+The matrix runner resolves each requested slot (e.g. `6000.2`) against locally installed Unity editors, preferring the exact minor version, then falling back to the nearest installed same-major editor.
+
+Execution is sequential against a **single canonical dev project** (`unity-project-dev/ucp-dev`):
+
+1. Close any running editor for the project.
+2. Backup `Packages/manifest.json`.
+3. Sanitize the manifest for the target version (removes modules unavailable in older editors).
+4. Delete `Library/` for a clean reimport.
+5. Run `scripts/qa-playground.ps1` with `-ForceUnityVersion` and `-SkipInstall`.
+6. Restore the original manifest.
+7. Close the editor and repeat for the next slot.
+
+Per-slot JSON results are written to `.matrix-results/<slot>.json`. A markdown summary is written to `.matrix-results/summary.md`.
+
+If a requested slot has no compatible installed editor, it is skipped with a warning rather than failing the entire run.
+
+#### QA Harness (`scripts/qa-playground.ps1`)
+
+The QA harness exercises all major bridge command families in sequence:
+
+- **Lifecycle**: open, connect, scene load
+- **Object operations**: create, add-component, set/get-property, remove-component, destroy
+- **Prefabs**: create, instantiate, unpack, apply overrides, revert, delete
+- **Assets**: search, info, reimport, delete
+- **Materials**: list, info
+- **Files**: read, write, search
+- **Settings**: get, set
+- **Build**: status, set-scenes
+- **Logs**: status, recent
+- **Screenshot**: capture
+- **Play mode**: play, pause, stop (with domain-reload resilience)
+- **Test runner**: run-tests in edit mode
+- **VCS**: status
+
+Each step is tracked in a durable JSON summary file. If the harness crashes mid-run, the partial results survive for investigation.
+
+Key parameters:
+- `-Project <path>`: target Unity project
+- `-ForceUnityVersion <id>`: override which editor version to use
+- `-TimeoutSeconds <n>`: per-command timeout
+- `-SkipInstall`: skip bridge installation (bridge already embedded)
+- `-SummaryPath <path>`: where to write the JSON summary
+
+#### CLI Dialog Handling
+
+The CLI automatically detects and dismisses Unity startup dialogs during editor launch and bridge wait cycles. Dialog handling is controlled by `--dialog-policy`:
+
+- `ignore` (recommended for automation): dismisses all recognized dialogs with the safest non-destructive button
+- `auto`: dismisses dialogs with a balanced preference order
+- `recover`: prefers recovery/restore buttons
+- `safe-mode`: enters safe mode when offered
+- `cancel`: cancels/quits when offered
+- `manual`: never auto-dismisses; waits for human interaction
+
+Recognized dialog titles:
+- "Opening Project in Non-Matching Editor Installation" → Continue
+- "Enter Safe Mode?" → Ignore (policy: ignore) / Enter Safe Mode (policy: safe-mode)
+- "Project Upgrade Required" → Confirm
+- "Auto Graphics API Notice" → OK
+
+Unrecognized dialogs fall through to a generic button preference list that includes: ignore, continue, confirm, skip, ok, yes.
+
+#### Release Flow
+
+1. **Run local Unity matrix** (pre-release, local only — requires Unity installs):
+   ```powershell
+   .\scripts\unity-version-matrix.ps1 -Project 'unity-project-dev\ucp-dev' `
+       -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4') `
+       -TimeoutSeconds 180 -Run
+   ```
+2. **Bump version**: edit `version.json`, then run `node scripts/sync-version.mjs <new-version>` to propagate to Cargo.toml, npm/package.json, Unity package.json, docs, and skill metadata.
+3. **Verify sync**: `node scripts/sync-version.mjs --check <new-version>` must report all files in sync.
+4. **Update CHANGELOG.md**: move `[Unreleased]` entries under a dated version heading.
+5. **Commit**: `git commit -am "chore(release): prepare <version>"`
+6. **Tag**: `git tag v<version>`
+7. **Push**: `git push origin main --tags`
+8. **GitHub Actions** (`.github/workflows/release.yml`):
+   - Runs CI preflight (cargo test, version sync check) — **no Unity matrix on CI**.
+   - Builds platform binaries (Linux, macOS, Windows).
+   - Creates a GitHub Release with the binaries attached.
+   - Publishes the npm package (`@mflrevan/ucp`) to npmjs.
+9. **Website** (`.github/workflows/pages.yml`): deploys automatically from `main` on push.
+
+> **Note**: The Unity compatibility matrix is a local-only validation step. It requires physical Unity editor installs and cannot run on GitHub Actions runners. Always run it locally before tagging a release.
+
+#### Cross-Version Compatibility Notes
+
+The bridge package must compile and function correctly across Unity 6.0 through 6.4. Key compatibility considerations:
+
+- `EditorUtility.EntityIdToObject` does not exist in any Unity 6 version; use `EditorUtility.InstanceIDToObject()` via the `UnityObjectCompat` shim.
+- `SerializedObject` must always call `.Update()` before reading/writing properties and use `try/finally` for `.Dispose()`. Omitting `.Update()` crashes Unity 6000.4.
+- `com.unity.modules.adaptiveperformance` and `com.unity.modules.vectorgraphics` do not exist before Unity 6000.3; the matrix sanitizes these from the manifest for older editors.
+- Tests in the test assembly cannot reference `internal` types from the bridge assembly; use `EditorUtility` directly instead of `UnityObjectCompat`.
 
 ## What To Preserve As The Codebase Grows
 

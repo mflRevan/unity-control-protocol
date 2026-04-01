@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Claude Code marketplace catalog for Unity Control Protocol.",
-    "version": "0.4.5"
+    "version": "0.4.6"
   },
   "plugins": [
     {
       "name": "ucp",
       "source": "./",
       "description": "Unity Editor automation via the Unity Control Protocol base skill.",
-      "version": "0.4.5",
+      "version": "0.4.6",
       "author": {
         "name": "mflRevan"
       },

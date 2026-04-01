@@ -50,21 +50,3 @@ jobs:
       - name: Validate current version metadata sync
         run: node scripts/sync-version.mjs --check (Get-Content version.json -Raw | ConvertFrom-Json).version
         shell: pwsh
-
-  unity-matrix:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Validate release/test matrix
-        shell: pwsh
-        run: >
-          .\scripts\validate-release.ps1
-          -Version ((Get-Content version.json -Raw | ConvertFrom-Json).version)
-          -Project "unity-project-dev\ucp-dev"
-          -UnitySlots 6000.0,6000.1,6000.2,6000.3,6000.4
-          -TimeoutSeconds 180
-          -SkipWebsite
