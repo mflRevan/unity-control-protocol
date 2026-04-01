@@ -74,6 +74,8 @@ Some parts of the repository are foundational and should stay aligned:
 
 - `version.json` is the source of truth for release and protocol metadata.
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
+- `scripts/validate-release.ps1` is the shared validation entrypoint for local release preflight and GitHub Actions gating.
+- `scripts/unity-version-matrix.ps1` is the canonical Unity compatibility harness for Unity 6 slot coverage (`6000.0` through `6000.4`) with explicit fallback and skip reporting.
 - `skills/unity-control-protocol/` is the canonical agent skill source used by docs and the Claude Code plugin wrapper.
 - `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
@@ -200,6 +202,12 @@ The bridge should stay pragmatic and reliable. It should not become harder to ev
 ### Packaging And Metadata
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.
+
+Release hardening now also depends on a shared validation path:
+
+- pull requests and `main` pushes run `.github/workflows/validate.yml`
+- tag releases run the same preflight before binary packaging and npm publish
+- Unity compatibility testing should prefer one canonical dev project source plus disposable per-run copies, rather than maintaining long-lived per-version project clones
 
 Claude Code plugin metadata should also stay version-aligned with the same source of truth so marketplace installs track the same release identity as the CLI, bridge, npm package, docs, and agent skill.
 

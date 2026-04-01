@@ -6,7 +6,34 @@ on:
       - 'v*'
 
 jobs:
+  validate:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Release preflight validation
+        shell: pwsh
+        run: >
+          .\scripts\validate-release.ps1
+          -Version "${env:GITHUB_REF_NAME}".TrimStart('v')
+          -Project "unity-project-dev\ucp-dev"
+          -UnitySlots 6000.0,6000.1,6000.2,6000.3,6000.4
+          -TimeoutSeconds 180
+          -SkipWebsite
+
   build:
+    needs: validate
     permissions:
       contents: read
     strategy:

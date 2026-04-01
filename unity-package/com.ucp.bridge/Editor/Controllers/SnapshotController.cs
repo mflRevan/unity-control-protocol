@@ -202,7 +202,7 @@ namespace UCP.Bridge
 
         private static GameObject FindByInstanceId(int id)
         {
-            var obj = UnityEditor.EditorUtility.EntityIdToObject(id);
+            var obj = UnityObjectCompat.ResolveByInstanceId(id);
             return obj as GameObject;
         }
 

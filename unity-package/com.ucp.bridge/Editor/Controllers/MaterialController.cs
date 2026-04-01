@@ -228,7 +228,7 @@ namespace UCP.Bridge
             if (p.TryGetValue("instanceId", out var idObj))
             {
                 int instanceId = Convert.ToInt32(idObj);
-                var obj = EditorUtility.EntityIdToObject(instanceId);
+                var obj = UnityObjectCompat.ResolveByInstanceId(instanceId);
 
                 if (obj is Material directMat)
                     return directMat;
@@ -330,7 +330,7 @@ namespace UCP.Bridge
                         }
                         else if (texDict.TryGetValue("instanceId", out var tid))
                         {
-                            var tex = EditorUtility.EntityIdToObject(Convert.ToInt32(tid)) as Texture;
+                            var tex = UnityObjectCompat.ResolveByInstanceId<Texture>(Convert.ToInt32(tid));
                             mat.SetTexture(propName, tex);
                         }
                     }

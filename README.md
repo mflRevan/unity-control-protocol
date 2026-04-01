@@ -339,12 +339,38 @@ Or use the helper scripts:
 ./scripts/qa-playground.ps1 -Project unity-project-dev/ucp-dev -TimeoutSeconds 45
 ```
 
+Run the Unity 6 compatibility matrix against the dedicated dev project with explicit slot resolution:
+
+```powershell
+./scripts/unity-version-matrix.ps1 -Project unity-project-dev/ucp-dev -Run
+```
+
+Matrix behavior:
+
+- requested slots default to `6000.0`, `6000.1`, `6000.2`, `6000.3`, and `6000.4`
+- exact installed slot matches are preferred
+- if an exact slot is missing, the matrix uses the next higher installed slot in the same Unity major first
+- if no higher slot exists, it falls back to the nearest lower installed slot in the same major
+- if nothing can cover a slot, that slot is skipped and reported explicitly as untested
+- when the matrix runs, each Unity version uses a disposable copy of the dedicated dev project so older/newer editors do not permanently churn the canonical workspace
+
+As currently installed on this workstation, the exact Unity editor IDs are:
+
+- `6000.0.66f2`
+- `6000.1.17f1`
+- `6000.2.7f2`
+- `6000.3.1f1`
+- `6000.4.0f1`
+
 ## Release flow
 
 - `version.json` is the metadata source of truth
 - `scripts/sync-version.mjs --check <version>` validates synced version-bearing files
+- `.github/workflows/validate.yml` runs PR and `main` validation for Rust, website, metadata sync, and the Unity 6 compatibility matrix
+- `scripts/validate-release.ps1` is the shared local/release preflight entrypoint
 - `claude plugin validate .` validates the Claude Code plugin and marketplace metadata under `.claude-plugin/`
 - pushing a tag matching `v*` runs `.github/workflows/release.yml`
+- the release workflow now gates binary packaging on the same validation preflight, including the Unity 6 matrix
 - the workflow builds Linux, macOS, and Windows binaries
 - the same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
 - the repo root also acts as a Claude Code plugin source through `.claude-plugin/plugin.json`, with `.claude-plugin/marketplace.json` available for marketplace-style installs from GitHub

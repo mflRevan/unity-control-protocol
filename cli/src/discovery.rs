@@ -154,18 +154,85 @@ pub fn terminate_process(pid: u32) -> Result<bool, UcpError> {
 }
 
 fn preferred_dialog_button_label(
+    title: &str,
     labels: &[String],
     policy: config::StartupDialogPolicy,
 ) -> Option<String> {
+    let normalized_title = normalize_dialog_label(title);
+    let title_preferences: Option<&[&str]> = if normalized_title.contains("openingprojectinnonmatchingeditorinstallation")
+    {
+        match policy {
+            config::StartupDialogPolicy::Auto
+            | config::StartupDialogPolicy::Ignore
+            | config::StartupDialogPolicy::Recover => {
+                Some(&["continue", "openproject", "openanyway", "ok"])
+            }
+            config::StartupDialogPolicy::SafeMode => Some(&["quit", "cancel"]),
+            config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
+            config::StartupDialogPolicy::Manual => None,
+        }
+    } else if normalized_title.contains("entersafemode") {
+        match policy {
+            config::StartupDialogPolicy::Auto | config::StartupDialogPolicy::Ignore => {
+                Some(&["ignore", "continue", "ok"])
+            }
+            config::StartupDialogPolicy::Recover | config::StartupDialogPolicy::SafeMode => {
+                Some(&["entersafemode", "safemode"])
+            }
+            config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
+            config::StartupDialogPolicy::Manual => None,
+        }
+    } else if normalized_title.contains("projectupgraderequired") {
+        match policy {
+            config::StartupDialogPolicy::Auto
+            | config::StartupDialogPolicy::Ignore
+            | config::StartupDialogPolicy::Recover => {
+                Some(&["confirm", "continue", "openproject", "openanyway", "ok", "yes"])
+            }
+            config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
+            config::StartupDialogPolicy::SafeMode | config::StartupDialogPolicy::Manual => None,
+        }
+    } else if normalized_title.contains("autographicsapi") {
+        match policy {
+            config::StartupDialogPolicy::Auto
+            | config::StartupDialogPolicy::Ignore
+            | config::StartupDialogPolicy::Recover => {
+                Some(&["ok", "continue", "confirm", "yes"])
+            }
+            config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
+            config::StartupDialogPolicy::SafeMode | config::StartupDialogPolicy::Manual => None,
+        }
+    } else {
+        None
+    };
+
+    let normalized: Vec<(String, &String)> = labels
+        .iter()
+        .map(|label| (normalize_dialog_label(label), label))
+        .collect();
+
+    if let Some(preferences) = title_preferences {
+        for preferred in preferences {
+            if let Some((_, label)) = normalized
+                .iter()
+                .find(|(candidate, _)| candidate.contains(preferred))
+            {
+                return Some((*label).clone());
+            }
+        }
+    }
+
     let preferences: &[&str] = match policy {
         config::StartupDialogPolicy::Auto => &[
             "ignore",
             "continue",
+            "confirm",
             "skiprecovery",
             "skip",
             "openproject",
             "openanyway",
             "ok",
+            "yes",
             "loadrecovery",
             "recover",
             "restore",
@@ -175,24 +242,29 @@ fn preferred_dialog_button_label(
         config::StartupDialogPolicy::Ignore => &[
             "ignore",
             "continue",
+            "confirm",
             "skiprecovery",
             "skip",
             "openproject",
             "openanyway",
             "ok",
+            "yes",
         ],
-        config::StartupDialogPolicy::Recover => {
-            &["loadrecovery", "recover", "restore", "openproject"]
-        }
+        config::StartupDialogPolicy::Recover => &[
+            "continue",
+            "confirm",
+            "openproject",
+            "openanyway",
+            "loadrecovery",
+            "recover",
+            "restore",
+            "ok",
+            "yes",
+        ],
         config::StartupDialogPolicy::SafeMode => &["entersafemode", "safemode"],
         config::StartupDialogPolicy::Cancel => &["cancel", "quit", "close", "no"],
         config::StartupDialogPolicy::Manual => &[],
     };
-
-    let normalized: Vec<(String, &String)> = labels
-        .iter()
-        .map(|label| (normalize_dialog_label(label), label))
-        .collect();
 
     for preferred in preferences {
         if let Some((_, label)) = normalized
@@ -407,12 +479,17 @@ fn handle_process_startup_dialogs(
         let owner = unsafe { GetWindow(hwnd, GW_OWNER) };
         if process_id != 0
             && process_id == state.target_pid
-            && !owner.is_null()
             && unsafe { IsWindowVisible(hwnd) } != 0
         {
+            let title = read_window_text(hwnd);
+            let is_top_level_dialog = owner.is_null() && !title.trim().is_empty();
+            let is_owned_popup = !owner.is_null();
+            if !is_top_level_dialog && !is_owned_popup {
+                return 1;
+            }
             state.windows.push(WindowInfo {
                 hwnd,
-                title: read_window_text(hwnd),
+                title,
             });
         }
 
@@ -481,7 +558,7 @@ fn handle_process_startup_dialogs(
             .iter()
             .map(|button| button.label.clone())
             .collect::<Vec<_>>();
-        let Some(selected_label) = preferred_dialog_button_label(&labels, policy) else {
+        let Some(selected_label) = preferred_dialog_button_label(&window.title, &labels, policy) else {
             continue;
         };
 
@@ -632,7 +709,7 @@ mod tests {
         ];
 
         assert_eq!(
-            preferred_dialog_button_label(&labels, StartupDialogPolicy::Ignore),
+            preferred_dialog_button_label("", &labels, StartupDialogPolicy::Ignore),
             Some("Ignore".to_string())
         );
     }
@@ -642,8 +719,89 @@ mod tests {
         let labels = vec!["Skip Recovery".to_string(), "Load Recovery".to_string()];
 
         assert_eq!(
-            preferred_dialog_button_label(&labels, StartupDialogPolicy::Recover),
+            preferred_dialog_button_label("", &labels, StartupDialogPolicy::Recover),
             Some("Load Recovery".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_continue_for_recovery_policy() {
+        let labels = vec!["Quit".to_string(), "Continue".to_string()];
+
+        assert_eq!(
+            preferred_dialog_button_label("", &labels, StartupDialogPolicy::Recover),
+            Some("Continue".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_continue_for_non_matching_editor_dialog() {
+        let labels = vec!["Continue".to_string(), "Quit".to_string()];
+
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Opening Project in Non-Matching Editor Installation",
+                &labels,
+                StartupDialogPolicy::Ignore,
+            ),
+            Some("Continue".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_ignore_for_safe_mode_dialog_when_ignoring() {
+        let labels = vec![
+            "Enter Safe Mode".to_string(),
+            "Ignore".to_string(),
+            "Quit".to_string(),
+        ];
+
+        assert_eq!(
+            preferred_dialog_button_label("Enter Safe Mode?", &labels, StartupDialogPolicy::Ignore),
+            Some("Ignore".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_confirm_for_project_upgrade_required() {
+        let labels = vec!["Quit".to_string(), "Confirm".to_string()];
+
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Project Upgrade Required",
+                &labels,
+                StartupDialogPolicy::Ignore,
+            ),
+            Some("Confirm".to_string())
+        );
+    }
+
+    #[test]
+    fn chooses_ok_for_auto_graphics_api_notice() {
+        let labels = vec!["OK".to_string()];
+
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Auto Graphics API Notice",
+                &labels,
+                StartupDialogPolicy::Ignore,
+            ),
+            Some("OK".to_string())
+        );
+    }
+
+    #[test]
+    fn generic_fallback_matches_confirm_and_yes() {
+        let labels = vec!["Cancel".to_string(), "Confirm".to_string()];
+        assert_eq!(
+            preferred_dialog_button_label("Some Unknown Dialog", &labels, StartupDialogPolicy::Ignore),
+            Some("Confirm".to_string())
+        );
+
+        let labels2 = vec!["No".to_string(), "Yes".to_string()];
+        assert_eq!(
+            preferred_dialog_button_label("Another Unknown Dialog", &labels2, StartupDialogPolicy::Auto),
+            Some("Yes".to_string())
         );
     }
 

@@ -26,7 +26,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -63,7 +63,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -88,7 +88,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -116,7 +116,7 @@ namespace UCP.Bridge
             if (p.TryGetValue("completely", out var compObj))
                 completely = Convert.ToBoolean(compObj);
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -147,7 +147,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("path", out var pathObj))
                 throw new ArgumentException("Missing 'path' parameter");
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 
@@ -191,7 +191,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            var go = EditorUtility.EntityIdToObject(Convert.ToInt32(idObj)) as GameObject;
+            var go = UnityObjectCompat.ResolveByInstanceId<GameObject>(Convert.ToInt32(idObj));
             if (go == null)
                 throw new ArgumentException($"GameObject not found: {idObj}");
 

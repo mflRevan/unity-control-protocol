@@ -295,7 +295,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var obj = EditorUtility.EntityIdToObject(instanceId) as GameObject;
+            var obj = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (obj != null) return obj;
 
             for (int i = 0; i < SceneManager.sceneCount; i++)

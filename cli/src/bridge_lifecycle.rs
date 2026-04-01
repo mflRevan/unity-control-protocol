@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -5,6 +6,7 @@ use crate::client::BridgeClient;
 use crate::config::LockFile;
 use crate::config::StartupDialogPolicy;
 use crate::discovery;
+use crate::output;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +76,7 @@ pub async fn wait_for_bridge(
 
     loop {
         if start.elapsed().as_secs() > max_wait {
+            maybe_report_editor_log_failure(project);
             let expectation = match mode {
                 WaitMode::FirstAvailable => "Bridge did not become available",
                 WaitMode::RestartOptional => "Bridge did not stabilize",
@@ -140,6 +143,37 @@ pub async fn wait_for_bridge(
 
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
+}
+
+fn maybe_report_editor_log_failure(project: &Path) {
+    let log_path = crate::config::editor_log_path(project);
+    let Ok(content) = fs::read_to_string(&log_path) else {
+        return;
+    };
+
+    let last_lines = content
+        .lines()
+        .rev()
+        .take(200)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>();
+
+    let has_blocker = last_lines.iter().any(|line| {
+        let lower = line.to_ascii_lowercase();
+        (lower.contains("project has invalid dependencies")
+            || lower.contains("an error occurred while resolving packages")
+            || lower.contains("error cs"))
+            && !lower.contains("[ucp] error handling")
+    });
+
+    if !has_blocker {
+        return;
+    }
+
+    output::print_warn("Unity editor log shows startup-blocking errors:");
+    eprintln!("{}", last_lines.join("\n"));
 }
 
 /// Wait until Unity stops reporting editor-side background work such as

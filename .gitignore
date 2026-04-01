@@ -31,3 +31,5 @@ test_*.py
 .vercel
 .env*.local
 .venv
+# Unity version matrix results
+.matrix-results/

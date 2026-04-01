@@ -1,4 +1,5 @@
 use crate::output;
+use tokio::time::{Duration, timeout};
 
 use super::Context;
 
@@ -29,21 +30,21 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
         }
     }
 
+    let wait_timeout = Duration::from_secs(ctx.timeout.max(1));
+
     // Wait for tests/result notification
     let result = loop {
-        match client.next_notification().await {
-            Some(notif) if notif.method == "tests/result" => break notif.params,
-            Some(_) => continue, // skip other notifications (logs, etc.)
-            None => {
-                if ctx.json {
-                    output::print_json(&serde_json::json!({
-                        "success": false,
-                        "error": {"message": "Connection closed before test results arrived"}
-                    }));
-                } else {
-                    output::print_error("Connection closed before test results arrived");
-                }
-                return Ok(());
+        match timeout(wait_timeout, client.next_notification()).await {
+            Ok(Some(notif)) if notif.method == "tests/result" => break notif.params,
+            Ok(Some(_)) => continue, // skip other notifications (logs, etc.)
+            Ok(None) => {
+                anyhow::bail!("Connection closed before test results arrived");
+            }
+            Err(_) => {
+                anyhow::bail!(
+                    "Timed out after {}s waiting for Unity test results notification",
+                    wait_timeout.as_secs()
+                );
             }
         }
     };

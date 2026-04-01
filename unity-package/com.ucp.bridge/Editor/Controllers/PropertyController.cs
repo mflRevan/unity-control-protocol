@@ -179,33 +179,40 @@ namespace UCP.Bridge
 
             // Use SerializedObject for reliable Unity property enumeration
             var so = new SerializedObject(comp);
-            var prop = so.GetIterator();
-            if (prop.NextVisible(true))
+            try
             {
-                do
+                so.Update();
+                var prop = so.GetIterator();
+                if (prop.NextVisible(true))
                 {
-                    var fieldDict = new Dictionary<string, object>
+                    do
                     {
-                        ["name"] = prop.name,
-                        ["displayName"] = prop.displayName,
-                        ["type"] = prop.propertyType.ToString(),
-                        ["editable"] = !prop.isReadOnly(true)
-                    };
+                        var fieldDict = new Dictionary<string, object>
+                        {
+                            ["name"] = prop.name,
+                            ["displayName"] = prop.displayName,
+                            ["type"] = prop.propertyType.ToString(),
+                            ["editable"] = !prop.isReadOnly(true)
+                        };
 
-                    try
-                    {
-                        fieldDict["value"] = SerializedPropertyToValue(prop);
-                    }
-                    catch
-                    {
-                        fieldDict["value"] = "<unreadable>";
-                    }
+                        try
+                        {
+                            fieldDict["value"] = SerializedPropertyToValue(prop);
+                        }
+                        catch
+                        {
+                            fieldDict["value"] = "<unreadable>";
+                        }
 
-                    fields.Add(fieldDict);
+                        fields.Add(fieldDict);
+                    }
+                    while (prop.NextVisible(false));
                 }
-                while (prop.NextVisible(false));
             }
-            so.Dispose();
+            finally
+            {
+                so.Dispose();
+            }
 
             return fields;
         }
@@ -273,14 +280,17 @@ namespace UCP.Bridge
         private static object GetPropertyValue(Component comp, string propertyName)
         {
             var so = new SerializedObject(comp);
-            var prop = so.FindProperty(propertyName);
-            if (prop != null)
+            try
             {
-                var val = SerializedPropertyToValue(prop);
-                so.Dispose();
-                return val;
+                so.Update();
+                var prop = so.FindProperty(propertyName);
+                if (prop != null)
+                    return SerializedPropertyToValue(prop);
             }
-            so.Dispose();
+            finally
+            {
+                so.Dispose();
+            }
 
             // Fallback to reflection
             var type = comp.GetType();
@@ -298,15 +308,21 @@ namespace UCP.Bridge
         private static void SetPropertyValue(Component comp, string propertyName, object jsonValue)
         {
             var so = new SerializedObject(comp);
-            var prop = so.FindProperty(propertyName);
-            if (prop != null)
+            try
             {
-                SetSerializedPropertyValue(prop, jsonValue);
-                so.ApplyModifiedProperties();
-                so.Dispose();
-                return;
+                so.Update();
+                var prop = so.FindProperty(propertyName);
+                if (prop != null)
+                {
+                    SetSerializedPropertyValue(prop, jsonValue);
+                    so.ApplyModifiedProperties();
+                    return;
+                }
             }
-            so.Dispose();
+            finally
+            {
+                so.Dispose();
+            }
 
             // Fallback to reflection
             var type = comp.GetType();
@@ -502,7 +518,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var obj = EditorUtility.EntityIdToObject(instanceId) as GameObject;
+            var obj = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (obj != null) return obj;
 
             // Search in loaded scenes

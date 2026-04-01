@@ -371,7 +371,7 @@ namespace UCP.Bridge.Tests
             );
             Assert.That(getPosition.error, Is.Null);
 
-            var updated = EditorUtility.EntityIdToObject(instanceId) as GameObject;
+            var updated = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
             Assert.That(updated, Is.Not.Null);
             var localPosition = updated.transform.localPosition;
             Assert.That(localPosition.x, Is.EqualTo(1f).Within(0.001f));
@@ -383,7 +383,7 @@ namespace UCP.Bridge.Tests
 
             var delete = _router.Dispatch("object/delete", 1, "{\"instanceId\":" + instanceId + "}");
             Assert.That(delete.error, Is.Null);
-            Assert.That(EditorUtility.EntityIdToObject(instanceId), Is.Null);
+            Assert.That(EditorUtility.InstanceIDToObject(instanceId), Is.Null);
         }
 
         [Test]

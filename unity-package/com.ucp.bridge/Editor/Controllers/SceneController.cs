@@ -273,7 +273,7 @@ namespace UCP.Bridge
 
         private static GameObject FindGameObject(int instanceId)
         {
-            var direct = EditorUtility.EntityIdToObject(instanceId) as GameObject;
+            var direct = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (direct != null)
                 return direct;
 

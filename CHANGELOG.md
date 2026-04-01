@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added `scripts/unity-version-matrix.ps1` to resolve Unity 6 compatibility slots (`6000.0` through `6000.4`), prefer exact installed editors, fall back to the next-best same-major editor when needed, and report skipped slots explicitly. Runs each version sequentially against the canonical dev project with manifest backup/restore and Library cleanup between slots.
+- Added `scripts/validate-release.ps1` as a shared preflight entrypoint for local validation and release gating.
+- Added `.github/workflows/validate.yml` to run Rust validation, website build validation, metadata sync checks, and the Unity compatibility matrix on pull requests and `main`.
+- Added `UnityObjectCompat` compatibility shim (`Editor/Compatibility/UnityObjectCompat.cs`) centralizing `InstanceIDToObject` across all bridge controllers for cross-version safety.
+
+### Changed
+
+- Hardened `.github/workflows/release.yml` so release packaging waits for the same validation preflight, including Unity compatibility coverage, before building binaries and publishing npm artifacts.
+- CLI startup dialog handler now recognizes "Project Upgrade Required", "Auto Graphics API Notice", and other common Unity startup dialogs, plus generic fallback matching for "Confirm" and "Yes" buttons with `--dialog-policy ignore`.
+- Bridge `PropertyController` now calls `SerializedObject.Update()` before reading/writing properties and uses proper `try/finally` disposal, fixing a crash in Unity 6000.4 when setting Transform properties via `set-property`.
+- Migrated all bridge controllers from `EntityIdToObject` to `EditorUtility.InstanceIDToObject()` via `UnityObjectCompat`, fixing compile errors across Unity 6.0–6.4.
+- QA harness (`scripts/qa-playground.ps1`) hardened with `Test-UcpSuccess` helper, durable per-step JSON progress tracking, scene loading, editor force-close, and `-SkipInstall` support for matrix runs.
+- CLI `run-tests` command now enforces a 10-minute timeout on bridge test-result notifications to prevent infinite hangs.
+- Bridge lifecycle now provides editor-log feedback when bridge startup times out.
+- Updated release/testing documentation to describe the Unity matrix strategy, sequential single-project execution, and the shared validation flow.
+
+### Fixed
+
+- Fixed `PropertyController.SetPropertyValue` crash on Unity 6000.4 caused by missing `SerializedObject.Update()` call.
+- Fixed manifest sanitization removing `com.unity.modules.adaptiveperformance` and `com.unity.modules.vectorgraphics` for Unity versions below 6000.3 where those modules don't exist.
+- Fixed `ControllerSmokeTests` using internal `UnityObjectCompat` across assembly boundaries; tests now use `EditorUtility.InstanceIDToObject()` directly.
+
 ## [0.4.5] - 2026-03-25
 
 ### Added

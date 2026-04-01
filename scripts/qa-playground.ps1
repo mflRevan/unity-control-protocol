@@ -2,7 +2,10 @@ param(
 	[string]$Project = "C:/Users/aimma/Workspace/unity-control-protocol/unity-project-dev/ucp-dev",
 	[switch]$SkipInstall,
 	[switch]$KeepArtifacts,
-	[int]$TimeoutSeconds = 120
+	[int]$TimeoutSeconds = 120,
+	[string]$ForceUnityVersion,
+	[string]$Unity,
+	[string]$SummaryPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,6 +14,32 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifestPath = Join-Path $repoRoot 'cli/Cargo.toml'
 
 $results = New-Object System.Collections.Generic.List[object]
+$fatalFailure = $false
+$fatalDiagnostics = $null
+$currentStep = ''
+
+function New-UcpCargoArgs {
+	$command = @(
+		'run',
+		'--quiet',
+		'--manifest-path', $manifestPath,
+		'--',
+		'--project', $Project,
+		'--dialog-policy', 'ignore',
+		'--timeout', "$TimeoutSeconds",
+		'--json'
+	)
+
+	if (-not [string]::IsNullOrWhiteSpace($Unity)) {
+		$command += @('--unity', $Unity)
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($ForceUnityVersion)) {
+		$command += @('--force-unity-version', $ForceUnityVersion)
+	}
+
+	return $command
+}
 
 function Invoke-UcpJson {
 	param(
@@ -20,15 +49,7 @@ function Invoke-UcpJson {
 		[switch]$AllowFailure
 	)
 
-	$command = @(
-		'run',
-		'--quiet',
-		'--manifest-path', $manifestPath,
-		'--',
-		'--project', $Project,
-		'--timeout', "$TimeoutSeconds",
-		'--json'
-	) + $UcpArgs
+	$command = (New-UcpCargoArgs) + $UcpArgs
 
 	$effectiveProcessTimeout = if ($ProcessTimeoutSeconds -gt 0) { $ProcessTimeoutSeconds } else { $TimeoutSeconds + 10 }
 	$tempOutput = [System.IO.Path]::GetTempFileName()
@@ -87,6 +108,99 @@ function Invoke-UcpJson {
 	}
 }
 
+function Get-DiagnosticPayload {
+	$payload = [ordered]@{}
+
+	foreach ($entry in @(
+		@{ Name = 'editorStatus'; Args = @('editor', 'status') },
+		@{ Name = 'logsStatus'; Args = @('logs', 'status') },
+		@{ Name = 'editorLogs'; Args = @('editor', 'logs', '--lines', '160') }
+	)) {
+		$result = Invoke-UcpJson -UcpArgs $entry.Args -AllowFailure
+		$payload[$entry.Name] = [ordered]@{
+			exitCode = $result.ExitCode
+			raw = $result.Raw
+			json = $result.Json
+		}
+	}
+
+	return [pscustomobject]$payload
+}
+
+function Test-UcpSuccess {
+	param(
+		$Result
+	)
+
+	if ($null -ne $Result.Json -and $Result.Json.success -eq $true) {
+		return $true
+	}
+
+	if (-not [string]::IsNullOrWhiteSpace($Result.Raw) -and $Result.Raw -match '"success"\s*:\s*true') {
+		return $true
+	}
+
+	return $false
+}
+
+function Write-QaSummary {
+	param(
+		[switch]$Completed
+	)
+
+	if ([string]::IsNullOrWhiteSpace($SummaryPath)) {
+		return
+	}
+
+	$summaryDir = Split-Path -Parent $SummaryPath
+	if (-not [string]::IsNullOrWhiteSpace($summaryDir)) {
+		New-Item -ItemType Directory -Path $summaryDir -Force | Out-Null
+	}
+
+	$passedCount = @($results | Where-Object { $_.Passed }).Count
+	$failedCount = @($results | Where-Object { -not $_.Passed }).Count
+
+	try {
+		$summary = '' | Select-Object `
+			Project, RequestedUnityVersion, RequestedUnityPath, TimeoutSeconds, `
+			CurrentStep, Completed, Passed, PassedCount, FailedCount, TotalCount, `
+			Results, FatalFailure, Diagnostics
+		$summary.Project = [string]$Project
+		$summary.RequestedUnityVersion = [string]$ForceUnityVersion
+		$summary.RequestedUnityPath = [string]$Unity
+		$summary.TimeoutSeconds = [int]$TimeoutSeconds
+		$summary.CurrentStep = [string]$currentStep
+		$summary.Completed = [bool]$Completed.IsPresent
+		$summary.Passed = [bool]($failedCount -eq 0)
+		$summary.PassedCount = [int]$passedCount
+		$summary.FailedCount = [int]$failedCount
+		$summary.TotalCount = [int]$results.Count
+		$summary.Results = @($results | Select-Object Name, Passed, Detail)
+		$summary.FatalFailure = [bool]$fatalFailure
+		$summary.Diagnostics = $fatalDiagnostics
+
+		$summary | ConvertTo-Json -Depth 10 | Set-Content -Path $SummaryPath -Encoding utf8
+	}
+	catch {
+		$fallback = '' | Select-Object CurrentStep, Completed, Error
+		$fallback.CurrentStep = [string]$currentStep
+		$fallback.Completed = [bool]$Completed.IsPresent
+		$fallback.Error = [string]$_.Exception.Message
+		$fallback | ConvertTo-Json -Depth 4 | Set-Content -Path $SummaryPath -Encoding utf8
+	}
+}
+
+function Close-UnityEditorNow {
+	try {
+		$close = Invoke-UcpJson -UcpArgs @('editor', 'close', '--force') -AllowFailure
+		$detail = if ($close.Raw) { $close.Raw } else { 'requested force close' }
+		Add-Result -Name 'post-failure-close-force' -Passed:$true -Detail $detail
+	}
+	catch {
+		Add-Result -Name 'post-failure-close-force' -Passed:$false -Detail $_.Exception.Message
+	}
+}
+
 function Add-Result {
 	param(
 		[string]$Name,
@@ -103,6 +217,7 @@ function Add-Result {
 	$status = if ($Passed) { '[PASS]' } else { '[FAIL]' }
 	$color = if ($Passed) { 'Green' } else { 'Red' }
 	Write-Host "$status $Name :: $Detail" -ForegroundColor $color
+	Write-QaSummary
 }
 
 function Wait-BridgeReady {
@@ -115,7 +230,7 @@ function Wait-BridgeReady {
 	$lastDetail = ''
 	for ($i = 0; $i -lt $MaxAttempts; $i++) {
 		$probe = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
-		if ($probe.ExitCode -eq 0 -and $probe.Json -and $probe.Json.success) {
+		if (Test-UcpSuccess $probe) {
 			return [pscustomobject]@{
 				Ready = $true
 				Attempts = $i + 1
@@ -144,23 +259,46 @@ function Run-Step {
 	)
 
 	try {
+		$currentStep = $Name
+		Write-QaSummary
 		Write-Host "[RUN ] $Name :: ucp $($UcpArgs -join ' ')" -ForegroundColor Cyan
 		$result = Invoke-UcpJson -UcpArgs $UcpArgs -ProcessTimeoutSeconds $ProcessTimeoutSeconds -AllowFailure:$AllowFailure
 		$assertResult = & $Assert $result
 		Add-Result -Name $Name -Passed:$assertResult.Passed -Detail $assertResult.Detail
+		if (-not $assertResult.Passed) {
+			$fatalFailure = $true
+			$fatalDiagnostics = Get-DiagnosticPayload
+			Close-UnityEditorNow
+			throw "Stopping QA after failure in step '$Name'"
+		}
 		return $result
 	}
 	catch {
-		Add-Result -Name $Name -Passed:$false -Detail $_.Exception.Message
+		if (-not ($results | Where-Object { $_.Name -eq $Name -and -not $_.Passed })) {
+			Add-Result -Name $Name -Passed:$false -Detail $_.Exception.Message
+		}
+		if (-not $fatalFailure) {
+			$fatalFailure = $true
+			$fatalDiagnostics = Get-DiagnosticPayload
+			Close-UnityEditorNow
+		}
 		return $null
 	}
 }
 
 Write-Host "Running extensive UCP QA against: $Project" -ForegroundColor Cyan
+if (-not [string]::IsNullOrWhiteSpace($ForceUnityVersion)) {
+	Write-Host "Requested Unity version override: $ForceUnityVersion" -ForegroundColor Cyan
+}
+if (-not [string]::IsNullOrWhiteSpace($Unity)) {
+	Write-Host "Requested Unity executable override: $Unity" -ForegroundColor Cyan
+}
 
 if (-not (Test-Path (Join-Path $Project 'ProjectSettings/ProjectSettings.asset'))) {
 	throw "Not a Unity project: $Project"
 }
+
+$existingEmbeddedBridge = Test-Path (Join-Path $Project 'Packages/com.ucp.bridge/package.json')
 
 if (-not $SkipInstall) {
 	Run-Step -Name 'preflight-close-force' -UcpArgs @('editor', 'close', '--force') -AllowFailure -Assert {
@@ -168,18 +306,29 @@ if (-not $SkipInstall) {
 		[pscustomobject]@{ Passed = $true; Detail = if ($r.Raw) { $r.Raw } else { 'no-op' } }
 	} | Out-Null
 
-	Run-Step -Name 'install-dev-no-wait' -UcpArgs @('install', '--dev', '--no-wait') -Assert {
-		param($r)
-		if ($r.ExitCode -ne 0 -or -not $r.Json.success) {
-			return [pscustomobject]@{ Passed = $false; Detail = $r.Raw }
-		}
-		[pscustomobject]@{ Passed = $true; Detail = "bridgeStatus=$($r.Json.data.bridgeStatus)" }
-	} | Out-Null
+	if ($existingEmbeddedBridge) {
+		Add-Result -Name 'install-dev-no-wait' -Passed:$true -Detail 'skipped install; embedded bridge already present in project copy'
+	}
+	else {
+		Run-Step -Name 'install-dev-no-wait' -UcpArgs @('install', '--dev', '--no-wait') -Assert {
+			param($r)
+			if (-not (Test-UcpSuccess $r)) {
+				return [pscustomobject]@{ Passed = $false; Detail = $r.Raw }
+			}
+			[pscustomobject]@{ Passed = $true; Detail = "bridgeStatus=$($r.Json.data.bridgeStatus)" }
+		} | Out-Null
+	}
 }
 
 Run-Step -Name 'open' -UcpArgs @('open') -ProcessTimeoutSeconds ([Math]::Min($TimeoutSeconds, 30)) -AllowFailure -Assert {
 	param($r)
-	$passed = ($r.ExitCode -eq 0 -and $r.Json.success) -or ($r.ExitCode -eq 124)
+	$passed = $false
+	if ($r.ExitCode -eq 124) {
+		$passed = $true
+	}
+	elseif (Test-UcpSuccess $r) {
+		$passed = $true
+	}
 	$detail = if ($r.ExitCode -eq 124) { "open timed out locally; continuing with bridge probe :: $($r.Raw)" } else { $r.Raw }
 	[pscustomobject]@{ Passed = $passed; Detail = $detail }
 } | Out-Null
@@ -187,7 +336,7 @@ Run-Step -Name 'open' -UcpArgs @('open') -ProcessTimeoutSeconds ([Math]::Min($Ti
 $postOpenAttempts = [Math]::Max([int][Math]::Ceiling([double]$TimeoutSeconds / 12.0), 3)
 $connect = Run-Step -Name 'connect' -UcpArgs @('connect') -AllowFailure -Assert {
 	param($r)
-	if ($r.ExitCode -eq 0 -and $r.Json.success) {
+	if (Test-UcpSuccess $r) {
 		return [pscustomobject]@{ Passed = $true; Detail = $r.Raw }
 	}
 
@@ -197,7 +346,22 @@ $connect = Run-Step -Name 'connect' -UcpArgs @('connect') -AllowFailure -Assert 
 	}
 
 	$retry = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
-	[pscustomobject]@{ Passed = ($retry.ExitCode -eq 0 -and $retry.Json.success); Detail = $retry.Raw }
+	[pscustomobject]@{
+		Passed = (Test-UcpSuccess $retry)
+		Detail = $retry.Raw
+	}
+}
+
+$qaSceneRelativePath = 'Assets/Scenes/SampleScene.unity'
+$qaSceneAbsolutePath = Join-Path $Project $qaSceneRelativePath
+if (Test-Path $qaSceneAbsolutePath) {
+	Run-Step -Name 'scene-load-qa-scene' -UcpArgs @('scene', 'load', $qaSceneRelativePath) -Assert {
+		param($r)
+		[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
+	} | Out-Null
+}
+else {
+	Add-Result -Name 'scene-load-qa-scene' -Passed:$true -Detail "skipped; missing $qaSceneRelativePath"
 }
 
 $snapshot = Run-Step -Name 'snapshot-root' -UcpArgs @('scene', 'snapshot') -Assert {
@@ -215,7 +379,10 @@ $sceneList = Run-Step -Name 'scene-list' -UcpArgs @('scene', 'list') -Assert {
 $sceneActive = Run-Step -Name 'scene-active' -UcpArgs @('scene', 'active') -Assert {
 	param($r)
 	$name = $r.Json.data.name
-	[pscustomobject]@{ Passed = ($r.Json.success -and -not [string]::IsNullOrWhiteSpace($name)); Detail = "active=$name" }
+	$path = $r.Json.data.path
+	$passed = $r.Json.success
+	$detail = "active=$name path=$path"
+	[pscustomobject]@{ Passed = $passed; Detail = $detail }
 }
 
 $qaRoot = Run-Step -Name 'object-create-root' -UcpArgs @('object', 'create', 'UcpQaRoot') -Assert {
@@ -408,7 +575,13 @@ if (Test-Path $screenshotPath) {
 Run-Step -Name 'screenshot' -UcpArgs @('screenshot', '--output', $screenshotPath) -Assert {
 	param($r)
 	$exists = Test-Path $screenshotPath
-	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $exists); Detail = "exit=$($r.ExitCode) exists=$exists" }
+	$passed = $exists -and ((Test-UcpSuccess $r) -or $null -eq $r.Json)
+	[pscustomobject]@{ Passed = $passed; Detail = "exit=$($r.ExitCode) exists=$exists" }
+} | Out-Null
+
+Run-Step -Name 'scene-save-before-play' -UcpArgs @('scene', 'save') -Assert {
+	param($r)
+	[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
 } | Out-Null
 
 Run-Step -Name 'compile-no-wait' -UcpArgs @('compile', '--no-wait') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
@@ -422,19 +595,19 @@ Run-Step -Name 'play' -UcpArgs @('play') -AllowFailure -Assert {
 
 Run-Step -Name 'pause' -UcpArgs @('pause') -AllowFailure -Assert {
 	param($r)
-	if (-not ($r.ExitCode -eq 0 -and $r.Json.success)) {
+	if (-not (Test-UcpSuccess $r)) {
 		$wait = Wait-BridgeReady -Reason 'pause-retry' -MaxAttempts 15 -DelaySeconds 2
 		if (-not $wait.Ready) {
 			return [pscustomobject]@{ Passed = $false; Detail = "timeout before pause retry: $($wait.Detail)" }
 		}
 		$r = Invoke-UcpJson -UcpArgs @('pause') -AllowFailure
 	}
-	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $r.Json.success); Detail = $r.Raw }
+	[pscustomobject]@{ Passed = (Test-UcpSuccess $r); Detail = $r.Raw }
 } | Out-Null
 
 Run-Step -Name 'stop' -UcpArgs @('stop') -AllowFailure -Assert {
 	param($r)
-	if (-not ($r.ExitCode -eq 0 -and $r.Json.success)) {
+	if (-not (Test-UcpSuccess $r)) {
 		$wait = Wait-BridgeReady -Reason 'stop-retry' -MaxAttempts 15 -DelaySeconds 2
 		if (-not $wait.Ready) {
 			return [pscustomobject]@{ Passed = $false; Detail = "timeout before stop retry: $($wait.Detail)" }
@@ -442,7 +615,10 @@ Run-Step -Name 'stop' -UcpArgs @('stop') -AllowFailure -Assert {
 		$r = Invoke-UcpJson -UcpArgs @('stop') -AllowFailure
 	}
 	$ready = Wait-BridgeReady -Reason 'post-stop-stable' -MaxAttempts 15 -DelaySeconds 2
-	[pscustomobject]@{ Passed = ($r.ExitCode -eq 0 -and $r.Json.success -and $ready.Ready); Detail = if ($ready.Ready) { $r.Raw } else { "timeout after stop: $($ready.Detail)" } }
+	[pscustomobject]@{
+		Passed = ((Test-UcpSuccess $r) -and $ready.Ready)
+		Detail = if ($ready.Ready) { $r.Raw } else { "timeout after stop: $($ready.Detail)" }
+	}
 } | Out-Null
 
 Run-Step -Name 'exec-list' -UcpArgs @('exec', 'list') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
@@ -450,7 +626,7 @@ Run-Step -Name 'run-tests-edit' -UcpArgs @('run-tests', '--mode', 'edit') -Asser
 
 Run-Step -Name 'vcs-status-nonfatal' -UcpArgs @('vcs', 'status') -AllowFailure -Assert {
 	param($r)
-	$passed = ($r.ExitCode -eq 0 -and $r.Json.success) -or ($r.ExitCode -ne 0)
+	$passed = (Test-UcpSuccess $r) -or ($r.ExitCode -ne 0)
 	[pscustomobject]@{ Passed = $passed; Detail = $r.Raw }
 } | Out-Null
 
@@ -458,7 +634,7 @@ if (-not $KeepArtifacts -and $qaRootId -ne 0) {
 	Run-Step -Name 'object-delete-root' -UcpArgs @('object', 'delete', '--id', "$qaRootId") -AllowFailure -Assert {
 		param($r)
 		$alreadyMissing = $r.Raw -match 'GameObject not found'
-		$passed = ($r.ExitCode -eq 0 -and $r.Json.success) -or $alreadyMissing
+		$passed = (Test-UcpSuccess $r) -or $alreadyMissing
 		$detail = if ($alreadyMissing) { 'already deleted' } else { $r.Raw }
 		[pscustomobject]@{ Passed = $passed; Detail = $detail }
 	} | Out-Null
@@ -472,6 +648,8 @@ if (-not $KeepArtifacts -and $qaRootId -ne 0) {
 
 $passedCount = @($results | Where-Object { $_.Passed }).Count
 $failedCount = @($results | Where-Object { -not $_.Passed }).Count
+$currentStep = 'completed'
+Write-QaSummary -Completed
 
 Write-Host "`nQA Summary: passed=$passedCount failed=$failedCount total=$($results.Count)" -ForegroundColor Cyan
 

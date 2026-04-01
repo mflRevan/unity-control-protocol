@@ -1,0 +1,70 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  cargo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo test
+        run: cargo test --manifest-path cli/Cargo.toml
+
+      - name: Cargo check
+        run: cargo check --manifest-path cli/Cargo.toml
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install website deps
+        run: cd website && npm ci
+
+      - name: Build website
+        run: cd website && npm run build
+
+  metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate current version metadata sync
+        run: node scripts/sync-version.mjs --check (Get-Content version.json -Raw | ConvertFrom-Json).version
+        shell: pwsh
+
+  unity-matrix:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate release/test matrix
+        shell: pwsh
+        run: >
+          .\scripts\validate-release.ps1
+          -Version ((Get-Content version.json -Raw | ConvertFrom-Json).version)
+          -Project "unity-project-dev\ucp-dev"
+          -UnitySlots 6000.0,6000.1,6000.2,6000.3,6000.4
+          -TimeoutSeconds 180
+          -SkipWebsite
