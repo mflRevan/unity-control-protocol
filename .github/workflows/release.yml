@@ -120,10 +120,24 @@ jobs:
           sha256sum ucp-* > checksums-sha256.txt
           cat checksums-sha256.txt
 
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { capture=1; next }
+            capture && $0 ~ "^## \\[" { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "Failed to extract release notes for ${VERSION} from CHANGELOG.md" >&2
+            exit 1
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release-notes.md
           files: |
             artifacts/ucp-linux-x64
             artifacts/ucp-darwin-x64

@@ -25,8 +25,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/docs/commands" className="hover:text-foreground transition-colors">
-                  Commands
+                <Link to="/docs/overview" className="hover:text-foreground transition-colors">
+                  CLI Overview
                 </Link>
               </li>
               <li>

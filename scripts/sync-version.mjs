@@ -96,10 +96,10 @@ const replacements = [
     (content) => replaceIfPresent(content, /"com\.ucp\.bridge": ".*"/, `"com.ucp.bridge": "${bridgeDependency}"`),
   ],
   [
-    'docs/commands/connection.md',
+    'docs/overview/project-setup.md',
     (content) => replaceOne(content, /  \| Protocol: .*/, `  | Protocol: ${protocolVersion}`),
   ],
-  ['docs/commands/settings.md', (content) => replaceOne(content, /  Version: .*/, `  Version: ${version}`)],
+  ['docs/project/settings.md', (content) => replaceOne(content, /  Version: .*/, `  Version: ${version}`)],
   [
     'website/src/components/animated-terminal.tsx',
     (content) =>

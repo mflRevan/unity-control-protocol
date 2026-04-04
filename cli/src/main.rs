@@ -324,4 +324,131 @@ mod tests {
             _ => panic!("unexpected command variant"),
         }
     }
+
+    #[test]
+    fn parses_references_find_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "references",
+            "find",
+            "--asset",
+            "3cb6f81f1baa99647b390eb642d1990c",
+        ])
+        .expect("references find command should parse");
+
+        match cli.command {
+            commands::Command::References {
+                action: commands::references::ReferencesAction::Find { asset, object, .. },
+            } => {
+                assert_eq!(
+                    asset.as_deref(),
+                    Some("3cb6f81f1baa99647b390eb642d1990c")
+                );
+                assert!(object.is_none());
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_references_index_build_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "references",
+            "index",
+            "build",
+            "--approach",
+            "yaml",
+        ])
+        .expect("references index build command should parse");
+
+        match cli.command {
+            commands::Command::References {
+                action:
+                    commands::references::ReferencesAction::Index {
+                        action: commands::references::IndexAction::Build { approach },
+                    },
+            } => {
+                assert_eq!(approach, commands::references::IndexBuildApproachArg::Yaml);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_references_check_command() {
+        let cli =
+            Cli::try_parse_from(["ucp", "references", "check"]).expect("references check should parse");
+
+        match cli.command {
+            commands::Command::References {
+                action: commands::references::ReferencesAction::Check,
+            } => {}
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_references_detail_value() {
+        let result = Cli::try_parse_from([
+            "ucp",
+            "references",
+            "find",
+            "--asset",
+            "3cb6f81f1baa99647b390eb642d1990c",
+            "--detail",
+            "full",
+        ]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parses_asset_move_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "asset",
+            "move",
+            "Assets/Old.prefab",
+            "Assets/New/Old.prefab",
+        ])
+        .expect("asset move command should parse");
+
+        match cli.command {
+            commands::Command::Asset {
+                action: commands::asset::AssetAction::Move { path, destination },
+            } => {
+                assert_eq!(path, "Assets/Old.prefab");
+                assert_eq!(destination, "Assets/New/Old.prefab");
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_asset_bulk_move_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "asset",
+            "bulk-move",
+            "--moves",
+            "[{\"from\":\"Assets/A.mat\",\"to\":\"Assets/B.mat\"}]",
+            "--continue-on-error",
+        ])
+        .expect("asset bulk-move command should parse");
+
+        match cli.command {
+            commands::Command::Asset {
+                action:
+                    commands::asset::AssetAction::BulkMove {
+                        moves,
+                        continue_on_error,
+                    },
+            } => {
+                assert!(moves.contains("\"from\""));
+                assert!(continue_on_error);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
 }

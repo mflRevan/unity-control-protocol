@@ -15,6 +15,7 @@ pub mod packages;
 pub mod play;
 pub mod profiler;
 pub mod prefab;
+pub mod references;
 pub mod scene;
 pub mod screenshot;
 pub mod settings;
@@ -313,6 +314,11 @@ pub enum Command {
     Profiler {
         #[command(subcommand)]
         action: profiler::ProfilerAction,
+    },
+    /// Find and index asset/object references across the project
+    References {
+        #[command(subcommand)]
+        action: references::ReferencesAction,
     },
 }
 
@@ -724,5 +730,6 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Packages { action } => packages::run(action, &ctx).await,
         Command::Build { action } => build::run(action, &ctx).await,
         Command::Profiler { action } => profiler::run(action, &ctx).await,
+        Command::References { action } => references::run(action, &ctx).await,
     }
 }

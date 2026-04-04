@@ -190,6 +190,32 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         }
     }
 
+    // Serialization mode checks for native reference indexing
+    if let Some(ref proj) = project {
+        let ref_status = super::references::check_serialization(proj);
+        checks.push((
+            "Force Text serialization",
+            ref_status.force_text,
+            if ref_status.force_text {
+                "Enabled".into()
+            } else {
+                "Not set (recommended for native reference indexing)".into()
+            },
+        ));
+        checks.push((
+            "Visible Meta Files",
+            ref_status.visible_meta,
+            if ref_status.visible_meta {
+                "Enabled".into()
+            } else {
+                "Not set (recommended for native reference indexing)".into()
+            },
+        ));
+        if !ref_status.native_capable {
+            warnings.push("Native reference indexing is unavailable. Enable Force Text serialization and Visible Meta Files for full `ucp references` support.".into());
+        }
+    }
+
     if ctx.json {
         let data = serde_json::json!({
             "checks": checks.iter().map(|(name, ok, detail)| {

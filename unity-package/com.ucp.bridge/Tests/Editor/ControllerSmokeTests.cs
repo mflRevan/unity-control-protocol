@@ -21,6 +21,12 @@ namespace UCP.Bridge.Tests
         private const string TempTextPath = "Assets/UcpControllerSmoke.txt";
         private const string TempScriptPath = "Assets/UcpControllerSmokeComponent.cs";
         private const string TempTexturePath = "Assets/UcpImporterSmoke.png";
+        private const string TempScenePath = "Assets/UcpControllerMoveScene.unity";
+        private const string TempMovedFolderPath = "Assets/UcpControllerMoved";
+        private const string TempMovedAssetPath = "Assets/UcpControllerMoved/UcpControllerSmoke.asset";
+        private const string TempMovedReferenceAssetPath = "Assets/UcpControllerMoved/UcpControllerReference.asset";
+        private const string TempMovedMaterialPath = "Assets/UcpControllerMoved/UcpControllerSmoke.mat";
+        private const string TempMovedScenePath = "Assets/UcpControllerMoved/UcpControllerMoveScene.unity";
         private const string TempProfilerExportPath = "ProfilerCaptures\\smoke-export.json";
         private const string TempLocalPackageFolder = "TempUcpLocalPackage";
         private const string TempLocalPackageName = "com.ucp.temp.local";
@@ -53,6 +59,8 @@ namespace UCP.Bridge.Tests
             DeleteTempTextFile();
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
+            DeleteTempScene();
+            DeleteTempMovedFolder();
             DeleteTempProfilerExport();
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
@@ -74,6 +82,8 @@ namespace UCP.Bridge.Tests
             DeleteTempTextFile();
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
+            DeleteTempScene();
+            DeleteTempMovedFolder();
             DeleteTempProfilerExport();
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
@@ -475,6 +485,144 @@ namespace UCP.Bridge.Tests
             Assert.That(reloaded.maxPlayers, Is.EqualTo(8));
             Assert.That(reloaded.spawnDelay, Is.EqualTo(1.5f).Within(0.001f));
             Assert.That(AssetDatabase.GetAssetPath(reloaded.referenceAsset), Is.EqualTo(TempReferenceAssetPath));
+        }
+
+        [Test]
+        public void AssetMove_PreservesCustomAssetReferenceAndGuid()
+        {
+            var reference = ScriptableObject.CreateInstance<SearchRootAsset>();
+            reference.name = "MoveTarget";
+            AssetDatabase.CreateAsset(reference, TempReferenceAssetPath);
+
+            var asset = ScriptableObject.CreateInstance<BatchWritableAsset>();
+            asset.referenceAsset = reference;
+            AssetDatabase.CreateAsset(asset, TempAssetPath);
+            AssetDatabase.SaveAssets();
+
+            var originalGuid = AssetDatabase.AssetPathToGUID(TempReferenceAssetPath);
+
+            var response = _router.Dispatch(
+                "asset/move",
+                1,
+                "{\"path\":\"" + TempReferenceAssetPath + "\",\"destination\":\"" + TempMovedReferenceAssetPath + "\"}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToBoolean(result["changed"]), Is.True);
+            Assert.That(result["sourcePath"], Is.EqualTo(TempReferenceAssetPath));
+            Assert.That(result["destinationPath"], Is.EqualTo(TempMovedReferenceAssetPath));
+            Assert.That(result["guid"], Is.EqualTo(originalGuid));
+
+            var reloaded = AssetDatabase.LoadAssetAtPath<BatchWritableAsset>(TempAssetPath);
+            Assert.That(reloaded, Is.Not.Null);
+            Assert.That(reloaded.referenceAsset, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(reloaded.referenceAsset), Is.EqualTo(TempMovedReferenceAssetPath));
+            Assert.That(AssetDatabase.AssetPathToGUID(TempMovedReferenceAssetPath), Is.EqualTo(originalGuid));
+        }
+
+        [Test]
+        public void AssetBulkMove_MovesMultipleAssetsAndPreservesReferences()
+        {
+            var reference = ScriptableObject.CreateInstance<SearchRootAsset>();
+            reference.name = "BulkMoveRef";
+            AssetDatabase.CreateAsset(reference, TempReferenceAssetPath);
+
+            var asset = ScriptableObject.CreateInstance<BatchWritableAsset>();
+            asset.referenceAsset = reference;
+            asset.maxPlayers = 7;
+            AssetDatabase.CreateAsset(asset, TempAssetPath);
+            AssetDatabase.SaveAssets();
+
+            var response = _router.Dispatch(
+                "asset/bulk-move",
+                1,
+                "{\"moves\":["
+                + "{\"from\":\"" + TempReferenceAssetPath + "\",\"to\":\"" + TempMovedReferenceAssetPath + "\"},"
+                + "{\"from\":\"" + TempAssetPath + "\",\"to\":\"" + TempMovedAssetPath + "\"}"
+                + "]}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToInt32(result["requested"]), Is.EqualTo(2));
+            Assert.That(Convert.ToInt32(result["moved"]), Is.EqualTo(2));
+            Assert.That(Convert.ToInt32(result["failed"]), Is.EqualTo(0));
+
+            var movedAsset = AssetDatabase.LoadAssetAtPath<BatchWritableAsset>(TempMovedAssetPath);
+            Assert.That(movedAsset, Is.Not.Null);
+            Assert.That(movedAsset.maxPlayers, Is.EqualTo(7));
+            Assert.That(movedAsset.referenceAsset, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(movedAsset.referenceAsset), Is.EqualTo(TempMovedReferenceAssetPath));
+        }
+
+        [Test]
+        public void AssetMove_PreservesSceneMaterialReference()
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            Assert.That(shader, Is.Not.Null);
+
+            var material = new Material(shader) { name = "MoveSceneMaterial" };
+            AssetDatabase.CreateAsset(material, TempMaterialPath);
+            AssetDatabase.SaveAssets();
+
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "MoveSceneCube";
+            cube.GetComponent<MeshRenderer>().sharedMaterial = material;
+            Assert.That(EditorSceneManager.SaveScene(scene, TempScenePath), Is.True);
+
+            var response = _router.Dispatch(
+                "asset/move",
+                1,
+                "{\"path\":\"" + TempMaterialPath + "\",\"destination\":\"" + TempMovedMaterialPath + "\"}");
+
+            Assert.That(response.error, Is.Null);
+
+            EditorSceneManager.OpenScene(TempScenePath, OpenSceneMode.Single);
+            var movedCube = GameObject.Find("MoveSceneCube");
+            Assert.That(movedCube, Is.Not.Null);
+            var renderer = movedCube.GetComponent<MeshRenderer>();
+            Assert.That(renderer, Is.Not.Null);
+            Assert.That(renderer.sharedMaterial, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(renderer.sharedMaterial), Is.EqualTo(TempMovedMaterialPath));
+        }
+
+        [Test]
+        public void AssetMove_UpdatesBuildSettingsWhenSceneMoves()
+        {
+            var originalScenes = EditorBuildSettings.scenes;
+            try
+            {
+                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var marker = new GameObject("MovedSceneMarker");
+                marker.transform.position = new Vector3(1f, 2f, 3f);
+                Assert.That(EditorSceneManager.SaveScene(scene, TempScenePath), Is.True);
+
+                var originalGuid = AssetDatabase.AssetPathToGUID(TempScenePath);
+                EditorBuildSettings.scenes = new[]
+                {
+                    new EditorBuildSettingsScene(TempScenePath, true)
+                };
+
+                var response = _router.Dispatch(
+                    "asset/move",
+                    1,
+                    "{\"path\":\"" + TempScenePath + "\",\"destination\":\"" + TempMovedScenePath + "\"}");
+
+                Assert.That(response.error, Is.Null);
+                Assert.That(AssetDatabase.AssetPathToGUID(TempMovedScenePath), Is.EqualTo(originalGuid));
+
+                Assert.That(EditorBuildSettings.scenes, Has.Length.EqualTo(1));
+                Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(TempMovedScenePath));
+
+                EditorSceneManager.OpenScene(TempMovedScenePath, OpenSceneMode.Single);
+                Assert.That(GameObject.Find("MovedSceneMarker"), Is.Not.Null);
+            }
+            finally
+            {
+                EditorBuildSettings.scenes = originalScenes;
+            }
         }
 
         [Test]
@@ -933,6 +1081,24 @@ namespace UCP.Bridge.Tests
                 File.Delete(metaPath);
 
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static void DeleteTempScene()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(TempScenePath) != null)
+            {
+                AssetDatabase.DeleteAsset(TempScenePath);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static void DeleteTempMovedFolder()
+        {
+            if (AssetDatabase.IsValidFolder(TempMovedFolderPath))
+            {
+                AssetDatabase.DeleteAsset(TempMovedFolderPath);
+                AssetDatabase.SaveAssets();
+            }
         }
 
         private static void DeleteTempProfilerExport()

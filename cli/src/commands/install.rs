@@ -242,6 +242,7 @@ pub async fn run(
 
     ensure_ucp_state_dir(&project_path)?;
     ensure_local_git_exclude(&project_path, ".ucp/")?;
+    ensure_repo_ignore_entry(&project_path, ".ucp/")?;
 
     if let Some(pb) = spinner {
         pb.finish_and_clear();
@@ -359,10 +360,34 @@ pub async fn run(
             desired_package_url
         );
         print_automation_settings_note(&automation);
+        print_serialization_recommendation(&project_path);
         eprintln!();
     }
 
     Ok(())
+}
+
+fn print_serialization_recommendation(project: &Path) {
+    let status = super::references::check_serialization(project);
+    if status.force_text && status.visible_meta {
+        return;
+    }
+    let mut missing = Vec::new();
+    if !status.force_text {
+        missing.push("Force Text serialization");
+    }
+    if !status.visible_meta {
+        missing.push("Visible Meta Files");
+    }
+    eprintln!(
+        "  {} For native reference indexing ({}) enable: {}",
+        style("💡").yellow(),
+        style("ucp references").bold(),
+        missing.join(" and ")
+    );
+    eprintln!(
+        "     Edit > Project Settings > Editor > Asset Serialization / Version Control"
+    );
 }
 
 fn package_git_url() -> String {
@@ -582,6 +607,7 @@ async fn run_embedded_local_install(
     ensure_ucp_state_dir(project_path)?;
     ensure_local_git_exclude(project_path, ".ucp/")?;
     ensure_local_git_exclude(project_path, "Packages/com.ucp.bridge/")?;
+    ensure_repo_ignore_entry(project_path, ".ucp/")?;
     let mut automation = apply_recommended_player_settings(project_path)?;
     write_install_state(
         project_path,
@@ -701,9 +727,9 @@ async fn run_embedded_local_install(
             style("ℹ").cyan()
         );
         print_automation_settings_note(&automation);
+        print_serialization_recommendation(project_path);
         eprintln!();
     }
-
     Ok(())
 }
 
@@ -820,6 +846,39 @@ fn ensure_local_git_exclude(project_path: &Path, entry: &str) -> anyhow::Result<
     content.push('\n');
     fs::write(exclude_path, content)?;
     Ok(())
+}
+
+fn ensure_repo_ignore_entry(project_path: &Path, entry: &str) -> anyhow::Result<()> {
+    let gitignore_path = project_path.join(".gitignore");
+    if project_path.join(".git").exists() || gitignore_path.exists() {
+        ensure_ignore_file_entry(&gitignore_path, entry)?;
+    }
+
+    let ignore_conf_path = project_path.join("ignore.conf");
+    if project_path.join(".plastic").exists() || ignore_conf_path.exists() {
+        ensure_ignore_file_entry(&ignore_conf_path, entry)?;
+    }
+
+    Ok(())
+}
+
+fn ensure_ignore_file_entry(ignore_path: &Path, entry: &str) -> anyhow::Result<()> {
+    let mut content = fs::read_to_string(ignore_path).unwrap_or_default();
+    if content.lines().any(|line| line.trim() == entry) {
+        return Ok(());
+    }
+
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(entry);
+    content.push('\n');
+
+    match fs::write(ignore_path, content) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub async fn uninstall(ctx: &Context) -> anyhow::Result<()> {
@@ -1132,8 +1191,9 @@ fn print_automation_settings_note(automation: &AutomationSettingsOutcome) {
 mod tests {
     use super::{
         InstallOptions, InstallState, canonicalize_package_dir, desired_package_reference,
-        file_package_reference, read_install_state, remove_local_file_dependency,
-        should_refresh_existing_custom_source, uses_embedded_local_package, write_install_state,
+        ensure_repo_ignore_entry, file_package_reference, read_install_state,
+        remove_local_file_dependency, should_refresh_existing_custom_source,
+        uses_embedded_local_package, write_install_state,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -1247,6 +1307,32 @@ mod tests {
         let manifest = fs::read_to_string(&manifest_path).unwrap();
         assert!(!manifest.contains("file:C:/temp/com.ucp.bridge"));
         assert!(manifest.contains("com.foo.bar"));
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn ensure_repo_ignore_entry_updates_git_and_plastic_files() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "ucp-ignore-files-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(&temp_root).unwrap();
+        fs::create_dir_all(temp_root.join(".git")).unwrap();
+        fs::create_dir_all(temp_root.join(".plastic")).unwrap();
+
+        ensure_repo_ignore_entry(&temp_root, ".ucp/").unwrap();
+        let gitignore = fs::read_to_string(temp_root.join(".gitignore")).unwrap();
+        let ignore_conf = fs::read_to_string(temp_root.join("ignore.conf")).unwrap();
+        assert!(gitignore.contains(".ucp/"));
+        assert!(ignore_conf.contains(".ucp/"));
+
+        ensure_repo_ignore_entry(&temp_root, ".ucp/").unwrap();
+        let gitignore = fs::read_to_string(temp_root.join(".gitignore")).unwrap();
+        let ignore_conf = fs::read_to_string(temp_root.join("ignore.conf")).unwrap();
+        assert_eq!(gitignore.matches(".ucp/").count(), 1);
+        assert_eq!(ignore_conf.matches(".ucp/").count(), 1);
 
         let _ = fs::remove_dir_all(&temp_root);
     }

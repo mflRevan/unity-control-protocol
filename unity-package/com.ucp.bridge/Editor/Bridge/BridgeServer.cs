@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.4.6";
+        private const string ProtocolVersion = "0.5.0";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -162,6 +162,9 @@ namespace UCP.Bridge
 
             // Package management
             PackagesController.Register(s_router);
+
+            // Reference search (bridge fallback)
+            ReferenceController.Register(s_router);
         }
 
         private static void StartServer()

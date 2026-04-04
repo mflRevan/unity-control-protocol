@@ -1,4 +1,4 @@
-# Play Mode
+# Play Mode & Compilation
 
 Control Unity's play mode state from the command line.
 

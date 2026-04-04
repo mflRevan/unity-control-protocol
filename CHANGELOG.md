@@ -22,7 +22,7 @@
 - Updated SKILL.md with reference search guidance, including when to use `--detail summary` for agent-optimized context efficiency.
 - Expanded asset docs and skill guidance to cover Unity-safe move and bulk-move workflows for asset cleanup and refactoring.
 - Reorganized documentation into workflow-oriented `overview`, `authoring`, `runtime`, and `project` sections, replaced the old command inventory overview with stable lifecycle/setup guidance, and preserved legacy `/docs/commands/*` links through website aliases.
-- Frontend/docs redesign: redesigned navbar with spring-animated sliding indicator, docs sidebar with glowing section headers and active-item indicators, improved prose rendering (h2 accent bars, inline-code tinting, animated link underlines, table hover states), enhanced homepage feature cards and architecture hover effects, added terminal syntax coloring, and fixed Discord icon centering.
+- Frontend/docs redesign
 
 ## [0.4.6] - 2026-04-01
 

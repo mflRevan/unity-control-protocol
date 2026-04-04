@@ -68,6 +68,22 @@ pub enum AssetAction {
         /// Asset path
         path: String,
     },
+    /// Move or rename an asset or folder through Unity while preserving its GUID
+    Move {
+        /// Source asset or folder path
+        path: String,
+        /// Destination asset path, or destination folder path
+        destination: String,
+    },
+    /// Move multiple assets or folders through Unity in one ordered batch
+    BulkMove {
+        /// JSON array or object map describing moves
+        #[arg(long)]
+        moves: String,
+        /// Continue processing later moves after an individual move fails
+        #[arg(long)]
+        continue_on_error: bool,
+    },
     /// Reimport an asset or meta file through Unity
     Reimport {
         /// Asset path or .meta path
@@ -185,6 +201,32 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         AssetAction::Delete { path } => {
             client
                 .call("asset/delete", serde_json::json!({ "path": path }))
+                .await?
+        }
+        AssetAction::Move { path, destination } => {
+            client
+                .call(
+                    "asset/move",
+                    serde_json::json!({
+                        "path": path,
+                        "destination": destination
+                    }),
+                )
+                .await?
+        }
+        AssetAction::BulkMove {
+            moves,
+            continue_on_error,
+        } => {
+            let parsed = parse_bulk_moves(moves)?;
+            client
+                .call(
+                    "asset/bulk-move",
+                    serde_json::json!({
+                        "moves": parsed,
+                        "continueOnError": continue_on_error
+                    }),
+                )
                 .await?
         }
         AssetAction::Reimport { path } => {
@@ -331,6 +373,91 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             AssetAction::Delete { path } => {
                 output::print_success(&format!("Deleted asset: {path}"));
             }
+            AssetAction::Move { path, destination } => {
+                let changed = result
+                    .get("changed")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(true);
+                if changed {
+                    output::print_success(&format!("Moved asset: {path} → {destination}"));
+                } else {
+                    let final_path = result
+                        .get("destinationPath")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(destination);
+                    output::print_success(&format!("Asset already at destination: {final_path}"));
+                }
+            }
+            AssetAction::BulkMove { .. } => {
+                let requested = result
+                    .get("requested")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let moved = result
+                    .get("moved")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+                let failed = result
+                    .get("failed")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0);
+
+                if failed == 0 {
+                    output::print_success(&format!(
+                        "Moved {moved}/{requested} asset(s) successfully"
+                    ));
+                } else {
+                    output::print_warn(&format!(
+                        "Moved {moved}/{requested} asset(s); {failed} failed"
+                    ));
+                }
+
+                if let Some(results) = result.get("results").and_then(|value| value.as_array()) {
+                    for entry in results.iter().take(8) {
+                        let source = entry
+                            .get("sourcePath")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("?");
+                        let destination = entry
+                            .get("destinationPath")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("?");
+                        let changed = entry
+                            .get("changed")
+                            .and_then(|value| value.as_bool())
+                            .unwrap_or(true);
+                        if changed {
+                            eprintln!("  {source} → {destination}");
+                        } else {
+                            eprintln!("  {source} (unchanged)");
+                        }
+                    }
+                    if results.len() > 8 {
+                        eprintln!("  ... {} more result(s)", results.len() - 8);
+                    }
+                }
+
+                if let Some(errors) = result.get("errors").and_then(|value| value.as_array()) {
+                    for entry in errors.iter().take(8) {
+                        let index = entry
+                            .get("index")
+                            .and_then(|value| value.as_u64())
+                            .unwrap_or(0);
+                        let source = entry
+                            .get("sourcePath")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("?");
+                        let message = entry
+                            .get("message")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("move failed");
+                        eprintln!("  [move #{index}] {source}: {message}");
+                    }
+                    if errors.len() > 8 {
+                        eprintln!("  ... {} more error(s)", errors.len() - 8);
+                    }
+                }
+            }
             AssetAction::Reimport { .. } => {
                 let asset_path = result
                     .get("assetPath")
@@ -426,7 +553,9 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
         AssetAction::Write { .. }
         | AssetAction::WriteBatch { .. }
         | AssetAction::CreateSo { .. }
-        | AssetAction::Delete { .. } => true,
+        | AssetAction::Delete { .. }
+        | AssetAction::Move { .. }
+        | AssetAction::BulkMove { .. } => true,
         AssetAction::Reimport { .. } => true,
         AssetAction::ImportSettings { action } => match action {
             ImportSettingsAction::Read { .. } => false,
@@ -443,5 +572,29 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
         AssetAction::Search { .. }
         | AssetAction::Info { .. }
         | AssetAction::Read { .. } => false,
+    }
+}
+
+fn parse_bulk_moves(value: &str) -> anyhow::Result<serde_json::Value> {
+    let parsed: serde_json::Value = serde_json::from_str(value)?;
+    match parsed {
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => Ok(parsed),
+        _ => anyhow::bail!("--moves must be a JSON array or object map"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bulk_moves;
+
+    #[test]
+    fn parse_bulk_moves_accepts_array_and_object_map() {
+        assert!(parse_bulk_moves(r#"[{"from":"Assets/A","to":"Assets/B"}]"#).is_ok());
+        assert!(parse_bulk_moves(r#"{"Assets/A":"Assets/B"}"#).is_ok());
+    }
+
+    #[test]
+    fn parse_bulk_moves_rejects_scalar_json() {
+        assert!(parse_bulk_moves(r#""Assets/A""#).is_err());
     }
 }

@@ -212,7 +212,7 @@ This matters because UCP ships through multiple channels and the cost of drift i
 #### Local Validation Commands
 
 ```powershell
-# CLI compile check and unit tests (43 tests)
+# CLI compile check and unit tests (76 tests)
 cargo test --manifest-path cli\Cargo.toml
 
 # Version metadata sync check
@@ -328,6 +328,71 @@ The bridge package must compile and function correctly across Unity 6.0 through 
 - `SerializedObject` must always call `.Update()` before reading/writing properties and use `try/finally` for `.Dispose()`. Omitting `.Update()` crashes Unity 6000.4.
 - `com.unity.modules.adaptiveperformance` and `com.unity.modules.vectorgraphics` do not exist before Unity 6000.3; the matrix sanitizes these from the manifest for older editors.
 - Tests in the test assembly cannot reference `internal` types from the bridge assembly; use `EditorUtility` directly instead of `UnityObjectCompat`.
+
+### Reference Indexing (`cli/src/commands/references/`)
+
+The `ucp references` command family provides high-performance asset reference search entirely from the Rust CLI without requiring an active Unity editor session.
+
+#### Architecture
+
+The feature is split into two layers:
+
+- **Rust engine** (`engine.rs`): parses Unity text-serialized YAML files directly from disk using parallel scanning (rayon), extracting `{fileID, guid, type}` references and building an in-memory reverse-reference index. Two scanning approaches are available:
+  - `grep`: fast regex-based extraction (~22ms for 424 files in release). Lower data quality — captures GUIDs and source paths but limited object context.
+  - `yaml`: structured document-boundary parsing with two-pass name resolution (~24ms for 424 files in release). Captures source object type, name, property path, and file IDs. Default approach.
+- **Bridge fallback** (`ReferenceController.cs`): for projects that use binary serialization, falls back to `AssetDatabase.GetDependencies` plus `SerializedObject` property walking. Requires an active editor connection.
+
+#### Intelligent Output Grouping
+
+Results are grouped and truncated to minimize context bloat, especially important for agent consumers:
+
+- **Pattern detection**: repetitive reference patterns (e.g., 100 MeshRenderers all referencing the same material) are collapsed into `N × Type.property` summaries with sample names
+- **File-level aggregation**: references are grouped by source file with per-file pattern summaries and distinct object counts
+- **Detail levels**: `--detail summary|normal|verbose` controls output depth:
+  - `summary`: file counts + patterns only (264 refs → 189 chars JSON)
+  - `normal`: patterns + non-pattern details up to `--max-per-file` limit (264 refs → 499 chars)
+  - `verbose`: all individual references, no truncation (264 refs → 1299 chars)
+- **Configurable limits**: `--max-files`, `--max-per-file`, `--pattern-threshold`
+
+#### Serialization Requirements
+
+Native Rust indexing requires both:
+- **Force Text** serialization (`EditorSettings.asset → m_SerializationMode: 2`)
+- **Visible Meta Files** (`VersionControlSettings.asset → m_Mode: Visible Meta Files`)
+
+The CLI auto-detects these settings from disk. If either is missing, it prints a recommendation and falls back to the bridge. `ucp doctor` and `ucp install` both surface these checks.
+
+#### Commands
+
+```
+ucp references find --asset <path|guid> [--approach auto|rust-grep|rust-yaml|bridge]
+                                        [--detail summary|normal|verbose]
+                                        [--max-files 50] [--max-per-file 5]
+                                        [--pattern-threshold 3]
+ucp references find --object <guid:fileId>
+ucp references index build [--approach grep|yaml|auto]
+ucp references index status
+ucp references index clear
+ucp references check
+```
+
+#### Data Model
+
+Each reference hit contains: source path, source object type, source object name (when available), source file ID, target GUID, target file ID, and the property path where the reference was found.
+
+Grouped results (`GroupedResults`) add: per-file summaries with pattern detection, top-level cross-file patterns, total/distinct-object counts, and truncation indicators.
+
+The index scans all Unity-serialized file types: `.unity`, `.prefab`, `.mat`, `.asset`, `.controller`, `.anim`, `.overrideController`, `.playable`, `.signal`, `.flare`, `.physicsMaterial`, `.physicMaterial`, `.renderTexture`, `.lighting`, `.giparams`, `.mask`.
+
+#### Performance (424 files, 4377 refs, release build)
+
+- Full index build: grep 22ms, yaml 24ms (parallel via rayon)
+- Any find query: ~25ms regardless of result count
+- JSON output: 112–1299 chars depending on detail level (vs 50KB+ raw)
+
+#### Lifecycle
+
+Reference queries are **read-only** — no editor mutations, no bridge connection required for the Rust path.
 
 ## What To Preserve As The Codebase Grows
 

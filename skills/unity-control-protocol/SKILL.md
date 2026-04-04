@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.4.6'
+  version: '0.5.0'
 ---
 
 # Unity Control Protocol (UCP)
@@ -26,14 +26,13 @@ UCP and Unity expose a broad command surface. If you are unsure what is availabl
 - The user asks to enter/exit play mode, run tests, capture screenshots, or read logs
 - The user needs to manage scenes, project settings, build pipelines, or scripting defines
 - The user needs to browse/install Unity packages, manage scoped registries, or selectively import `.unitypackage` content
-- The user wants to automate Unity Editor workflows from CI/CD, scripts, or agents
-- The user mentions Plastic SCM / Unity VCS operations and needs a bridge-backed fallback rather than the native `cm` CLI
+- The user wants to automate entire Unity Editor workflows
+- The user wants to find all references to an asset, script, material, or prefab across the project
 
 ## When NOT to use this skill
 
 - The user is writing C# game code without needing editor automation
 - The user is working in a non-Unity project
-- UCP is not installed (`ucp doctor` will confirm)
 
 ## Setup & connection
 
@@ -60,8 +59,6 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 - For imported assets such as FBX, textures, and audio, prefer `ucp asset import-settings ...` over raw `.meta` file edits.
 - `ucp files write` and `ucp files patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
 - Prefer `ucp packages add|remove` for normal Package Manager installs and `ucp packages dependency ...` for explicit manifest-driven local `file:` references.
-- `ucp packages unitypackage inspect|import` gives a deterministic, agent-friendly path for Asset Store-style archives, including selective folder/asset import.
-- `ucp play` can fail when Unity is blocked by compile errors; fix the errors first, then retry.
 - Prefer `cm` for normal Unity Version Control work; use `ucp vcs` only as a lightweight fallback.
 
 ## Scene & editor basics
@@ -70,6 +67,7 @@ If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --he
 
 ```bash
 ucp scene snapshot --filter "Player"
+ucp scene save # save active scene before loading another
 ucp scene load Assets/Scenes/Level1.unity
 ucp scene focus --id 46894 --axis 1 0 0
 
@@ -87,6 +85,8 @@ ucp object get-fields --id 46894 --component Transform
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
 
 ucp asset search -t Material --max 10
+ucp asset move "Assets/Legacy/Enemy.prefab" "Assets/Characters/Enemy.prefab"
+ucp asset bulk-move --moves '[{"from":"Assets/Legacy/Enemy.mat","to":"Assets/Characters/Materials/Enemy.mat"}]'
 ucp asset import-settings write "Assets/Textures/HUD.png" --field m_IsReadable --value true
 
 ucp material set-property --path "Assets/Materials/Agent.mat" --property _Metallic --value "0.5"
@@ -94,6 +94,8 @@ ucp prefab apply --id -136722
 ```
 
 Object reference writes accept `instanceId`, asset `path`, or asset `guid`, and unresolved references fail explicitly.
+
+Use `ucp asset move` / `bulk-move` for Unity-aware renames and folder cleanup instead of raw filesystem moves. That keeps `.meta` files and GUIDs intact so scenes, prefabs, build settings, and serialized object references continue to resolve.
 
 ## Packages, settings, build, logs, tests, profiler, and exec
 
@@ -119,13 +121,39 @@ ucp exec run SetupScene
 
 Prefer fully qualified test names when filtering, and use `--json` for structured log or test consumption.
 
+## Reference search
+
+Use `ucp references --help` for the full surface. Reference queries are read-only and do not require a running editor when native Rust indexing is available (Force Text + Visible Meta Files).
+
+```bash
+# Check native indexing compatibility
+ucp references check
+
+# Find all references to a material
+ucp references find --asset "Assets/Materials/Agent.mat"
+
+# Find by GUID
+ucp references find --asset 933532a4fcc9baf4fa0491de14d08ed7
+
+# Summary detail for minimal context bloat
+ucp references find --asset "Assets/Scripts/PlayerController.cs" --detail summary
+
+# JSON output for structured consumption
+ucp references find --asset "Assets/Prefabs/Enemy.prefab" --json --detail normal
+
+# Force bridge fallback (requires running editor)
+ucp references find --asset "Assets/Materials/Agent.mat" --approach bridge
+```
+
+Use `--detail summary` in general workflows to minimize context bloat — repetitive patterns (e.g., 200 MeshRenderers referencing one material) collapse to a single count line. Use `--detail verbose` only for small, targeted result sets.
+
 ## Version control (Plastic SCM / Unity VCS)
 
 ```bash
 ucp vcs
 ```
 
-Prefer the native `cm` CLI for normal Unity Version Control work when it is available. Use `ucp vcs` as a lightweight fallback that prints the currently available bridge-backed VCS commands and flags.
+Prefer the native `cm` CLI for Unity VCS when it's available. Use `ucp vcs` as a lightweight fallback that prints the currently available bridge-backed VCS commands and flags.
 
 ## Common workflows
 
@@ -159,7 +187,7 @@ Use this for bridge-native authoring loops: assemble hierarchy in-scene, attach 
 
 ```bash
 # Preferred when you already have workspace access
-<edit file locally>
+<edit scripts/files locally>
 ucp compile
 
 # Fallback when you want bridge-mediated writes

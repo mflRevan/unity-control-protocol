@@ -117,6 +117,67 @@ ucp asset delete "Assets/UcpTemp"
 
 Use this instead of deleting Unity-managed assets directly on disk when the asset is already known to the editor. That keeps the asset database, meta handling, and import lifecycle coherent.
 
+### `ucp asset move <path> <destination>`
+
+Move or rename an asset or folder through Unity's asset database. This preserves the existing `.meta` file and GUID, so scene references, prefab references, ScriptableObject references, and other serialized links stay intact.
+
+```bash
+# Rename an asset
+ucp asset move "Assets/Configs/GameConfig.asset" "Assets/Configs/GameConfig.Legacy.asset"
+
+# Move an asset into a different folder (folders are created automatically)
+ucp asset move "Assets/Textures/HUD.png" "Assets/UI/Textures/HUD.png"
+
+# Move into an existing folder while keeping the same file name
+ucp asset move "Assets/Prefabs/Enemy.prefab" "Assets/Archive/"
+
+# Move a whole folder
+ucp asset move "Assets/OldEnvironment" "Assets/Archive/OldEnvironment"
+```
+
+**Notes:**
+
+- Moves are currently supported for paths under `Assets/`.
+- If the destination folder does not exist, UCP creates it automatically.
+- If the destination already exists, the move fails explicitly.
+- UCP waits for Unity to finish processing the move before the command returns.
+
+### `ucp asset bulk-move`
+
+Move multiple assets or folders in one ordered batch. This is useful for cleanup, renames, and larger refactors where you want Unity to preserve GUIDs and keep references intact across all moved assets.
+
+```bash
+# Ordered array form
+ucp asset bulk-move --moves '[
+  {"from":"Assets/Legacy/Player.prefab","to":"Assets/Characters/Player.prefab"},
+  {"from":"Assets/Legacy/Player.mat","to":"Assets/Characters/Materials/Player.mat"}
+]'
+
+# Object map form
+ucp asset bulk-move --moves '{
+  "Assets/Legacy/Enemy.prefab":"Assets/Characters/Enemy.prefab",
+  "Assets/Legacy/Enemy.mat":"Assets/Characters/Materials/Enemy.mat"
+}'
+
+# Best-effort cleanup pass
+ucp asset bulk-move --moves '[
+  {"from":"Assets/Temp/A.asset","to":"Assets/Archive/A.asset"},
+  {"from":"Assets/Temp/B.asset","to":"Assets/Archive/B.asset"}
+]' --continue-on-error
+```
+
+| Flag                    | Description                                                   |
+| ----------------------- | ------------------------------------------------------------- |
+| `--moves <json>`        | JSON array of `{from,to}` entries or an object map            |
+| `--continue-on-error`   | Keep processing later entries after an individual move fails  |
+
+**Notes:**
+
+- Bulk moves execute in the order provided.
+- Without `--continue-on-error`, UCP stops on the first failed move.
+- Earlier successful moves are not rolled back automatically.
+- Use `--json` when you want per-entry success/error details for larger refactors.
+
 ### `ucp asset reimport <path>`
 
 Force Unity to reimport a specific asset. The path may point to either the asset itself or its `.meta` file.

@@ -64,6 +64,6 @@ ucp build targets
 
 ## What's Next?
 
-- [Commands Overview](/docs/commands) - Full reference for every command
-- [Connection](/docs/commands/connection) - How connection and discovery works
-- [Object & Components](/docs/commands/objects) - Inspect and modify GameObjects
+- [CLI Overview](/docs/overview) - Global flags, lifecycle, and recommended workflows
+- [Project Setup & Bridge](/docs/overview/project-setup) - Install, connect, and diagnose bridge state
+- [Objects & Components](/docs/authoring/objects) - Inspect and modify GameObjects

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -17,6 +18,8 @@ namespace UCP.Bridge
             router.Register("asset/write-batch", HandleWriteScriptableObjectBatch);
             router.Register("asset/create-so", HandleCreateScriptableObject);
             router.Register("asset/delete", HandleDeleteAsset);
+            router.Register("asset/move", HandleMoveAsset);
+            router.Register("asset/bulk-move", HandleBulkMoveAssets);
         }
 
         private static object HandleSearch(string paramsJson)
@@ -334,6 +337,87 @@ namespace UCP.Bridge
             };
         }
 
+        private static object HandleMoveAsset(string paramsJson)
+        {
+            var parameters = ParseParameters(paramsJson);
+            var sourcePath = RequirePathParameter(parameters, "path");
+            var destination = RequirePathParameter(parameters, "destination");
+
+            var result = MoveAssetInternal(sourcePath, destination, true);
+            return result;
+        }
+
+        private static object HandleBulkMoveAssets(string paramsJson)
+        {
+            var parameters = ParseParameters(paramsJson);
+            if (!parameters.TryGetValue("moves", out var movesObject) || movesObject == null)
+                throw new ArgumentException("Missing 'moves' parameter");
+
+            var continueOnError = TryGetOptionalBool(parameters, "continueOnError");
+            var requests = ParseMoveRequests(movesObject);
+            var results = new List<object>();
+            var errors = new List<object>();
+            var movedCount = 0;
+            var stopped = false;
+            var anyChanged = false;
+
+            AssetDatabase.StartAssetEditing();
+            try
+            {
+                for (var index = 0; index < requests.Count; index++)
+                {
+                    var request = requests[index];
+                    try
+                    {
+                        var moveResult = MoveAssetInternal(request.SourcePath, request.Destination, false);
+                        results.Add(AddMoveIndex(moveResult, index));
+                        if (GetBool(moveResult, "changed"))
+                        {
+                            movedCount++;
+                            anyChanged = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["sourcePath"] = request.SourcePath,
+                            ["destinationPath"] = request.Destination,
+                            ["message"] = ex.Message
+                        });
+
+                        if (!continueOnError)
+                        {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
+
+            if (anyChanged)
+            {
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
+
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["requested"] = requests.Count,
+                ["moved"] = movedCount,
+                ["failed"] = errors.Count,
+                ["stopped"] = stopped,
+                ["results"] = results,
+                ["errors"] = errors
+            };
+        }
+
         private static void CreateFoldersRecursive(string path)
         {
             var parts = path.Replace("\\", "/").Split('/');
@@ -419,6 +503,267 @@ namespace UCP.Bridge
         private static string NormalizeTypeFilter(string typeFilter)
         {
             return typeFilter?.Trim() ?? string.Empty;
+        }
+
+        private static Dictionary<string, object> MoveAssetInternal(string sourcePath, string destination, bool finalize)
+        {
+            var normalizedSource = NormalizeMovePath(sourcePath);
+            var isFolder = AssetDatabase.IsValidFolder(normalizedSource);
+            if (!isFolder && !AssetDatabase.AssetPathExists(normalizedSource))
+                throw new ArgumentException($"Asset not found: {normalizedSource}");
+
+            if (!IsMovableAssetPath(normalizedSource))
+                throw new ArgumentException($"Asset moves are only supported under Assets/: {normalizedSource}");
+
+            var identity = DescribeExistingAsset(normalizedSource, isFolder);
+            var resolvedDestination = ResolveDestinationPath(normalizedSource, destination);
+            if (!IsMovableAssetPath(resolvedDestination))
+                throw new ArgumentException($"Destination must be under Assets/: {resolvedDestination}");
+
+            if (string.Equals(normalizedSource, resolvedDestination, StringComparison.OrdinalIgnoreCase))
+            {
+                return DescribeMovedAsset(normalizedSource, resolvedDestination, false, identity);
+            }
+
+            if (AssetDatabase.AssetPathExists(resolvedDestination) || AssetDatabase.IsValidFolder(resolvedDestination))
+                throw new ArgumentException($"Destination already exists: {resolvedDestination}");
+
+            EnsureParentFoldersExist(resolvedDestination);
+
+            var moveError = AssetDatabase.MoveAsset(normalizedSource, resolvedDestination);
+            if (!string.IsNullOrEmpty(moveError))
+                throw new InvalidOperationException(moveError);
+
+            if (finalize)
+            {
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
+
+            return DescribeMovedAsset(normalizedSource, resolvedDestination, true, identity);
+        }
+
+        private static Dictionary<string, object> DescribeMovedAsset(
+            string sourcePath,
+            string destinationPath,
+            bool changed,
+            AssetIdentity identity)
+        {
+            var payload = new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["sourcePath"] = sourcePath,
+                ["destinationPath"] = destinationPath,
+                ["changed"] = changed,
+                ["guid"] = identity.Guid,
+                ["isFolder"] = identity.IsFolder
+            };
+
+            if (!string.IsNullOrEmpty(identity.Name))
+            {
+                payload["name"] = identity.Name;
+            }
+
+            if (!string.IsNullOrEmpty(identity.Type))
+            {
+                payload["type"] = identity.Type;
+            }
+
+            return payload;
+        }
+
+        private static AssetIdentity DescribeExistingAsset(string assetPath, bool isFolder)
+        {
+            var guid = GetGuidForAssetPath(assetPath);
+            var name = isFolder ? System.IO.Path.GetFileName(assetPath.TrimEnd('/')) : null;
+            var type = isFolder ? "Folder" : null;
+
+            if (!isFolder)
+            {
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+                if (mainAsset != null)
+                {
+                    name = mainAsset.name;
+                    type = mainAsset.GetType().Name;
+                }
+            }
+
+            return new AssetIdentity(guid, name, type, isFolder);
+        }
+
+        private static string GetGuidForAssetPath(string assetPath)
+        {
+            var guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (!string.IsNullOrEmpty(guid))
+                return guid;
+
+            var metaPath = ResolveProjectRelativePath(assetPath + ".meta");
+            if (!File.Exists(metaPath))
+                return string.Empty;
+
+            foreach (var line in File.ReadLines(metaPath))
+            {
+                if (!line.TrimStart().StartsWith("guid:", StringComparison.Ordinal))
+                    continue;
+
+                var parts = line.Split(new[] { ':' }, 2);
+                return parts.Length == 2 ? parts[1].Trim() : string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        private static string ResolveProjectRelativePath(string assetPath)
+        {
+            var projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.Combine(projectRoot, assetPath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private static string ResolveDestinationPath(string sourcePath, string destination)
+        {
+            var normalizedDestination = NormalizeMovePath(destination);
+            if (string.IsNullOrEmpty(normalizedDestination))
+                throw new ArgumentException("Missing 'destination' parameter");
+
+            if (AssetDatabase.IsValidFolder(normalizedDestination))
+                return normalizedDestination + "/" + System.IO.Path.GetFileName(sourcePath);
+
+            if (normalizedDestination.EndsWith("/", StringComparison.Ordinal))
+                return normalizedDestination.TrimEnd('/') + "/" + System.IO.Path.GetFileName(sourcePath);
+
+            return normalizedDestination;
+        }
+
+        private static void EnsureParentFoldersExist(string assetPath)
+        {
+            var parent = System.IO.Path.GetDirectoryName(assetPath)?.Replace("\\", "/");
+            if (string.IsNullOrEmpty(parent) || AssetDatabase.IsValidFolder(parent))
+                return;
+
+            CreateFoldersRecursive(parent);
+        }
+
+        private static string NormalizeMovePath(string path)
+        {
+            return path?.Trim().Replace('\\', '/');
+        }
+
+        private static bool IsMovableAssetPath(string path)
+        {
+            return !string.IsNullOrEmpty(path)
+                && (path.Equals("Assets", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static Dictionary<string, object> ParseParameters(string paramsJson)
+        {
+            return MiniJson.Deserialize(paramsJson) as Dictionary<string, object>
+                ?? throw new ArgumentException("Invalid parameters");
+        }
+
+        private static string RequirePathParameter(Dictionary<string, object> parameters, string key)
+        {
+            if (!parameters.TryGetValue(key, out var valueObject) || valueObject == null)
+                throw new ArgumentException($"Missing '{key}' parameter");
+
+            var value = valueObject.ToString();
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException($"Missing '{key}' parameter");
+
+            return value;
+        }
+
+        private static bool TryGetOptionalBool(Dictionary<string, object> parameters, string key)
+        {
+            return parameters.TryGetValue(key, out var valueObject)
+                && valueObject != null
+                && Convert.ToBoolean(valueObject);
+        }
+
+        private static List<MoveRequest> ParseMoveRequests(object movesObject)
+        {
+            var requests = new List<MoveRequest>();
+
+            if (movesObject is List<object> list)
+            {
+                foreach (var item in list)
+                {
+                    if (!(item is Dictionary<string, object> entry))
+                        throw new ArgumentException("Each bulk move entry must be an object");
+
+                    requests.Add(new MoveRequest(
+                        RequireMoveEntry(entry, "from"),
+                        RequireMoveEntry(entry, "to")));
+                }
+            }
+            else if (movesObject is Dictionary<string, object> map)
+            {
+                foreach (var entry in map)
+                {
+                    if (entry.Value == null)
+                        throw new ArgumentException($"Missing destination for bulk move source '{entry.Key}'");
+                    requests.Add(new MoveRequest(entry.Key, entry.Value.ToString()));
+                }
+            }
+            else
+            {
+                throw new ArgumentException("'moves' must be a JSON array or object map");
+            }
+
+            return requests;
+        }
+
+        private static string RequireMoveEntry(Dictionary<string, object> entry, string key)
+        {
+            if (!entry.TryGetValue(key, out var valueObject) || valueObject == null)
+                throw new ArgumentException($"Bulk move entry missing '{key}'");
+
+            var value = valueObject.ToString();
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException($"Bulk move entry missing '{key}'");
+
+            return value;
+        }
+
+        private static Dictionary<string, object> AddMoveIndex(Dictionary<string, object> payload, int index)
+        {
+            payload["index"] = index;
+            return payload;
+        }
+
+        private static bool GetBool(Dictionary<string, object> payload, string key)
+        {
+            return payload.TryGetValue(key, out var valueObject)
+                && valueObject != null
+                && Convert.ToBoolean(valueObject);
+        }
+
+        private readonly struct MoveRequest
+        {
+            public MoveRequest(string sourcePath, string destination)
+            {
+                SourcePath = sourcePath;
+                Destination = destination;
+            }
+
+            public string SourcePath { get; }
+            public string Destination { get; }
+        }
+
+        private readonly struct AssetIdentity
+        {
+            public AssetIdentity(string guid, string name, string type, bool isFolder)
+            {
+                Guid = guid ?? string.Empty;
+                Name = name;
+                Type = type;
+                IsFolder = isFolder;
+            }
+
+            public string Guid { get; }
+            public string Name { get; }
+            public string Type { get; }
+            public bool IsFolder { get; }
         }
 
     }

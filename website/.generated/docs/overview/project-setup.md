@@ -1,4 +1,6 @@
-# Connection
+# Project Setup & Bridge
+
+This section covers installing the bridge, establishing connectivity, and diagnosing project-level setup issues before you start authoring or runtime workflows.
 
 ## How Discovery Works
 
@@ -33,7 +35,7 @@ ucp --unity "C:/Program Files/Unity/Hub/Editor/6000.3.1f1/Editor/Unity.exe" conn
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.4.6
+  | Protocol: 0.5.0
 ```
 
 By default, `ucp connect` auto-updates stale tracked bridge refs before launching Unity. To warn without mutating the project, use `--bridge-update-policy warn`.
@@ -97,7 +99,7 @@ ucp doctor
 
 ## Related lifecycle commands
 
-Connection commands now integrate with the editor lifecycle surface documented in `docs/commands/editor.md`.
+Connection commands integrate with the [Editor Lifecycle](/docs/overview/editor-lifecycle) surface.
 
 ```bash
 ucp open
