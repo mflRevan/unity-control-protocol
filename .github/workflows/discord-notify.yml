@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
 
+# Releases created inside GitHub Actions with the default GITHUB_TOKEN do not
+# trigger this workflow. Automated tag releases send Discord notifications from
+# release.yml; this workflow remains as the path for manual or external release
+# publications.
+
 jobs:
   notify:
     runs-on: ubuntu-latest

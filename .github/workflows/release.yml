@@ -196,3 +196,47 @@ jobs:
         run: cd npm && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  notify-discord:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract release notes from CHANGELOG
+        id: release-notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { capture=1; next }
+            capture && $0 ~ "^## \\[" { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "Failed to extract release notes for ${VERSION} from CHANGELOG.md" >&2
+            exit 1
+          fi
+
+          {
+            echo 'body<<EOF'
+            cat release-notes.md
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send Discord notification
+        uses: SethCohen/github-releases-to-discord@v1.19.0
+        with:
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          color: "2105893"
+          username: "UCP Release"
+          avatar_url: "https://raw.githubusercontent.com/mflRevan/unity-control-protocol/main/assets/branding/ucp-icon-128.png"
+          footer_title: "Unity Control Protocol"
+          footer_timestamp: true
+          reduce_headings: true
+          release_name: ${{ github.ref_name }}
+          release_body: ${{ steps.release-notes.outputs.body }}
+          release_html_url: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}
