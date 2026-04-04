@@ -652,7 +652,10 @@ fn clear_session(project: &Path) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{forced_version_warning, installed_unity_versions, read_hub_path_string};
+    use super::{
+        forced_version_warning, installed_unity_versions, read_hub_path_string,
+        unity_executable_name,
+    };
     use std::fs;
     use std::path::PathBuf;
 
@@ -684,12 +687,16 @@ mod tests {
         fs::create_dir_all(root.join("6000.3.1f1").join("Editor")).unwrap();
         fs::create_dir_all(root.join("2023.1.7f1").join("Editor")).unwrap();
         fs::write(
-            root.join("6000.3.1f1").join("Editor").join("Unity.exe"),
+            root.join("6000.3.1f1")
+                .join("Editor")
+                .join(unity_executable_name()),
             b"",
         )
         .unwrap();
         fs::write(
-            root.join("2023.1.7f1").join("Editor").join("Unity.exe"),
+            root.join("2023.1.7f1")
+                .join("Editor")
+                .join(unity_executable_name()),
             b"",
         )
         .unwrap();
