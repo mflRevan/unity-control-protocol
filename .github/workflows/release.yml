@@ -179,7 +179,20 @@ jobs:
           mkdir -p npm/bridge
           cp -R unity-package/com.ucp.bridge npm/bridge/com.ucp.bridge
 
+      - name: Check whether npm version already exists
+        id: npm-version
+        run: |
+          PACKAGE_NAME=$(node -p "require('./npm/package.json').name")
+          VERSION="${GITHUB_REF_NAME#v}"
+          if npm view "${PACKAGE_NAME}@${VERSION}" version --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${VERSION} is already published; skipping npm publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npmjs
+        if: steps.npm-version.outputs.published != 'true'
         run: cd npm && npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
