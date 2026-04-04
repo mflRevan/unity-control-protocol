@@ -21,56 +21,36 @@ import {
   Settings,
   Hammer,
   Bot,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { docsNavigation } from '@/lib/docs-content';
 
-interface NavItem {
-  title: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-interface NavGroup {
-  title: string;
-  items: NavItem[];
-}
-
-const navigation: NavGroup[] = [
-  {
-    title: 'Getting Started',
-    items: [
-      { title: 'Introduction', href: '/docs', icon: BookOpen },
-      { title: 'Installation', href: '/docs/installation', icon: Download },
-      { title: 'Quick Start', href: '/docs/quickstart', icon: Zap },
-    ],
-  },
-  {
-    title: 'Commands',
-    items: [
-      { title: 'Overview', href: '/docs/commands', icon: Terminal },
-      { title: 'Connection', href: '/docs/commands/connection', icon: Plug },
-      { title: 'Play Mode', href: '/docs/commands/playmode', icon: Gamepad2 },
-      { title: 'Profiler', href: '/docs/commands/profiler', icon: Gauge },
-      { title: 'Scenes', href: '/docs/commands/scenes', icon: FolderCode },
-      { title: 'Files', href: '/docs/commands/files', icon: FileCode2 },
-      { title: 'Screenshots & Logs', href: '/docs/commands/media', icon: Camera },
-      { title: 'Testing', href: '/docs/commands/testing', icon: TestTube2 },
-      { title: 'Scripting', href: '/docs/commands/scripting', icon: ScrollText },
-      { title: 'Version Control', href: '/docs/commands/vcs', icon: GitBranch },
-      { title: 'Objects & Components', href: '/docs/commands/objects', icon: Box },
-      { title: 'Assets', href: '/docs/commands/assets', icon: Package },
-      { title: 'Packages', href: '/docs/commands/packages', icon: Download },
-      { title: 'Materials', href: '/docs/commands/materials', icon: Palette },
-      { title: 'Prefabs', href: '/docs/commands/prefabs', icon: Puzzle },
-      { title: 'Settings', href: '/docs/commands/settings', icon: Settings },
-      { title: 'Build Pipeline', href: '/docs/commands/build', icon: Hammer },
-    ],
-  },
-  {
-    title: 'Agents',
-    items: [{ title: 'Skills', href: '/docs/agents/skills', icon: Bot }],
-  },
-];
+const iconByHref: Record<string, React.ComponentType<{ className?: string }>> = {
+  '/docs': BookOpen,
+  '/docs/installation': Download,
+  '/docs/quickstart': Zap,
+  '/docs/overview': Terminal,
+  '/docs/overview/project-setup': Plug,
+  '/docs/overview/editor-lifecycle': Terminal,
+  '/docs/authoring/scenes': FolderCode,
+  '/docs/authoring/objects': Box,
+  '/docs/authoring/prefabs': Puzzle,
+  '/docs/authoring/assets': Package,
+  '/docs/authoring/materials': Palette,
+  '/docs/authoring/references': Search,
+  '/docs/authoring/files': FileCode2,
+  '/docs/authoring/scripting': ScrollText,
+  '/docs/runtime/play-mode': Gamepad2,
+  '/docs/runtime/logs-and-media': Camera,
+  '/docs/runtime/testing': TestTube2,
+  '/docs/runtime/profiler': Gauge,
+  '/docs/project/packages': Download,
+  '/docs/project/settings': Settings,
+  '/docs/project/build': Hammer,
+  '/docs/project/version-control': GitBranch,
+  '/docs/agents/skills': Bot,
+};
 
 interface DocsSidebarProps {
   mobile?: boolean;
@@ -82,29 +62,36 @@ export function DocsSidebar({ mobile, onNavigate }: DocsSidebarProps) {
 
   return (
     <nav
-      className={cn('space-y-6', mobile ? 'px-2 py-4' : 'sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto pr-4')}
+      className={cn(
+        'docs-sidebar-scroll space-y-1',
+        mobile ? 'px-2 py-4' : 'sticky top-24 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2',
+      )}
     >
-      {navigation.map((group) => (
-        <div key={group.title}>
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
-            {group.title}
-          </h4>
+      {docsNavigation.map((group, gi) => (
+        <div key={group.title} className={gi > 0 ? 'pt-5' : ''}>
+          <div className="flex items-center gap-2.5 mb-3 px-3">
+            <div className="h-4 w-[3px] rounded-full bg-primary/50" />
+            <h4 className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-primary/55" style={{ textShadow: '0 0 12px var(--color-primary)' }}>
+              {group.title}
+            </h4>
+          </div>
           <ul className="space-y-0.5">
             {group.items.map((item) => {
               const isActive = location.pathname === item.href;
+              const Icon = iconByHref[item.href] ?? Terminal;
               return (
                 <li key={item.href}>
                   <Link
                     to={item.href}
                     onClick={onNavigate}
                     className={cn(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors',
+                      'flex items-center gap-2.5 py-2 rounded-md text-sm transition-all duration-200',
                       isActive
-                        ? 'bg-primary/10 text-primary font-medium'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                        ? 'bg-primary/8 text-primary font-medium border-l-2 border-primary px-3 pl-[10px]'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50 px-3',
                     )}
                   >
-                    <item.icon className="h-4 w-4 shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0" />
                     <span>{item.title}</span>
                     {isActive && <ChevronRight className="h-3 w-3 ml-auto" />}
                   </Link>

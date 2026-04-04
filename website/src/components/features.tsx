@@ -90,10 +90,11 @@ export function Features() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {features.map((feature, i) => (
             <FadeIn key={feature.title} delay={0.05 * i}>
-              <GlowCard className="h-full">
-                <div className="p-6 space-y-3">
+              <GlowCard className="h-full group/card">
+                <div className={`h-[2px] bg-linear-to-r ${feature.accent} opacity-60`} />
+                <div className="p-6 pt-5 space-y-3">
                   <div
-                    className={`inline-flex items-center justify-center w-10 h-10 rounded-lg bg-linear-to-br ${feature.accent}`}
+                    className={`inline-flex items-center justify-center w-10 h-10 rounded-lg bg-linear-to-br ${feature.accent} transition-transform duration-300 group-hover/card:scale-110`}
                   >
                     <feature.icon className="h-5 w-5 text-primary" />
                   </div>

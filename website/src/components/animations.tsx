@@ -133,7 +133,7 @@ export function GlowCard({ children, className = '' }: GlowCardProps) {
   return (
     <div
       ref={cardRef}
-      className={`relative overflow-hidden rounded-xl border border-border bg-card transition-colors hover:border-primary/30 ${className}`}
+      className={`relative overflow-hidden rounded-xl border border-border bg-card transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(167,139,250,0.06)] hover:-translate-y-0.5 ${className}`}
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

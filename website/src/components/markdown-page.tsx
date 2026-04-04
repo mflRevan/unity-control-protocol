@@ -180,10 +180,13 @@ function CodeFence({ className, children }: { className?: string; children?: Rea
   const highlighted = colorize(code, lang);
 
   return (
-    <div className="rounded-lg overflow-hidden border border-border bg-[#0d0d0f] my-5">
+    <div className="rounded-lg overflow-hidden border border-border bg-[#0d0d0f] my-5 transition-colors duration-200 hover:border-border/80">
       <div className="flex items-center justify-between px-4 py-2 bg-[#1a1a1e] border-b border-white/5">
         <span className="text-xs text-white/40 font-mono">{lang || 'code'}</span>
-        <button onClick={handleCopy} className="text-white/30 hover:text-white/70 transition-colors">
+        <button
+          onClick={handleCopy}
+          className="text-white/30 hover:text-white/70 transition-all duration-200 p-1 -m-1 rounded hover:bg-white/5"
+        >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>

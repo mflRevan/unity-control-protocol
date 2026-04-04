@@ -60,37 +60,36 @@ export function Hero() {
             </FadeIn>
 
             <FadeIn delay={0.8}>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link to="/docs">
-                  <Button size="lg" className="gap-2 group relative overflow-hidden">
-                    <span className="relative z-10 flex items-center gap-2">
-                      Get Started
-                      <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                    </span>
-                  </Button>
-                </Link>
-                <a href="https://github.com/mflRevan/unity-control-protocol" target="_blank" rel="noopener noreferrer">
-                  <Button size="lg" variant="outline" className="gap-2 border-border/60 hover:border-primary/40">
-                    <Github className="h-4 w-4" />
-                    View on GitHub
-                  </Button>
-                </a>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={1.0}>
-              <div
-                onClick={handleCopy}
-                className="inline-flex items-center gap-3 px-4 py-2.5 rounded-lg bg-muted/50 border border-border hover:border-primary/30 cursor-pointer transition-all group hover:bg-muted/80"
-              >
-                <code className="text-sm font-mono text-muted-foreground">
-                  <span className="text-primary/70">$</span> npm install -g @mflrevan/ucp
-                </code>
-                {copied ? (
-                  <Check className="h-4 w-4 text-emerald-500" />
-                ) : (
-                  <Copy className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                )}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link to="/docs">
+                    <Button size="lg" className="gap-2 group relative overflow-hidden">
+                      <span className="relative z-10 flex items-center gap-2">
+                        Get Started
+                        <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                      </span>
+                    </Button>
+                  </Link>
+                  <a href="https://github.com/mflRevan/unity-control-protocol" target="_blank" rel="noopener noreferrer">
+                    <Button size="lg" variant="outline" className="gap-2 border-border/60 hover:border-primary/40">
+                      <Github className="h-4 w-4" />
+                      View on GitHub
+                    </Button>
+                  </a>
+                </div>
+                <div
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-3 px-4 py-2.5 rounded-lg bg-muted/50 border border-border hover:border-primary/30 cursor-pointer transition-all group/copy hover:bg-muted/80"
+                >
+                  <code className="text-sm font-mono text-muted-foreground">
+                    <span className="text-primary/70">$</span> npm install -g @mflrevan/ucp
+                  </code>
+                  {copied ? (
+                    <Check className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-4 w-4 text-muted-foreground group-hover/copy:text-foreground transition-colors" />
+                  )}
+                </div>
               </div>
             </FadeIn>
           </div>

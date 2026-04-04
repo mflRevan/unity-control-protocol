@@ -49,10 +49,10 @@ export function Architecture() {
             <div className="relative grid md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-6 md:gap-4 items-center">
               {/* CLI Side */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center transition-all group-hover:scale-105 group-hover:border-primary/40 group-hover:shadow-[0_0_20px_var(--color-primary)/0.15]">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-primary/40 group-hover:shadow-[0_0_24px_rgba(167,139,250,0.15)]">
                   <Terminal className="h-8 w-8 text-primary" />
                 </div>
-                <div>
+                <div className="min-h-[4.5rem]">
                   <h3 className="font-semibold text-lg">CLI / Agent</h3>
                   <p className="text-sm text-muted-foreground mt-1.5">
                     Rust binary, AI agent, or CI/CD pipeline sends commands
@@ -75,10 +75,10 @@ export function Architecture() {
 
               {/* Connection */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-blue-500/15 to-cyan-500/5 border border-blue-500/20 flex items-center justify-center transition-all group-hover:scale-105 group-hover:border-blue-500/40">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-blue-500/15 to-cyan-500/5 border border-blue-500/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-blue-500/40 group-hover:shadow-[0_0_24px_rgba(59,130,246,0.15)]">
                   <Wifi className="h-8 w-8 text-blue-400" />
                 </div>
-                <div>
+                <div className="min-h-[4.5rem]">
                   <h3 className="font-semibold text-lg text-blue-400">WebSocket</h3>
                   <p className="text-sm text-muted-foreground mt-1.5">JSON-RPC 2.0 on localhost with token auth</p>
                 </div>
@@ -92,10 +92,10 @@ export function Architecture() {
 
               {/* Unity Side */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-emerald-500/15 to-green-500/5 border border-emerald-500/20 flex items-center justify-center transition-all group-hover:scale-105 group-hover:border-emerald-500/40">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-emerald-500/15 to-green-500/5 border border-emerald-500/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-emerald-500/40 group-hover:shadow-[0_0_24px_rgba(16,185,129,0.15)]">
                   <Box className="h-8 w-8 text-emerald-400" />
                 </div>
-                <div>
+                <div className="min-h-[4.5rem]">
                   <h3 className="font-semibold text-lg">Unity Editor</h3>
                   <p className="text-sm text-muted-foreground mt-1.5">
                     Bridge package receives commands and controls the editor

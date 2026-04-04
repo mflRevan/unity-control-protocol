@@ -75,6 +75,32 @@
   display: none;
 }
 
+/* Subtle docs sidebar scrollbar that blends into the surrounding chrome */
+.docs-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-foreground) 16%, transparent) transparent;
+}
+
+.docs-sidebar-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.docs-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.docs-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-foreground) 14%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.docs-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-primary) 24%, var(--color-foreground) 10%, transparent);
+  background-clip: padding-box;
+}
+
 /* Animated travelling dot for architecture diagram */
 @keyframes slideRight {
   0% {
@@ -98,13 +124,38 @@
   @apply max-w-none;
 }
 .prose-custom h1 {
-  @apply text-3xl font-bold tracking-tight mb-3;
+  @apply text-3xl font-bold tracking-tight mb-4;
 }
 .prose-custom h2 {
-  @apply text-xl font-semibold tracking-tight mt-12 mb-5 pt-7 border-t-2 border-primary/25 first:mt-0 first:pt-0 first:border-0;
+  @apply text-xl font-semibold tracking-tight mt-14 mb-5 pt-8 pl-4 relative first:mt-0 first:pt-0;
+}
+.prose-custom h2:not(:first-child) {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+}
+.prose-custom h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0.15em;
+  width: 3px;
+  height: 1em;
+  border-radius: 2px;
+  background: var(--color-primary);
+  opacity: 0.5;
 }
 .prose-custom h3 {
-  @apply text-lg font-semibold mt-8 mb-3;
+  @apply text-base font-semibold mt-8 mb-3 text-foreground/90;
+}
+.prose-custom h3::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  background: var(--color-primary);
+  opacity: 0.5;
+  vertical-align: middle;
+  margin-right: 0.5em;
+  border-radius: 1px;
 }
 .prose-custom p {
   @apply text-muted-foreground leading-relaxed mb-5;
@@ -135,28 +186,52 @@
   @apply text-foreground font-semibold;
 }
 .prose-custom code {
-  @apply text-sm font-mono bg-muted px-1.5 py-0.5 rounded text-foreground;
+  @apply text-[0.85em] font-mono px-1.5 py-0.5 rounded text-foreground;
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-muted));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 .prose-custom pre code {
   @apply bg-transparent p-0;
+  border: 0;
 }
 .prose-custom a {
-  @apply text-primary hover:underline;
+  @apply text-primary transition-colors duration-200;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  text-underline-offset: 3px;
+}
+.prose-custom a:hover {
+  text-decoration-color: var(--color-primary);
 }
 .prose-custom blockquote {
-  @apply border-l-2 border-primary/30 pl-4 my-5 text-muted-foreground italic;
+  @apply my-6 text-muted-foreground/80 italic rounded-r-lg;
+  border-left: 3px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  padding: 0.875rem 1.25rem;
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+.prose-custom hr {
+  @apply my-10 border-none h-px;
+  background: linear-gradient(to right, transparent, var(--color-border), transparent);
 }
 .prose-custom table {
   @apply w-full text-sm mb-8 border-collapse;
 }
 .prose-custom thead {
-  @apply border-b border-border;
+  @apply border-b-2 border-primary/15;
 }
 .prose-custom th {
-  @apply text-left py-2.5 px-4 font-semibold text-foreground;
+  @apply text-left py-3 px-4 font-semibold text-foreground text-sm;
+  background: color-mix(in srgb, var(--color-muted) 50%, transparent);
 }
 .prose-custom td {
-  @apply py-2.5 px-4 text-muted-foreground border-b border-border/30;
+  @apply py-2.5 px-4 text-muted-foreground;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+}
+.prose-custom tbody tr {
+  @apply transition-colors duration-150;
+}
+.prose-custom tbody tr:hover {
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
 }
 .terminal-prose {
   @apply max-w-none;

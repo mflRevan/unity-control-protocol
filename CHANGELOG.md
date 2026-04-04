@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0] - 2026-04-04
+
+### Added
+
+- Added `ucp references` command family for high-performance, Rust-native asset reference search. Parses Unity's text-serialized YAML directly from disk using parallel scanning (rayon), building a reverse-reference index without requiring a running Unity editor.
+  - `ucp references find --asset <path|guid>` finds all files and objects referencing a given asset, with intelligent output grouping and pattern detection.
+  - `ucp references index build` builds a full reference index with benchmarking output.
+  - `ucp references index status` and `ucp references index clear` for index management.
+  - `ucp references check` verifies project serialization compatibility for native indexing.
+- Added configurable output controls for reference queries: `--detail summary|normal|verbose`, `--max-files`, `--max-per-file`, `--pattern-threshold` to minimize context consumption for agent workflows.
+- Added bridge-based fallback (`ReferenceController.cs`) for projects using binary serialization, using `AssetDatabase.GetDependencies` plus `SerializedObject` property walking.
+- Added serialization compatibility checks (Force Text + Visible Meta Files) to `ucp doctor` and `ucp install`, with actionable recommendations when settings are missing.
+- Added `docs/authoring/references.md` with full usage documentation, syntax reference, flag descriptions, and output examples.
+- Added `ucp asset move <path> <destination>` for Unity-aware asset and folder moves through `AssetDatabase.MoveAsset`, preserving `.meta` files and GUIDs so references stay intact.
+- Added `ucp asset bulk-move --moves <json>` for ordered batch move/refactor workflows with structured per-entry results and optional `--continue-on-error`.
+
+### Changed
+
+- `ucp install` now automatically appends `.ucp/` to the project's shared ignore file for the active VCS when available: `.gitignore` for Git worktrees and `ignore.conf` for Unity VCS / Plastic workspaces. Repeated installs detect existing entries and do not duplicate them.
+- Updated SKILL.md with reference search guidance, including when to use `--detail summary` for agent-optimized context efficiency.
+- Expanded asset docs and skill guidance to cover Unity-safe move and bulk-move workflows for asset cleanup and refactoring.
+- Reorganized documentation into workflow-oriented `overview`, `authoring`, `runtime`, and `project` sections, replaced the old command inventory overview with stable lifecycle/setup guidance, and preserved legacy `/docs/commands/*` links through website aliases.
+- Frontend/docs redesign: redesigned navbar with spring-animated sliding indicator, docs sidebar with glowing section headers and active-item indicators, improved prose rendering (h2 accent bars, inline-code tinting, animated link underlines, table hover states), enhanced homepage feature cards and architecture hover effects, added terminal syntax coloring, and fixed Discord icon centering.
+
 ## [0.4.6] - 2026-04-01
 
 ### Added
