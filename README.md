@@ -1,395 +1,294 @@
 <p align="center">
-  <img src="assets/branding/ucp-icon.svg" alt="UCP logo" width="96" />
+  <img src="assets/branding/ucp-icon.svg" alt="UCP logo" width="80" />
 </p>
 
 <h1 align="center">Unity Control Protocol</h1>
 
 <p align="center">
-  CLI-first automation for the Unity Editor.
+  <strong>The complete command-line interface for the Unity Editor.</strong><br>
+  Control every part of the editor lifecycle from your terminal — scenes, objects,<br>assets, builds, tests, profiling — all through one CLI.
 </p>
 
 <p align="center">
-  <a href="assets/branding/ucp-icon.svg">SVG logo</a>
-  |
-  <a href="https://discord.gg/F4RjhdVTbz">Discord</a>
-  |
-  <a href="https://github.com/mflRevan/unity-control-protocol/releases">Releases</a>
-  |
-  <a href="https://unityctl.dev/docs">Docs</a>
-  |
-  <a href="https://www.npmjs.com/package/@mflrevan/ucp">npm</a>
+  <a href="https://www.npmjs.com/package/@mflrevan/ucp"><img src="https://img.shields.io/npm/v/@mflrevan/ucp?style=flat&color=7c3aed&label=npm" alt="npm version" /></a>&nbsp;
+  <a href="https://github.com/mflRevan/unity-control-protocol/releases"><img src="https://img.shields.io/github/v/release/mflRevan/unity-control-protocol?style=flat&color=7c3aed&label=release" alt="GitHub release" /></a>&nbsp;
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-7c3aed?style=flat" alt="MIT license" /></a>&nbsp;
+  <a href="https://discord.gg/F4RjhdVTbz"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
-UCP is a cross-platform CLI plus Unity Editor bridge for programmatic control of Unity projects. It is built for local automation, AI agents, CI/CD, and repeatable editor workflows across scenes, objects, assets, importer settings, packages, tests, builds, and profiler inspection.
+<p align="center">
+  <a href="https://unityctl.dev/docs">Documentation</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://github.com/mflRevan/unity-control-protocol/releases">Releases</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://discord.gg/F4RjhdVTbz">Discord</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://www.npmjs.com/package/@mflrevan/ucp">npm</a>
+</p>
 
-## What UCP is
+<br>
 
-UCP is split into two parts:
+## Why UCP
 
-- `ucp`: a Rust CLI for operators, agents, and scripts
-- `com.ucp.bridge`: a Unity Editor package that exposes editor operations over localhost WebSocket JSON-RPC
+Unity has no native CLI. If you want to automate anything — move an asset, run tests, adjust a material, trigger a build — you're stuck clicking through the editor or writing throwaway editor scripts.
 
-The bridge writes `.ucp/bridge.lock` in the Unity project root. The CLI reads that lock file, authenticates with a per-session token, and then talks to the editor through the bridge.
+UCP fixes that. It's a Rust CLI that talks to a lightweight bridge package running inside the Unity Editor over WebSocket. Every editor operation becomes a terminal command. Every command supports `--json` for machine consumption.
 
-Most bridge-backed commands can now auto-start Unity when the project and editor path can be resolved.
+This makes the Unity Editor fully scriptable — for you, for CI/CD, and for AI agents.
 
-## What ships in this repo
+<br>
 
-- `cli/`: Rust CLI exposed as `ucp`
-- `unity-package/com.ucp.bridge/`: Unity bridge package
-- `npm/`: npm wrapper that downloads the matching released binary and bundles the bridge payload
-- `docs/`: markdown docs source
-- `website/`: Vite/React docs site built from `docs/` and `skills/`
-- `skills/unity-control-protocol/SKILL.md`: canonical agent skill file
+<table>
+<tr>
+<td width="50%">
 
-## Recommended workflow
+**Without UCP**
+- Open Unity, wait for it to load
+- Click through menus to find assets
+- Manually move files, hope references don't break
+- Run tests by clicking a button and reading the console
+- Build by navigating three dialog boxes
+- Repeat for every project, every time
 
-This is the current happy-path workflow for real project use:
+</td>
+<td width="50%">
 
+**With UCP**
 ```bash
-cd /path/to/MyUnityProject
-ucp install
-ucp open
 ucp connect
-ucp scene snapshot
-ucp scene focus --id 46894 --axis 1 0 0
-
-# edit files locally in your workspace
-ucp compile
-
-ucp play
-ucp screenshot --view scene --output capture.png
-ucp stop
+ucp asset search -t Prefab -n "Enemy"
+ucp asset bulk-move --moves '[...]'
+ucp references check Assets/Prefabs
 ucp run-tests --mode edit
-ucp close
+ucp build start --output "Builds/Game.exe"
 ```
 
-Recommended usage notes:
+</td>
+</tr>
+</table>
 
-- Prefer normal workspace file edits plus `ucp compile` for script iteration.
-- Use `ucp files read|write|patch` when you intentionally want bridge-mediated project file I/O.
-- `ucp files write|patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
-- For imported assets such as textures, FBX models, and audio, prefer `ucp asset import-settings ...` over hand-editing `.meta` files.
-- Use `ucp asset reimport <path>` when you intentionally deferred apply work or changed an imported asset on disk outside Unity's importer workflow.
-- Use `ucp packages ...` for Unity Package Manager workflows and `ucp packages unitypackage ...` for selective `.unitypackage` inspection/import.
-- Use `ucp open` when you want an explicit lifecycle step.
-- Use `ucp connect` when you want "make sure Unity is running and verify the bridge is healthy" in one command.
-- Use `ucp scene snapshot` to discover instance IDs, then `ucp scene focus` and `ucp screenshot` for visual iteration loops.
+<br>
 
-## Install
+## How it works
 
-### npm
+```
+  Your Terminal                                          Unity Editor
+ ┌──────────────────┐     WebSocket / JSON-RPC      ┌──────────────────┐
+ │                  │     on localhost with token     │                  │
+ │   ucp CLI        │◄──────────────────────────────►│   UCP Bridge     │
+ │   (Rust binary)  │                                │   (Editor pkg)   │
+ │                  │                                │                  │
+ └──────────────────┘                                └──────────────────┘
+   ▲                                                   │
+   │  AI agents, CI/CD pipelines,                      │  Executes Unity API calls:
+   │  scripts, and humans all use                      │  AssetDatabase, SceneManager,
+   │  the same CLI interface                           │  EditorBuildSettings, TestRunner,
+   │                                                   │  SerializedObject, and more
+   └───────────────────────────────────────────────────┘
+```
+
+The bridge installs as a standard Unity package. When the editor opens, it starts a local WebSocket server and writes a lockfile. The CLI reads that lockfile, authenticates, and sends commands. No cloud services, no accounts, no editor plugins to configure.
+
+<br>
+
+## What you can control
+
+UCP covers the full Unity Editor lifecycle:
+
+```
+ SETUP & LIFECYCLE       SCENE AUTHORING          RUNTIME & TESTING       PROJECT & SHIPPING
+ ──────────────────      ──────────────────       ──────────────────      ──────────────────
+ doctor                  scene list|load|save     play / stop / pause     build targets|start
+ install / uninstall     scene snapshot|focus     compile                 settings player|editor
+ open / close            object create|get|set    run-tests               settings set-player|...
+ connect                 asset search|move        logs --follow           packages add|remove
+ bridge status|update    asset import-settings    screenshot              packages search|info
+ editor restart|status   material set-property    profiler session        packages unitypackage
+                         prefab create|apply      profiler summary        packages registries
+                         files read|write|patch   exec run                vcs
+                         references find|check
+```
+
+> Every command supports `--json` for structured output. Most support `--project`, `--timeout`, and `--verbose`.
+
+<br>
+
+## Workflows
+
+### 🔄 Massive asset refactor
+
+Rename and reorganize hundreds of assets without breaking a single reference:
+
+```bash
+ucp references find --asset "Assets/Materials/Legacy/" --detail summary
+ucp asset bulk-move --moves '[
+  {"from":"Assets/Materials/Legacy/Metal.mat",   "to":"Assets/Materials/PBR/Metal.mat"},
+  {"from":"Assets/Materials/Legacy/Wood.mat",    "to":"Assets/Materials/PBR/Wood.mat"},
+  {"from":"Assets/Prefabs/Old/Enemy.prefab",     "to":"Assets/Prefabs/Characters/Enemy.prefab"}
+]'
+ucp references check Assets/Prefabs Assets/Materials   # verify nothing broke
+ucp compile
+ucp run-tests --mode edit
+```
+
+`asset move` and `bulk-move` go through Unity's `AssetDatabase.MoveAsset` — `.meta` files and GUIDs stay intact, so every scene, prefab, and serialized reference keeps working.
+
+---
+
+### 🛠️ Full feature implementation cycle
+
+Build a feature end-to-end from the terminal — write code, assemble scene objects, test, and capture results:
+
+```bash
+# 1. Edit scripts in your IDE, then recompile
+ucp compile
+
+# 2. Build up scene hierarchy through the bridge
+ucp object create "EnemySpawner"
+ucp object add-component --id -15774 --component BoxCollider
+ucp object set-property --id -15774 --component BoxCollider --property m_Size --value "[5,2,5]"
+ucp prefab create --id -15774 --path "Assets/Prefabs/EnemySpawner.prefab"
+
+# 3. Visual verification
+ucp scene focus --id -15774 --axis 0 0 -1
+ucp screenshot --view scene --output spawner-preview.png
+
+# 4. Test and validate
+ucp run-tests --mode edit --filter "SpawnerTests"
+ucp logs --pattern "Exception|Error" --count 50
+```
+
+---
+
+### 🚀 CI/CD pipeline
+
+Gate your builds on real editor validation — not just compilation:
+
+```bash
+ucp connect                                    # start editor, wait for bridge
+ucp compile                                    # ensure scripts compile
+ucp run-tests --mode edit --json               # structured test results
+ucp build set-defines "CI;RELEASE"             # configure defines
+ucp build start --output "Builds/Game.exe"     # build player
+ucp close                                      # shut down cleanly
+```
+
+---
+
+### 🔍 Performance profiling
+
+Capture profiler data without touching Unity's profiler window:
+
+```bash
+ucp profiler session start --mode play
+ucp play
+# ... let the game run ...
+ucp profiler summary --limit 10
+ucp profiler hierarchy --frame latest --thread 0 --limit 20
+ucp profiler capture save --output session.json
+ucp stop
+```
+
+<br>
+
+## Quick start
+
+**1. Install the CLI**
 
 ```bash
 npm install -g @mflrevan/ucp
 ```
 
-### pnpm
+<details>
+<summary>Other install methods</summary>
 
+**pnpm**
 ```bash
 pnpm add -g @mflrevan/ucp
 pnpm approve-builds
 ```
 
-### from source
-
+**From source**
 ```bash
 git clone https://github.com/mflRevan/unity-control-protocol.git
 cd unity-control-protocol/cli
 cargo build --release
 ```
 
-### Claude Code plugin / marketplace
+**Binary** — download from [GitHub Releases](https://github.com/mflRevan/unity-control-protocol/releases).
 
-This repository is also Claude Code marketplace-compatible.
+</details>
 
-For local development or one-off testing:
-
-```bash
-claude --plugin-dir .
-```
-
-For marketplace-style installation from GitHub:
-
-```text
-/plugin marketplace add mflRevan/unity-control-protocol
-/plugin install ucp@unity-control-protocol
-```
-
-The default Claude Code marketplace install exposes only the base Unity automation skill:
-
-- `/ucp:unity-control-protocol`
-
-Repository support files for Claude Code users:
-
-- `.claude-plugin/plugin.json`: plugin manifest
-- `.claude-plugin/marketplace.json`: root marketplace catalog
-- `skills/unity-control-protocol/SKILL.md`: base skill shipped to Claude Code
-
-## Install the Unity bridge
-
-From a Unity project root:
+**2. Install the bridge in your Unity project**
 
 ```bash
+cd /path/to/YourUnityProject
 ucp install
 ```
 
-Default behavior:
+This adds `com.ucp.bridge` to `Packages/manifest.json`, pinned to the CLI version.
 
-- writes a tracked `com.ucp.bridge` dependency into `Packages/manifest.json`
-- pins that dependency to the matching CLI tag
-- stays non-interactive unless you pass `--confirm`
-- does not inject a local `file:` dependency
-
-Explicit local bridge development modes:
-
-- `ucp install --dev`
-- `ucp install --embedded`
-- `ucp install --bridge-path <path>`
-
-## Lifecycle and bridge behavior
-
-### `ucp open`
-
-- explicit editor bootstrap
-- launches Unity for the target project
-- waits for `.ucp/bridge.lock`
-- waits for handshake success
-- will not incorrectly treat a half-closed editor as healthy
-
-### `ucp connect`
-
-- ensures Unity is running
-- waits for the bridge
-- reports Unity version, project name, and protocol version
-- is the simplest “make this project ready for automation” entrypoint
-
-### `ucp close`
-
-- requests graceful shutdown through the bridge first
-- falls back to window-close behavior when needed
-- can force terminate with `ucp editor close --force`
-- now reports when the editor is still closing instead of falsely claiming success
-
-### bridge drift handling
-
-Before bridge-backed commands launch or connect, UCP checks whether the tracked bridge dependency is behind the current CLI version.
-
-- `auto`: update the tracked dependency before launch or connect
-- `warn`: report drift without mutating the project
-- `off`: skip drift handling
-
-Use `--bridge-update-policy warn` if you want notification-only behavior.
-
-### Unity resolution
-
-UCP resolves Unity in this order:
-
-1. `--unity <path>`
-2. `UCP_UNITY`
-3. saved CLI settings
-4. `--force-unity-version <version>`
-5. `ProjectSettings/ProjectVersion.txt`
-6. Unity Hub project metadata
-7. standard and secondary Unity Hub install roots
-8. `Unity.exe` on `PATH`
-
-If the project's configured Unity version is known but not installed, UCP fails instead of silently picking a different editor. Use `--force-unity-version <ver>` only when you explicitly accept that risk.
-
-## Core command surface
-
-### Setup and lifecycle
-
-- `ucp doctor`
-- `ucp install`
-- `ucp uninstall`
-- `ucp bridge status|update`
-- `ucp connect`
-- `ucp editor open|close|restart|status|logs|ps`
-- `ucp open|close`
-
-### Runtime control
-
-- `ucp play`
-- `ucp stop`
-- `ucp pause`
-- `ucp compile`
-- `ucp profiler ...`
-
-### Scene, files, media, tests, scripts
-
-- `ucp scene list|active|load|focus|snapshot`
-- `ucp files read|write|patch`
-- `ucp screenshot`
-- `ucp logs`
-- `ucp run-tests`
-- `ucp exec list|run`
-
-### Advanced editor control
-
-- `ucp object ...`
-- `ucp asset ...`
-- `ucp packages ...`
-- `ucp material ...`
-- `ucp prefab ...`
-- `ucp settings ...`
-- `ucp build ...`
-- `ucp vcs ...`
-
-All commands support `--json`. Most also support `--project`, `--unity`, `--bridge-update-policy`, `--dialog-policy`, `--timeout`, and `--verbose`.
-
-Profiler workflows are safe-by-default for live editor use: new sessions clear stale buffered frames when needed, recent-frame summaries are bounded, heavy flags are restored on stop, and editor-side capture export uses structured JSON snapshots rather than pretending live raw binary capture is available.
-
-Asset workflows are importer-aware: `ucp asset import-settings read|write|write-batch` expose importer settings directly, and `ucp asset reimport` gives an explicit targeted reimport path for assets or their `.meta` files.
-
-Package workflows now cover official Unity packages, manifest dependencies, scoped registries, and selective `.unitypackage` import. For external local packages, prefer `ucp packages dependency set <name> file:...` rather than treating folders under `Packages/` as normal add/remove targets.
-
-## Practical examples
-
-### Bootstrap and inspect
+**3. Connect and go**
 
 ```bash
-ucp doctor
-ucp connect
-ucp scene snapshot --depth 1
-ucp scene active
+ucp open                           # launch Unity, wait for bridge
+ucp scene snapshot --depth 1       # see your scene hierarchy
+ucp screenshot --output snap.png   # capture the scene view
 ```
 
-### Visual iteration loop
+> **Tip:** Run `ucp doctor` to validate your setup — Unity resolution, bridge health, and project serialization settings.
+
+<br>
+
+## AI agent integration
+
+UCP is built to be driven by AI coding agents. It ships as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin with a skill file that teaches agents the full command surface and common workflows.
 
 ```bash
-ucp scene snapshot --filter "Player"
-ucp scene focus --id 46894 --axis 0 0 -1
-ucp screenshot --view scene --output scene-pass.png
-ucp object set-property --id 46894 --component Transform --property m_LocalPosition --value "[0,1,0]"
-ucp screenshot --view scene --output scene-pass-2.png
+# Local plugin mode
+claude --plugin-dir /path/to/unity-control-protocol
+
+# Marketplace install
+/plugin marketplace add mflRevan/unity-control-protocol
 ```
 
-### Local code iteration
+Every command's `--json` flag gives agents structured, parseable output instead of human-formatted text.
 
-```bash
-# edit files in your editor
-ucp compile
-ucp run-tests --mode edit
-ucp logs --count 20
+<br>
+
+## Platform support
+
+| Platform | Architecture |
+|---|---|
+| Windows | x64 |
+| macOS | x64, ARM (Apple Silicon) |
+| Linux | x64 |
+
+Requires Unity 2021.3 or later. Tested across Unity 6 (`6000.0` – `6000.4`).
+
+<br>
+
+## Repository layout
+
 ```
-
-### Imported asset iteration
-
-```bash
-ucp asset import-settings read "Assets/Models/Enemy.fbx"
-ucp asset import-settings write "Assets/Models/Enemy.fbx" --field m_GlobalScale --value 0.5
-ucp asset import-settings write-batch "Assets/Textures/HUD.png" --values '{"m_IsReadable":true,"m_TextureType":8}'
-ucp asset reimport "Assets/Textures/HUD.png.meta"
-```
-
-Use importer-settings commands instead of manually patching `.meta` files when Unity exposes importer-managed settings.
-
-### Package management and selective import
-
-```bash
-ucp packages search com.unity.cinemachine
-ucp packages add com.unity.cinemachine
-ucp packages info com.unity.cinemachine
-
-ucp packages dependency set com.company.tooling file:../tooling-package
-ucp packages registries add --name github --url https://npm.pkg.github.com --scope com.company
-
-ucp packages unitypackage inspect Downloads/EnvironmentPack.unitypackage
-ucp packages unitypackage import Downloads/EnvironmentPack.unitypackage --select Assets/Environment/Trees
-```
-
-Notes:
-
-- `packages add|remove` is the normal UPM install/remove path.
-- `packages dependency ...` is the reliable path for explicit manifest-managed references such as external local `file:` packages.
-- Adding a brand-new scoped registry can trigger Unity's own **Importing a scoped registry** popup.
-- Selective `.unitypackage` import is implemented by archive inspection plus targeted extraction, because Unity does not expose a non-interactive selective import API.
-
-### Buffered or live logs
-
-```bash
-ucp logs --count 10
-ucp logs --pattern "NullReference|Exception" --count 100
-ucp logs --follow --level error
-```
-
-## Development in this repo
-
-### Local validation
-
-```bash
-cargo test --manifest-path cli/Cargo.toml
-cargo check --manifest-path cli/Cargo.toml
-cd website && npm run build
-```
-
-### Live Unity smoke testing
-
-Mount the repo-local bridge into a real Unity project:
-
-```powershell
-cargo run --manifest-path cli/Cargo.toml -- --project D:/Unity/Projects/MyGame install --dev
-```
-
-Or use the helper scripts:
-
-```powershell
-./scripts/smoke-dev.ps1 -Project D:/Unity/Projects/MyGame
-./scripts/qa-playground.ps1 -Project unity-project-dev/ucp-dev -TimeoutSeconds 45
-```
-
-Run the Unity 6 compatibility matrix against the dedicated dev project with explicit slot resolution:
-
-```powershell
-./scripts/unity-version-matrix.ps1 -Project unity-project-dev/ucp-dev -Run
-```
-
-Matrix behavior:
-
-- requested slots default to `6000.0`, `6000.1`, `6000.2`, `6000.3`, and `6000.4`
-- exact installed slot matches are preferred
-- if an exact slot is missing, the matrix uses the next higher installed slot in the same Unity major first
-- if no higher slot exists, it falls back to the nearest lower installed slot in the same major
-- if nothing can cover a slot, that slot is skipped and reported explicitly as untested
-- when the matrix runs, each Unity version uses a disposable copy of the dedicated dev project so older/newer editors do not permanently churn the canonical workspace
-
-As currently installed on this workstation, the exact Unity editor IDs are:
-
-- `6000.0.66f2`
-- `6000.1.17f1`
-- `6000.2.7f2`
-- `6000.3.1f1`
-- `6000.4.0f1`
-
-## Release flow
-
-- `version.json` is the metadata source of truth
-- `scripts/sync-version.mjs --check <version>` validates synced version-bearing files
-- `.github/workflows/validate.yml` runs PR and `main` validation for Rust, website, metadata sync, and the Unity 6 compatibility matrix
-- `scripts/validate-release.ps1` is the shared local/release preflight entrypoint
-- `claude plugin validate .` validates the Claude Code plugin and marketplace metadata under `.claude-plugin/`
-- pushing a tag matching `v*` runs `.github/workflows/release.yml`
-- the release workflow now gates binary packaging on the same validation preflight, including the Unity 6 matrix
-- the workflow builds Linux, macOS, and Windows binaries
-- the same workflow creates the GitHub release and publishes `@mflrevan/ucp` to npm
-- the repo root also acts as a Claude Code plugin source through `.claude-plugin/plugin.json`, with `.claude-plugin/marketplace.json` available for marketplace-style installs from GitHub
-- released npm packages bundle the bridge payload
-- GitHub release archives include the CLI binary plus `bridge/com.ucp.bridge`
-
-## Repository map
-
-```text
-cli/                              Rust CLI
-unity-package/com.ucp.bridge/     Unity Editor bridge package
-npm/                              npm wrapper and postinstall downloader
+cli/                              Rust CLI — the ucp binary
+unity-package/com.ucp.bridge/    Unity Editor bridge package
+npm/                              npm distribution wrapper
 docs/                             Markdown documentation source
-website/                          Docs site
-skills/                           Agent skill files
-scripts/                          Validation and build helpers
-assets/branding/                  Shared logo assets
+website/                          Docs site (unityctl.dev)
+skills/                           AI agent skill files
+scripts/                          Build, validation, and release helpers
+assets/branding/                  Logo and icon assets
 ```
+
+<br>
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and the release workflow.
+
+```bash
+cargo test --manifest-path cli/Cargo.toml    # CLI unit tests
+cargo check --manifest-path cli/Cargo.toml   # type check
+cd website && npm run build                  # docs site build
+```
+
+<br>
 
 ## License
 
-MIT
+[MIT](LICENSE.md)
