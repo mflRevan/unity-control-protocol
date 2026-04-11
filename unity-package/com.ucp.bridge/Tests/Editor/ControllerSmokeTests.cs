@@ -22,11 +22,14 @@ namespace UCP.Bridge.Tests
         private const string TempScriptPath = "Assets/UcpControllerSmokeComponent.cs";
         private const string TempTexturePath = "Assets/UcpImporterSmoke.png";
         private const string TempScenePath = "Assets/UcpControllerMoveScene.unity";
+        private const string TempSceneBPath = "Assets/UcpControllerSceneB.unity";
         private const string TempMovedFolderPath = "Assets/UcpControllerMoved";
         private const string TempMovedAssetPath = "Assets/UcpControllerMoved/UcpControllerSmoke.asset";
         private const string TempMovedReferenceAssetPath = "Assets/UcpControllerMoved/UcpControllerReference.asset";
         private const string TempMovedMaterialPath = "Assets/UcpControllerMoved/UcpControllerSmoke.mat";
         private const string TempMovedScenePath = "Assets/UcpControllerMoved/UcpControllerMoveScene.unity";
+        private const string TempReimportFolderPath = "Assets/UcpRecursiveReimport";
+        private const string TempReimportTexturePath = "Assets/UcpRecursiveReimport/UcpRecursiveA.png";
         private const string TempProfilerExportPath = "ProfilerCaptures\\smoke-export.json";
         private const string TempLocalPackageFolder = "TempUcpLocalPackage";
         private const string TempLocalPackageName = "com.ucp.temp.local";
@@ -40,6 +43,8 @@ namespace UCP.Bridge.Tests
             SnapshotController.Register(_router);
             AssetController.Register(_router);
             ImporterController.Register(_router);
+            PlayModeController.Register(_router);
+            ReferenceController.Register(_router);
             LogsController.Register(_router);
             HierarchyController.Register(_router);
             ProfilerController.Register(_router);
@@ -60,7 +65,9 @@ namespace UCP.Bridge.Tests
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
             DeleteTempScene();
+            DeleteTempSceneB();
             DeleteTempMovedFolder();
+            DeleteTempReimportFolder();
             DeleteTempProfilerExport();
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
@@ -83,7 +90,9 @@ namespace UCP.Bridge.Tests
             DeleteTempScriptFile();
             DeleteTempTextureAsset();
             DeleteTempScene();
+            DeleteTempSceneB();
             DeleteTempMovedFolder();
+            DeleteTempReimportFolder();
             DeleteTempProfilerExport();
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
@@ -247,6 +256,64 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void AssetSearch_SupportsRegexNameFiltering()
+        {
+            const string RegexAssetPath = "Assets/SCN_101.asset";
+
+            try
+            {
+                var sceneAsset = ScriptableObject.CreateInstance<SearchRootAsset>();
+                sceneAsset.name = "SCN_101";
+                AssetDatabase.CreateAsset(sceneAsset, RegexAssetPath);
+                AssetDatabase.SaveAssets();
+
+                var response = _router.Dispatch(
+                    "asset/search",
+                    1,
+                    "{\"name\":\"^SCN_[0-9]+$\",\"regex\":true,\"path\":\"Assets\",\"maxResults\":10}");
+
+                Assert.That(response.error, Is.Null);
+
+                var result = (Dictionary<string, object>)response.result;
+                var matches = (List<object>)result["results"];
+                var match = FindAssetMatchByPath(matches, RegexAssetPath);
+                Assert.That(match, Is.Not.Null);
+            }
+            finally
+            {
+                if (AssetDatabase.AssetPathExists(RegexAssetPath))
+                {
+                    AssetDatabase.DeleteAsset(RegexAssetPath);
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                }
+            }
+        }
+
+        [Test]
+        public void AssetSearch_DoesNotEmitSceneReadObjectThreadedErrors()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+            EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), TempScenePath);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            LogsController.ClearHistoryForTests();
+
+            var response = _router.Dispatch(
+                "asset/search",
+                1,
+                "{\"name\":\"UcpControllerMoveScene\",\"path\":\"Assets\",\"maxResults\":10}");
+
+            Assert.That(response.error, Is.Null);
+
+            var status = _router.Dispatch("logs/status", 1, "{}");
+            Assert.That(status.error, Is.Null);
+
+            var result = (Dictionary<string, object>)status.result;
+            var byLevel = (Dictionary<string, object>)result["byLevel"];
+            Assert.That(Convert.ToInt32(byLevel["error"]), Is.EqualTo(0));
+            Assert.That(Convert.ToInt32(byLevel["exception"]), Is.EqualTo(0));
+        }
+
+        [Test]
         public void LogsTail_ReturnsRequestedBufferedCount()
         {
             for (var index = 0; index < 12; index++)
@@ -342,6 +409,30 @@ namespace UCP.Bridge.Tests
             var result = (Dictionary<string, object>)response.result;
             Assert.That(result["message"], Is.EqualTo("Exploded"));
             Assert.That(result["stackTrace"], Is.EqualTo("stack line 1\nstack line 2"));
+        }
+
+        [Test]
+        public void LogsStatus_CanScopeToNewEntriesAfterCursor()
+        {
+            var first = LogsController.RecordTestLog("info", "Before");
+            LogsController.RecordTestLog("warning", "After warning");
+            LogsController.RecordTestLog("error", "After error");
+
+            var response = _router.Dispatch(
+                "logs/status",
+                1,
+                "{\"afterId\":" + Convert.ToInt64(first["id"]) + "}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToInt64(result["afterId"]), Is.EqualTo(Convert.ToInt64(first["id"])));
+            Assert.That(Convert.ToInt32(result["total"]), Is.EqualTo(2));
+
+            var byLevel = (Dictionary<string, object>)result["byLevel"];
+            Assert.That(Convert.ToInt32(byLevel["info"]), Is.EqualTo(0));
+            Assert.That(Convert.ToInt32(byLevel["warning"]), Is.EqualTo(1));
+            Assert.That(Convert.ToInt32(byLevel["error"]), Is.EqualTo(1));
         }
 
         [Test]
@@ -557,6 +648,28 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void AssetBulkMove_DryRunDoesNotMutateProject()
+        {
+            var asset = ScriptableObject.CreateInstance<SearchRootAsset>();
+            asset.name = "DryRunAsset";
+            AssetDatabase.CreateAsset(asset, TempAssetPath);
+            AssetDatabase.SaveAssets();
+
+            var response = _router.Dispatch(
+                "asset/bulk-move",
+                1,
+                "{\"dryRun\":true,\"moves\":[{\"from\":\"" + TempAssetPath + "\",\"to\":\"" + TempMovedAssetPath + "\"}]}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToBoolean(result["dryRun"]), Is.True);
+            Assert.That(Convert.ToInt32(result["moved"]), Is.EqualTo(1));
+            Assert.That(AssetDatabase.LoadAssetAtPath<SearchRootAsset>(TempAssetPath), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<SearchRootAsset>(TempMovedAssetPath), Is.Null);
+        }
+
+        [Test]
         public void AssetMove_PreservesSceneMaterialReference()
         {
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -756,6 +869,53 @@ namespace UCP.Bridge.Tests
             var importer = AssetImporter.GetAtPath(TempTexturePath) as TextureImporter;
             Assert.That(importer, Is.Not.Null);
             Assert.That(importer.isReadable, Is.True);
+        }
+
+        [Test]
+        public void ImporterController_ReimportRecursive_ReimportsFolderContents()
+        {
+            CreateTempRecursiveTextureAsset(Color.magenta);
+            AssetImportSupport.ClearTestState();
+
+            var response = _router.Dispatch(
+                "asset/reimport",
+                1,
+                "{\"path\":\"" + TempReimportFolderPath + "\",\"recursive\":true}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToBoolean(result["recursive"]), Is.True);
+            Assert.That(Convert.ToInt32(result["requested"]), Is.GreaterThanOrEqualTo(1));
+            Assert.That(Convert.ToInt32(result["reimported"]), Is.GreaterThanOrEqualTo(1));
+            Assert.That(AssetImportSupport.LastReimportedPathForTests, Is.EqualTo(TempReimportTexturePath));
+        }
+
+        [Test]
+        public void SceneController_Load_AdditiveKeepsExistingSceneLoaded()
+        {
+            var firstScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("SceneAObject");
+            Assert.That(EditorSceneManager.SaveScene(firstScene, TempScenePath), Is.True);
+
+            var secondScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("SceneBObject");
+            Assert.That(EditorSceneManager.SaveScene(secondScene, TempSceneBPath), Is.True);
+
+            EditorSceneManager.OpenScene(TempScenePath, OpenSceneMode.Single);
+
+            var response = _router.Dispatch(
+                "scene/load",
+                1,
+                "{\"path\":\"" + TempSceneBPath + "\",\"additive\":true,\"saveDirtyScenes\":true,\"discardUntitled\":true}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToBoolean(result["additive"]), Is.True);
+            Assert.That(UnityEngine.SceneManagement.SceneManager.sceneCount, Is.EqualTo(2));
+            Assert.That(UnityEngine.SceneManagement.SceneManager.GetSceneByPath(TempScenePath).isLoaded, Is.True);
+            Assert.That(UnityEngine.SceneManagement.SceneManager.GetSceneByPath(TempSceneBPath).isLoaded, Is.True);
         }
 
         [Test]
@@ -1092,11 +1252,29 @@ namespace UCP.Bridge.Tests
             }
         }
 
+        private static void DeleteTempSceneB()
+        {
+            if (AssetDatabase.LoadMainAssetAtPath(TempSceneBPath) != null)
+            {
+                AssetDatabase.DeleteAsset(TempSceneBPath);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
         private static void DeleteTempMovedFolder()
         {
             if (AssetDatabase.IsValidFolder(TempMovedFolderPath))
             {
                 AssetDatabase.DeleteAsset(TempMovedFolderPath);
+                AssetDatabase.SaveAssets();
+            }
+        }
+
+        private static void DeleteTempReimportFolder()
+        {
+            if (AssetDatabase.IsValidFolder(TempReimportFolderPath))
+            {
+                AssetDatabase.DeleteAsset(TempReimportFolderPath);
                 AssetDatabase.SaveAssets();
             }
         }
@@ -1180,6 +1358,24 @@ namespace UCP.Bridge.Tests
                 ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
         }
 
+        private static void CreateTempRecursiveTextureAsset(Color color)
+        {
+            DeleteTempReimportFolder();
+            Directory.CreateDirectory(ResolveProjectRelativePath(TempReimportFolderPath));
+
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.SetPixels(new[] { color, color, color, color });
+            texture.Apply();
+
+            var bytes = texture.EncodeToPNG();
+            UnityEngine.Object.DestroyImmediate(texture);
+
+            File.WriteAllBytes(ResolveProjectRelativePath(TempReimportTexturePath), bytes);
+            AssetDatabase.ImportAsset(
+                TempReimportTexturePath,
+                ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+        }
+
         private static string ResolveProjectRelativePath(string assetPath)
         {
             var projectRoot = Path.GetDirectoryName(Application.dataPath);
@@ -1222,6 +1418,19 @@ namespace UCP.Bridge.Tests
                 var path = match.ContainsKey("path") ? match["path"].ToString() : string.Empty;
                 var name = match.ContainsKey("name") ? match["name"].ToString() : string.Empty;
                 if (path == expectedPath && name == expectedName)
+                    return match;
+            }
+
+            return null;
+        }
+
+        private static Dictionary<string, object> FindAssetMatchByPath(List<object> matches, string expectedPath)
+        {
+            foreach (var entry in matches)
+            {
+                var match = (Dictionary<string, object>)entry;
+                var path = match.ContainsKey("path") ? match["path"].ToString() : string.Empty;
+                if (path == expectedPath)
                     return match;
             }
 

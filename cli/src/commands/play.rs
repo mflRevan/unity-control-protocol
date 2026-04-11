@@ -31,13 +31,24 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        let label = match method {
-            "play" => "Entered play mode",
-            "stop" => "Exited play mode",
-            "pause" => "Toggled pause",
-            _ => "Done",
-        };
-        output::print_success(label);
+        let status = result.get("status").and_then(Value::as_str).unwrap_or("ok");
+        match (method, status) {
+            ("play", "already_playing") => {
+                anyhow::bail!("Already in play mode. Use `ucp stop` to exit play mode.");
+            }
+            ("stop", "already_stopped") => {
+                output::print_success("Already in edit mode");
+            }
+            _ => {
+                let label = match method {
+                    "play" => "Entered play mode",
+                    "stop" => "Exited play mode",
+                    "pause" => "Toggled pause",
+                    _ => "Done",
+                };
+                output::print_success(label);
+            }
+        }
         if method == "stop" {
             if let Some(log_status) = result.get("logStatus") {
                 crate::commands::logs::print_status(log_status, ctx);

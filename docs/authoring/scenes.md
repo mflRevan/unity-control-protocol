@@ -56,11 +56,20 @@ Load a scene by path.
 
 ```bash
 ucp scene load Assets/Scenes/Level1.unity
+
+# Keep the current scene setup loaded and add another scene
+ucp scene load Assets/Scenes/Lighting.unity --additive
 ```
 
 After `scene load`, UCP waits for Unity's scene-processing work to settle before returning so the newly loaded scene is ready for immediate inspection or follow-up edits.
 
 If the active scene has unsaved changes, `scene load` now fails before the transition and reports a concise dirty-scene summary. Save first with `ucp scene save`, or rerun your scene-editing command with `--save`.
+
+| Flag              | Description                                                     |
+| ----------------- | --------------------------------------------------------------- |
+| `--additive`      | Load the scene additively instead of replacing the current setup |
+| `--no-save`       | Do not auto-save dirty scenes before loading                    |
+| `--keep-untitled` | Keep dirty untitled scenes instead of discarding them           |
 
 ### `ucp scene snapshot`
 

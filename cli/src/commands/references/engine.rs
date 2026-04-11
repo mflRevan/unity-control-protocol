@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use regex::Regex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -123,7 +124,7 @@ impl ReferenceIndex {
                     files: Vec::new(),
                     elapsed_ms: elapsed.as_millis() as u64,
                     top_patterns: Vec::new(),
-                }
+                };
             }
         };
 
@@ -178,8 +179,7 @@ impl ReferenceIndex {
         top_patterns.sort_by(|a, b| b.count.cmp(&a.count));
 
         // Sort files by reference count descending for most-relevant-first
-        let mut file_entries: Vec<(&str, Vec<&ReferenceHit>)> =
-            by_file.into_iter().collect();
+        let mut file_entries: Vec<(&str, Vec<&ReferenceHit>)> = by_file.into_iter().collect();
         file_entries.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
 
         let total_files = file_entries.len();
@@ -335,6 +335,82 @@ const SCANNABLE_EXTENSIONS: &[&str] = &[
     "mask",
 ];
 
+const STRING_SCANNABLE_EXTENSIONS: &[&str] = &[
+    "unity",
+    "prefab",
+    "mat",
+    "asset",
+    "controller",
+    "anim",
+    "overrideController",
+    "playable",
+    "signal",
+    "flare",
+    "physicsMaterial",
+    "physicMaterial",
+    "renderTexture",
+    "lighting",
+    "giparams",
+    "mask",
+    "json",
+    "txt",
+    "asmdef",
+    "cs",
+    "shader",
+    "compute",
+    "cginc",
+    "hlsl",
+    "uss",
+    "uxml",
+    "yaml",
+    "yml",
+    "xml",
+];
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BrokenReference {
+    pub source_path: String,
+    pub source_file_id: i64,
+    pub source_object_type: String,
+    pub source_object_name: Option<String>,
+    pub property_hint: String,
+    pub target_guid: String,
+    pub target_file_id: Option<i64>,
+    pub issue: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OutgoingReferenceCheck {
+    pub requested_path: String,
+    pub files_scanned: usize,
+    pub total_references: usize,
+    pub missing_references: usize,
+    pub missing: Vec<BrokenReference>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StringReferenceMatch {
+    pub line: usize,
+    pub excerpt: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileStringReferenceMatches {
+    pub path: String,
+    pub total_matches: usize,
+    pub matches: Vec<StringReferenceMatch>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StringReferenceResults {
+    pub pattern: String,
+    pub regex: bool,
+    pub total_matches: usize,
+    pub total_files: usize,
+    pub files: Vec<FileStringReferenceMatches>,
+}
+
 /// Build a reference index for the project using parallel file scanning.
 pub fn build_index(project: &Path, approach: IndexApproach) -> anyhow::Result<ReferenceIndex> {
     let assets_dir = project.join("Assets");
@@ -346,12 +422,12 @@ pub fn build_index(project: &Path, approach: IndexApproach) -> anyhow::Result<Re
     let settings_dir = project.join("ProjectSettings");
 
     let mut files = Vec::new();
-    collect_scannable_files(&assets_dir, &mut files);
+    collect_files_with_extensions(&assets_dir, SCANNABLE_EXTENSIONS, &mut files);
     if packages_dir.is_dir() {
-        collect_scannable_files(&packages_dir, &mut files);
+        collect_files_with_extensions(&packages_dir, SCANNABLE_EXTENSIONS, &mut files);
     }
     if settings_dir.is_dir() {
-        collect_scannable_files(&settings_dir, &mut files);
+        collect_files_with_extensions(&settings_dir, SCANNABLE_EXTENSIONS, &mut files);
     }
 
     let files_scanned = files.len();
@@ -396,20 +472,284 @@ pub fn build_index(project: &Path, approach: IndexApproach) -> anyhow::Result<Re
     })
 }
 
-fn collect_scannable_files(dir: &Path, out: &mut Vec<PathBuf>) {
+pub fn resolve_scannable_target(project: &Path, requested: &str) -> anyhow::Result<Vec<PathBuf>> {
+    resolve_target_with_extensions(project, requested, SCANNABLE_EXTENSIONS)
+}
+
+pub fn resolve_string_search_target(
+    project: &Path,
+    requested: Option<&str>,
+) -> anyhow::Result<Vec<PathBuf>> {
+    let requested = requested.unwrap_or("Assets");
+    resolve_target_with_extensions(project, requested, STRING_SCANNABLE_EXTENSIONS)
+}
+
+pub fn check_outgoing_references(
+    project: &Path,
+    requested: &str,
+) -> anyhow::Result<OutgoingReferenceCheck> {
+    let files = resolve_scannable_target(project, requested)?;
+    let guid_map = collect_guid_map(project);
+    let requested_path = normalize_requested_path(requested);
+
+    let per_file: Vec<(usize, Vec<BrokenReference>)> = files
+        .par_iter()
+        .map(|file| {
+            let relative = file
+                .strip_prefix(project)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let content = match std::fs::read_to_string(file) {
+                Ok(content) => content,
+                Err(_) => return (0usize, Vec::new()),
+            };
+
+            let mut refs = Vec::new();
+            yaml_scan(&content, &relative, &mut refs);
+            let total = refs.len();
+            let missing = refs
+                .into_iter()
+                .filter(|hit| !should_ignore_missing_reference(hit))
+                .filter(|hit| !guid_map.contains_key(&hit.target_guid))
+                .map(|hit| BrokenReference {
+                    source_path: hit.source_path,
+                    source_file_id: hit.source_file_id,
+                    source_object_type: hit.source_object_type,
+                    source_object_name: hit.source_object_name,
+                    property_hint: hit.property_hint,
+                    target_guid: hit.target_guid,
+                    target_file_id: hit.target_file_id,
+                    issue: "Target GUID does not resolve to an asset or package meta file".into(),
+                })
+                .collect::<Vec<_>>();
+
+            (total, missing)
+        })
+        .collect();
+
+    let total_references = per_file.iter().map(|(count, _)| *count).sum();
+    let missing = per_file
+        .into_iter()
+        .flat_map(|(_, missing)| missing)
+        .collect::<Vec<_>>();
+
+    Ok(OutgoingReferenceCheck {
+        requested_path,
+        files_scanned: files.len(),
+        total_references,
+        missing_references: missing.len(),
+        missing,
+    })
+}
+
+pub fn find_string_references(
+    project: &Path,
+    requested: Option<&str>,
+    pattern: &str,
+    use_regex: bool,
+    max_files: usize,
+    max_per_file: usize,
+) -> anyhow::Result<StringReferenceResults> {
+    let files = resolve_string_search_target(project, requested)?;
+    let regex = if use_regex {
+        Some(Regex::new(pattern)?)
+    } else {
+        None
+    };
+
+    let mut per_file: Vec<FileStringReferenceMatches> = files
+        .par_iter()
+        .filter_map(|file| {
+            let relative = file
+                .strip_prefix(project)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let content = std::fs::read_to_string(file).ok()?;
+            let mut total_matches = 0usize;
+            let mut matches = Vec::new();
+
+            for (index, line) in content.lines().enumerate() {
+                let is_match = if let Some(regex) = regex.as_ref() {
+                    regex.is_match(line)
+                } else {
+                    line.contains(pattern)
+                };
+
+                if !is_match {
+                    continue;
+                }
+
+                total_matches += 1;
+                if matches.len() < max_per_file {
+                    matches.push(StringReferenceMatch {
+                        line: index + 1,
+                        excerpt: truncate_excerpt(line.trim()),
+                    });
+                }
+            }
+
+            if total_matches == 0 {
+                return None;
+            }
+
+            Some(FileStringReferenceMatches {
+                path: relative,
+                total_matches,
+                truncated: total_matches > matches.len(),
+                matches,
+            })
+        })
+        .collect();
+
+    per_file.sort_by(|a, b| {
+        b.total_matches
+            .cmp(&a.total_matches)
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    let total_matches = per_file.iter().map(|file| file.total_matches).sum();
+    let total_files = per_file.len();
+    per_file.truncate(max_files);
+
+    Ok(StringReferenceResults {
+        pattern: pattern.to_string(),
+        regex: use_regex,
+        total_matches,
+        total_files,
+        files: per_file,
+    })
+}
+
+fn resolve_target_with_extensions(
+    project: &Path,
+    requested: &str,
+    allowed_extensions: &[&str],
+) -> anyhow::Result<Vec<PathBuf>> {
+    let normalized = normalize_requested_path(requested);
+    let path = project.join(normalized.replace('/', std::path::MAIN_SEPARATOR_STR));
+    if !path.exists() {
+        anyhow::bail!("Path not found: {}", normalized);
+    }
+
+    let mut files = Vec::new();
+    if path.is_dir() {
+        collect_files_with_extensions(&path, allowed_extensions, &mut files);
+    } else if has_allowed_extension(&path, allowed_extensions) {
+        files.push(path);
+    } else {
+        anyhow::bail!(
+            "Unsupported file type for reference scanning: {}",
+            normalized
+        );
+    }
+
+    Ok(files)
+}
+
+fn normalize_requested_path(requested: &str) -> String {
+    let normalized = requested.trim().replace('\\', "/");
+    if normalized.starts_with("Assets/")
+        || normalized.starts_with("Packages/")
+        || normalized.starts_with("ProjectSettings/")
+        || normalized == "Assets"
+        || normalized == "Packages"
+        || normalized == "ProjectSettings"
+    {
+        normalized
+    } else {
+        format!("Assets/{normalized}")
+    }
+}
+
+fn collect_guid_map(project: &Path) -> HashMap<String, String> {
+    let mut metas = Vec::new();
+    for root in ["Assets", "Packages"] {
+        let dir = project.join(root);
+        if dir.is_dir() {
+            collect_meta_files(&dir, &mut metas);
+        }
+    }
+
+    metas
+        .into_par_iter()
+        .filter_map(|meta| {
+            let relative = meta
+                .strip_prefix(project)
+                .ok()?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let content = std::fs::read_to_string(&meta).ok()?;
+            let guid = content.lines().find_map(|line| {
+                let trimmed = line.trim();
+                trimmed
+                    .strip_prefix("guid:")
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| value.len() == 32)
+            })?;
+            let asset_path = relative.strip_suffix(".meta")?.to_string();
+            Some((guid, asset_path))
+        })
+        .collect()
+}
+
+fn collect_meta_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            collect_scannable_files(&path, out);
-        } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            if SCANNABLE_EXTENSIONS.contains(&ext) {
-                out.push(path);
-            }
+            collect_meta_files(&path, out);
+        } else if path.extension().and_then(|ext| ext.to_str()) == Some("meta") {
+            out.push(path);
         }
     }
+}
+
+fn collect_files_with_extensions(dir: &Path, allowed_extensions: &[&str], out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files_with_extensions(&path, allowed_extensions, out);
+        } else if has_allowed_extension(&path, allowed_extensions) {
+            out.push(path);
+        }
+    }
+}
+
+fn has_allowed_extension(path: &Path, allowed_extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| allowed_extensions.contains(&ext))
+        .unwrap_or(false)
+}
+
+fn truncate_excerpt(line: &str) -> String {
+    const MAX_EXCERPT: usize = 160;
+    if line.chars().count() <= MAX_EXCERPT {
+        return line.to_string();
+    }
+
+    let mut excerpt = line.chars().take(MAX_EXCERPT).collect::<String>();
+    excerpt.push_str("...");
+    excerpt
+}
+
+fn should_ignore_missing_reference(hit: &ReferenceHit) -> bool {
+    if hit.source_path.ends_with(".mat") {
+        let leaf = hit
+            .property_hint
+            .rsplit('.')
+            .next()
+            .unwrap_or(&hit.property_hint);
+        return matches!(leaf, "m_Shader" | "m_Script");
+    }
+
+    false
 }
 
 // ─── Approach B: Grep-based scan ───────────────────────────────────────────
@@ -810,8 +1150,7 @@ MonoBehaviour:
 
     #[test]
     fn parse_document_header_handles_large_file_id() {
-        let (class_id, file_id) =
-            parse_document_header("--- !u!1 &762373481093513140").unwrap();
+        let (class_id, file_id) = parse_document_header("--- !u!1 &762373481093513140").unwrap();
         assert_eq!(class_id, 1);
         assert_eq!(file_id, 762373481093513140);
     }
@@ -891,17 +1230,20 @@ MonoBehaviour:
         yaml_scan(SAMPLE_SCRIPTABLE_OBJECT, "config.asset", &mut refs);
 
         // Should find the script reference
-        assert!(refs
-            .iter()
-            .any(|r| r.target_guid == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"));
+        assert!(
+            refs.iter()
+                .any(|r| r.target_guid == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
+        );
         // Should find the material reference
-        assert!(refs
-            .iter()
-            .any(|r| r.target_guid == "3cb6f81f1baa99647b390eb642d1990c"));
+        assert!(
+            refs.iter()
+                .any(|r| r.target_guid == "3cb6f81f1baa99647b390eb642d1990c")
+        );
         // Should find the prefab reference
-        assert!(refs
-            .iter()
-            .any(|r| r.target_guid == "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9"));
+        assert!(
+            refs.iter()
+                .any(|r| r.target_guid == "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9")
+        );
     }
 
     #[test]
@@ -989,8 +1331,7 @@ MonoBehaviour:
         };
 
         // With specific fileId should filter
-        let results =
-            index.find_references("3cb6f81f1baa99647b390eb642d1990c", Some(2100000), 100);
+        let results = index.find_references("3cb6f81f1baa99647b390eb642d1990c", Some(2100000), 100);
         assert_eq!(results.len(), 1);
 
         // With wrong fileId should return empty
@@ -1177,5 +1518,87 @@ MonoBehaviour:
         assert_eq!(grouped.top_patterns[0].count, 5);
         assert_eq!(grouped.top_patterns[0].source_type, "Material");
         assert_eq!(grouped.top_patterns[0].property, "m_Shader");
+    }
+
+    #[test]
+    fn check_outgoing_references_reports_missing_guid_targets() {
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-outgoing-check-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_root);
+        std::fs::create_dir_all(temp_root.join("Assets")).unwrap();
+        std::fs::write(
+            temp_root.join("Assets").join("Broken.asset"),
+            r#"%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_Name: BrokenCarrier
+  target: {fileID: 2100000, guid: deadbeefdeadbeefdeadbeefdeadbeef, type: 2}
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            temp_root.join("Assets").join("Broken.asset.meta"),
+            "fileFormatVersion: 2\nguid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+        )
+        .unwrap();
+
+        let result = check_outgoing_references(&temp_root, "Assets/Broken.asset").unwrap();
+        assert_eq!(result.files_scanned, 1);
+        assert_eq!(result.total_references, 1);
+        assert_eq!(result.missing_references, 1);
+        assert_eq!(
+            result.missing[0].target_guid,
+            "deadbeefdeadbeefdeadbeefdeadbeef"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn find_string_references_matches_literal_lines() {
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-string-search-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_root);
+        std::fs::create_dir_all(temp_root.join("Assets").join("Configs")).unwrap();
+        std::fs::write(
+            temp_root
+                .join("Assets")
+                .join("Configs")
+                .join("Routes.asset"),
+            "primaryScenePath: SCN_Main\nbackupScenePath: SCN_Debug\n",
+        )
+        .unwrap();
+
+        let result =
+            find_string_references(&temp_root, Some("Assets/Configs"), "SCN_", false, 20, 5)
+                .unwrap();
+
+        assert_eq!(result.total_matches, 2);
+        assert_eq!(result.total_files, 1);
+        assert_eq!(result.files[0].matches[0].line, 1);
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
+    fn ignores_material_shader_and_script_missing_refs_in_outgoing_check() {
+        let shader_ref = ReferenceHit {
+            source_path: "Assets/Test.mat".to_string(),
+            source_file_id: 2100000,
+            source_object_type: "Material".to_string(),
+            source_object_name: Some("Test".to_string()),
+            property_hint: "Material.m_Shader".to_string(),
+            target_guid: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+            target_file_id: Some(4800000),
+            ref_type: Some(3),
+        };
+        let texture_ref = ReferenceHit {
+            property_hint: "Material.m_SavedProperties._MainTex.m_Texture".to_string(),
+            ..shader_ref.clone()
+        };
+
+        assert!(should_ignore_missing_reference(&shader_ref));
+        assert!(!should_ignore_missing_reference(&texture_ref));
     }
 }

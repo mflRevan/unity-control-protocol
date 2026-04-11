@@ -125,10 +125,19 @@ async fn main() -> anyhow::Result<()> {
     let json_output = ctx.json;
     if let Err(e) = commands::run(cli.command, ctx).await {
         if json_output {
-            let err = serde_json::json!({
-                "success": false,
-                "error": { "message": format!("{e:#}") }
-            });
+            let err = if let Some(test_run_failure) = e.downcast_ref::<commands::tests::TestRunFailure>()
+            {
+                serde_json::json!({
+                    "success": false,
+                    "error": { "message": test_run_failure.message },
+                    "data": test_run_failure.result
+                })
+            } else {
+                serde_json::json!({
+                    "success": false,
+                    "error": { "message": format!("{e:#}") }
+                })
+            };
             println!("{}", serde_json::to_string(&err).unwrap());
         } else {
             output::print_error(&format!("{e:#}"));
@@ -173,6 +182,30 @@ mod tests {
     }
 
     #[test]
+    fn parses_scene_load_additive_command() {
+        let cli = Cli::try_parse_from(["ucp", "scene", "load", "Assets/Main.unity", "--additive"])
+            .expect("scene load additive command should parse");
+
+        match cli.command {
+            commands::Command::Scene {
+                action:
+                    commands::scene::SceneAction::Load {
+                        path,
+                        additive,
+                        no_save,
+                        keep_untitled,
+                    },
+            } => {
+                assert_eq!(path, "Assets/Main.unity");
+                assert!(additive);
+                assert!(!no_save);
+                assert!(!keep_untitled);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
     fn parses_scene_focus_command_with_axis() {
         let cli = Cli::try_parse_from([
             "ucp", "scene", "focus", "--id", "-42", "--axis", "1", "0.5", "-1",
@@ -202,18 +235,20 @@ mod tests {
 
     #[test]
     fn parses_profiler_summary_command() {
-        let cli =
-            Cli::try_parse_from(["ucp", "profiler", "summary", "--limit", "5", "--thread", "0"])
-                .expect("profiler summary command should parse");
+        let cli = Cli::try_parse_from([
+            "ucp", "profiler", "summary", "--limit", "5", "--thread", "0",
+        ])
+        .expect("profiler summary command should parse");
 
         match cli.command {
             commands::Command::Profiler {
-                action: commands::profiler::ProfilerAction::Summary {
-                    first_frame,
-                    last_frame,
-                    thread,
-                    limit,
-                },
+                action:
+                    commands::profiler::ProfilerAction::Summary {
+                        first_frame,
+                        last_frame,
+                        thread,
+                        limit,
+                    },
             } => {
                 assert!(first_frame.is_none());
                 assert!(last_frame.is_none());
@@ -242,15 +277,16 @@ mod tests {
 
         match cli.command {
             commands::Command::Profiler {
-                action: commands::profiler::ProfilerAction::Session {
-                    action:
-                        commands::profiler::ProfilerSessionAction::Start {
-                            mode,
-                            deep_profile,
-                            enable_categories,
-                            ..
-                        },
-                },
+                action:
+                    commands::profiler::ProfilerAction::Session {
+                        action:
+                            commands::profiler::ProfilerSessionAction::Start {
+                                mode,
+                                deep_profile,
+                                enable_categories,
+                                ..
+                            },
+                    },
             } => {
                 assert_eq!(mode.as_deref(), Some("play"));
                 assert_eq!(deep_profile, Some(true));
@@ -314,8 +350,8 @@ mod tests {
 
     #[test]
     fn parses_logs_status_command() {
-        let cli =
-            Cli::try_parse_from(["ucp", "logs", "status"]).expect("logs status command should parse");
+        let cli = Cli::try_parse_from(["ucp", "logs", "status"])
+            .expect("logs status command should parse");
 
         match cli.command {
             commands::Command::Logs { action, .. } => {
@@ -340,10 +376,7 @@ mod tests {
             commands::Command::References {
                 action: commands::references::ReferencesAction::Find { asset, object, .. },
             } => {
-                assert_eq!(
-                    asset.as_deref(),
-                    Some("3cb6f81f1baa99647b390eb642d1990c")
-                );
+                assert_eq!(asset.as_deref(), Some("3cb6f81f1baa99647b390eb642d1990c"));
                 assert!(object.is_none());
             }
             _ => panic!("unexpected command variant"),
@@ -352,15 +385,9 @@ mod tests {
 
     #[test]
     fn parses_references_index_build_command() {
-        let cli = Cli::try_parse_from([
-            "ucp",
-            "references",
-            "index",
-            "build",
-            "--approach",
-            "yaml",
-        ])
-        .expect("references index build command should parse");
+        let cli =
+            Cli::try_parse_from(["ucp", "references", "index", "build", "--approach", "yaml"])
+                .expect("references index build command should parse");
 
         match cli.command {
             commands::Command::References {
@@ -377,13 +404,48 @@ mod tests {
 
     #[test]
     fn parses_references_check_command() {
-        let cli =
-            Cli::try_parse_from(["ucp", "references", "check"]).expect("references check should parse");
+        let cli = Cli::try_parse_from(["ucp", "references", "check", "Assets/Scenes"])
+            .expect("references check should parse");
 
         match cli.command {
             commands::Command::References {
-                action: commands::references::ReferencesAction::Check,
-            } => {}
+                action: commands::references::ReferencesAction::Check { path },
+            } => assert_eq!(path.as_deref(), Some("Assets/Scenes")),
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_references_find_strings_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "references",
+            "find-strings",
+            "--pattern",
+            "SCN_",
+            "--path",
+            "Assets/Configs",
+            "--regex",
+        ])
+        .expect("references find-strings should parse");
+
+        match cli.command {
+            commands::Command::References {
+                action:
+                    commands::references::ReferencesAction::FindStrings {
+                        pattern,
+                        path,
+                        regex,
+                        max_files,
+                        max_per_file,
+                    },
+            } => {
+                assert_eq!(pattern, "SCN_");
+                assert_eq!(path.as_deref(), Some("Assets/Configs"));
+                assert!(regex);
+                assert_eq!(max_files, 20);
+                assert_eq!(max_per_file, 5);
+            }
             _ => panic!("unexpected command variant"),
         }
     }
@@ -443,10 +505,79 @@ mod tests {
                     commands::asset::AssetAction::BulkMove {
                         moves,
                         continue_on_error,
+                        dry_run,
                     },
             } => {
                 assert!(moves.contains("\"from\""));
                 assert!(continue_on_error);
+                assert!(!dry_run);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_asset_search_regex_command() {
+        let cli =
+            Cli::try_parse_from(["ucp", "asset", "search", "--name", "^SCN_\\d+$", "--regex"])
+                .expect("asset search regex command should parse");
+
+        match cli.command {
+            commands::Command::Asset {
+                action: commands::asset::AssetAction::Search { name, regex, .. },
+            } => {
+                assert_eq!(name.as_deref(), Some("^SCN_\\d+$"));
+                assert!(regex);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_asset_bulk_move_dry_run_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "asset",
+            "bulk-move",
+            "--moves",
+            "{\"Assets/A.mat\":\"Assets/B.mat\"}",
+            "--dry-run",
+        ])
+        .expect("asset bulk-move dry-run should parse");
+
+        match cli.command {
+            commands::Command::Asset {
+                action:
+                    commands::asset::AssetAction::BulkMove {
+                        dry_run,
+                        continue_on_error,
+                        ..
+                    },
+            } => {
+                assert!(dry_run);
+                assert!(!continue_on_error);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_asset_reimport_recursive_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "asset",
+            "reimport",
+            "Assets/Generated",
+            "--recursive",
+        ])
+        .expect("asset reimport recursive should parse");
+
+        match cli.command {
+            commands::Command::Asset {
+                action: commands::asset::AssetAction::Reimport { path, recursive },
+            } => {
+                assert_eq!(path, "Assets/Generated");
+                assert!(recursive);
             }
             _ => panic!("unexpected command variant"),
         }

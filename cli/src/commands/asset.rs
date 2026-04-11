@@ -16,6 +16,9 @@ pub enum AssetAction {
         /// Name filter
         #[arg(long, short = 'n')]
         name: Option<String>,
+        /// Treat --name as a regex instead of a case-insensitive substring
+        #[arg(long)]
+        regex: bool,
         /// Folder path filter (e.g. "Assets/Prefabs")
         #[arg(long, short = 'p')]
         path: Option<String>,
@@ -83,11 +86,17 @@ pub enum AssetAction {
         /// Continue processing later moves after an individual move fails
         #[arg(long)]
         continue_on_error: bool,
+        /// Validate and preview the batch without executing any moves
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Reimport an asset or meta file through Unity
     Reimport {
         /// Asset path or .meta path
         path: String,
+        /// Reimport all supported assets under the given folder tree
+        #[arg(long)]
+        recursive: bool,
     },
     /// Inspect and modify Unity importer settings for an asset
     ImportSettings {
@@ -140,6 +149,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         AssetAction::Search {
             r#type,
             name,
+            regex,
             path,
             max,
         } => {
@@ -149,6 +159,9 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             }
             if let Some(n) = name {
                 params["name"] = serde_json::json!(n);
+            }
+            if *regex {
+                params["regex"] = serde_json::json!(true);
             }
             if let Some(p) = path {
                 params["path"] = serde_json::json!(p);
@@ -217,6 +230,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         AssetAction::BulkMove {
             moves,
             continue_on_error,
+            dry_run,
         } => {
             let parsed = parse_bulk_moves(moves)?;
             client
@@ -224,14 +238,18 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     "asset/bulk-move",
                     serde_json::json!({
                         "moves": parsed,
-                        "continueOnError": continue_on_error
+                        "continueOnError": continue_on_error,
+                        "dryRun": dry_run
                     }),
                 )
                 .await?
         }
-        AssetAction::Reimport { path } => {
+        AssetAction::Reimport { path, recursive } => {
             client
-                .call("asset/reimport", serde_json::json!({ "path": path }))
+                .call(
+                    "asset/reimport",
+                    serde_json::json!({ "path": path, "recursive": recursive }),
+                )
                 .await?
         }
         AssetAction::ImportSettings { action } => match action {
@@ -306,10 +324,16 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
-            AssetAction::Search { .. } => {
+            AssetAction::Search { regex, .. } => {
                 let total = result.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
                 let returned = result.get("returned").and_then(|v| v.as_i64()).unwrap_or(0);
-                output::print_success(&format!("Found {total} asset(s) (showing {returned})"));
+                if *regex {
+                    output::print_success(&format!(
+                        "Found {total} asset(s) via regex search (showing {returned})"
+                    ));
+                } else {
+                    output::print_success(&format!("Found {total} asset(s) (showing {returned})"));
+                }
                 if let Some(results) = result.get("results").and_then(|v| v.as_array()) {
                     for r in results {
                         let path = r.get("path").and_then(|v| v.as_str()).unwrap_or("?");
@@ -388,7 +412,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     output::print_success(&format!("Asset already at destination: {final_path}"));
                 }
             }
-            AssetAction::BulkMove { .. } => {
+            AssetAction::BulkMove { dry_run, .. } => {
                 let requested = result
                     .get("requested")
                     .and_then(|value| value.as_u64())
@@ -402,7 +426,17 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     .and_then(|value| value.as_u64())
                     .unwrap_or(0);
 
-                if failed == 0 {
+                if *dry_run {
+                    if failed == 0 {
+                        output::print_success(&format!(
+                            "Dry run validated {moved}/{requested} move(s)"
+                        ));
+                    } else {
+                        output::print_warn(&format!(
+                            "Dry run validated {moved}/{requested} move(s); {failed} would fail"
+                        ));
+                    }
+                } else if failed == 0 {
                     output::print_success(&format!(
                         "Moved {moved}/{requested} asset(s) successfully"
                     ));
@@ -458,16 +492,34 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
-            AssetAction::Reimport { .. } => {
-                let asset_path = result
-                    .get("assetPath")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
-                let importer_type = result
-                    .get("importerType")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("asset");
-                output::print_success(&format!("Reimported {asset_path} ({importer_type})"));
+            AssetAction::Reimport { recursive, .. } => {
+                if *recursive {
+                    let requested = result
+                        .get("requested")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let reimported = result
+                        .get("reimported")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let skipped = result.get("skipped").and_then(|v| v.as_u64()).unwrap_or(0);
+                    output::print_success(&format!(
+                        "Reimported {reimported}/{requested} asset(s) recursively"
+                    ));
+                    if skipped > 0 {
+                        eprintln!("  Skipped: {skipped}");
+                    }
+                } else {
+                    let asset_path = result
+                        .get("assetPath")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
+                    let importer_type = result
+                        .get("importerType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("asset");
+                    output::print_success(&format!("Reimported {asset_path} ({importer_type})"));
+                }
             }
             AssetAction::ImportSettings { action } => match action {
                 ImportSettingsAction::Read { .. } => {
@@ -555,7 +607,8 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
         | AssetAction::CreateSo { .. }
         | AssetAction::Delete { .. }
         | AssetAction::Move { .. }
-        | AssetAction::BulkMove { .. } => true,
+        | AssetAction::BulkMove { dry_run: false, .. } => true,
+        AssetAction::BulkMove { dry_run: true, .. } => false,
         AssetAction::Reimport { .. } => true,
         AssetAction::ImportSettings { action } => match action {
             ImportSettingsAction::Read { .. } => false,
@@ -569,9 +622,7 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
                         .unwrap_or(false)
             }
         },
-        AssetAction::Search { .. }
-        | AssetAction::Info { .. }
-        | AssetAction::Read { .. } => false,
+        AssetAction::Search { .. } | AssetAction::Info { .. } | AssetAction::Read { .. } => false,
     }
 }
 

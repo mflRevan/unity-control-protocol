@@ -45,6 +45,27 @@ namespace UCP.Bridge
             return RecordLog(level, message, stackTrace);
         }
 
+        public static long GetLatestId()
+        {
+            lock (s_historyLock)
+            {
+                return s_history.Count == 0 ? 0 : s_history[s_history.Count - 1].Id;
+            }
+        }
+
+        public static Dictionary<string, object> BuildStatusSummary(long afterId = 0)
+        {
+            lock (s_historyLock)
+            {
+                var ordered = s_history
+                    .Where(entry => entry.Id > afterId)
+                    .OrderBy(entry => entry.Id)
+                    .ToList();
+
+                return BuildStatusResult(ordered, afterId);
+            }
+        }
+
         private static object HandleTail(string paramsJson)
         {
             var query = ParseQuery(paramsJson, includePattern: false);
@@ -77,82 +98,12 @@ namespace UCP.Bridge
 
         private static object HandleStatus(string paramsJson)
         {
-            lock (s_historyLock)
-            {
-                var ordered = s_history.OrderBy(entry => entry.Id).ToList();
-                var byLevel = new Dictionary<string, object>
-                {
-                    ["info"] = ordered.Count(entry => entry.Level == "info"),
-                    ["warning"] = ordered.Count(entry => entry.Level == "warning"),
-                    ["error"] = ordered.Count(entry => entry.Level == "error"),
-                    ["exception"] = ordered.Count(entry => entry.Level == "exception")
-                };
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            long afterId = 0;
+            if (p != null && p.TryGetValue("afterId", out var afterIdObj) && afterIdObj != null)
+                afterId = Math.Max(0, Convert.ToInt64(afterIdObj));
 
-                var grouped = ordered
-                    .GroupBy(entry => $"{entry.Level}|{Fingerprint(entry.Message)}")
-                    .Select(group =>
-                    {
-                        var first = group.First();
-                        var last = group.Last();
-                        return new Dictionary<string, object>
-                        {
-                            ["level"] = first.Level,
-                            ["fingerprint"] = Fingerprint(first.Message),
-                            ["sampleMessage"] = Preview(first.Message, MaxPreviewLength),
-                            ["count"] = group.Count(),
-                            ["firstTimestamp"] = first.Timestamp,
-                            ["lastTimestamp"] = last.Timestamp,
-                            ["latestId"] = last.Id
-                        };
-                    })
-                    .OrderByDescending(entry => Convert.ToInt32(entry["count"]))
-                    .ThenBy(entry => entry["sampleMessage"].ToString())
-                    .ToList();
-
-                var result = new Dictionary<string, object>
-                {
-                    ["total"] = ordered.Count,
-                    ["byLevel"] = byLevel,
-                    ["uniqueCount"] = grouped.Count,
-                    ["topCategories"] = grouped.Take(8).Cast<object>().ToList()
-                };
-
-                if (ordered.Count > 0)
-                {
-                    var first = ordered.First();
-                    var last = ordered.Last();
-                    result["firstTimestamp"] = first.Timestamp;
-                    result["lastTimestamp"] = last.Timestamp;
-                    result["historyWindowSeconds"] = Math.Max(0d, (last.TimestampUtc - first.TimestampUtc).TotalSeconds);
-                    result["latestId"] = last.Id;
-                }
-
-                var playSession = PlayModeController.GetSessionSnapshot();
-                result["play"] = SerializePlaySession(playSession);
-
-                if (playSession.LastEnteredPlayAtUtc.HasValue)
-                {
-                    var sessionEnd = playSession.Playing
-                        ? DateTime.UtcNow
-                        : (playSession.LastExitedPlayAtUtc ?? DateTime.UtcNow);
-                    var sessionLogs = ordered
-                        .Where(entry => entry.TimestampUtc >= playSession.LastEnteredPlayAtUtc.Value
-                            && entry.TimestampUtc <= sessionEnd)
-                        .ToList();
-
-                    result["lastPlayWindow"] = new Dictionary<string, object>
-                    {
-                        ["startedAt"] = playSession.LastEnteredPlayAtUtc.Value.ToString("o"),
-                        ["endedAt"] = sessionEnd.ToString("o"),
-                        ["durationSeconds"] = Math.Max(0d, (sessionEnd - playSession.LastEnteredPlayAtUtc.Value).TotalSeconds),
-                        ["total"] = sessionLogs.Count,
-                        ["warnings"] = sessionLogs.Count(entry => entry.Level == "warning"),
-                        ["errors"] = sessionLogs.Count(entry => entry.Level == "error" || entry.Level == "exception")
-                    };
-                }
-
-                return result;
-            }
+            return BuildStatusSummary(afterId);
         }
 
         private static Dictionary<string, object> RecordLog(string level, string message, string stackTrace)
@@ -255,6 +206,83 @@ namespace UCP.Bridge
                 ["returned"] = queryResult.Returned.Count,
                 ["truncated"] = queryResult.Truncated
             };
+        }
+
+        private static Dictionary<string, object> BuildStatusResult(List<LogRecord> ordered, long afterId)
+        {
+            var byLevel = new Dictionary<string, object>
+            {
+                ["info"] = ordered.Count(entry => entry.Level == "info"),
+                ["warning"] = ordered.Count(entry => entry.Level == "warning"),
+                ["error"] = ordered.Count(entry => entry.Level == "error"),
+                ["exception"] = ordered.Count(entry => entry.Level == "exception")
+            };
+
+            var grouped = ordered
+                .GroupBy(entry => $"{entry.Level}|{Fingerprint(entry.Message)}")
+                .Select(group =>
+                {
+                    var first = group.First();
+                    var last = group.Last();
+                    return new Dictionary<string, object>
+                    {
+                        ["level"] = first.Level,
+                        ["fingerprint"] = Fingerprint(first.Message),
+                        ["sampleMessage"] = Preview(first.Message, MaxPreviewLength),
+                        ["count"] = group.Count(),
+                        ["firstTimestamp"] = first.Timestamp,
+                        ["lastTimestamp"] = last.Timestamp,
+                        ["latestId"] = last.Id
+                    };
+                })
+                .OrderByDescending(entry => Convert.ToInt32(entry["count"]))
+                .ThenBy(entry => entry["sampleMessage"].ToString())
+                .ToList();
+
+            var result = new Dictionary<string, object>
+            {
+                ["afterId"] = afterId,
+                ["total"] = ordered.Count,
+                ["byLevel"] = byLevel,
+                ["uniqueCount"] = grouped.Count,
+                ["topCategories"] = grouped.Take(8).Cast<object>().ToList()
+            };
+
+            if (ordered.Count > 0)
+            {
+                var first = ordered.First();
+                var last = ordered.Last();
+                result["firstTimestamp"] = first.Timestamp;
+                result["lastTimestamp"] = last.Timestamp;
+                result["historyWindowSeconds"] = Math.Max(0d, (last.TimestampUtc - first.TimestampUtc).TotalSeconds);
+                result["latestId"] = last.Id;
+            }
+
+            var playSession = PlayModeController.GetSessionSnapshot();
+            result["play"] = SerializePlaySession(playSession);
+
+            if (playSession.LastEnteredPlayAtUtc.HasValue)
+            {
+                var sessionEnd = playSession.Playing
+                    ? DateTime.UtcNow
+                    : (playSession.LastExitedPlayAtUtc ?? DateTime.UtcNow);
+                var sessionLogs = ordered
+                    .Where(entry => entry.TimestampUtc >= playSession.LastEnteredPlayAtUtc.Value
+                        && entry.TimestampUtc <= sessionEnd)
+                    .ToList();
+
+                result["lastPlayWindow"] = new Dictionary<string, object>
+                {
+                    ["startedAt"] = playSession.LastEnteredPlayAtUtc.Value.ToString("o"),
+                    ["endedAt"] = sessionEnd.ToString("o"),
+                    ["durationSeconds"] = Math.Max(0d, (sessionEnd - playSession.LastEnteredPlayAtUtc.Value).TotalSeconds),
+                    ["total"] = sessionLogs.Count,
+                    ["warnings"] = sessionLogs.Count(entry => entry.Level == "warning"),
+                    ["errors"] = sessionLogs.Count(entry => entry.Level == "error" || entry.Level == "exception")
+                };
+            }
+
+            return result;
         }
 
         private static Dictionary<string, object> SerializeSummary(LogRecord entry)

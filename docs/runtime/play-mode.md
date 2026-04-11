@@ -10,6 +10,8 @@ Enter play mode.
 
 If Unity refuses to enter play mode because there are still breaking script errors, `ucp play` now returns a failure instead of reporting a false success. Use the existing log commands if you need the full console details.
 
+If Unity is already in play mode, `ucp play` now fails clearly and points you to `ucp stop` instead of looking like a no-op toggle.
+
 `ucp play` also refuses to proceed when the active scene has unsaved changes. Save explicitly with `ucp scene save`, or use `--save` on the scene-editing command that produced the change.
 
 For unattended editor startup flows, pair lifecycle commands with `--dialog-policy` when Unity may raise recovery or Safe Mode prompts. A blocked startup dialog can leave the editor process alive without a live bridge until the prompt is resolved.

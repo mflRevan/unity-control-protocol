@@ -18,7 +18,10 @@ namespace UCP.Bridge
         {
             var parameters = ParseParameters(paramsJson);
             var requestedPath = RequirePath(parameters);
-            return AssetImportSupport.Reimport(requestedPath);
+            var recursive = TryGetOptionalBool(parameters, "recursive");
+            return recursive
+                ? AssetImportSupport.ReimportRecursive(requestedPath)
+                : AssetImportSupport.Reimport(requestedPath);
         }
 
         private static object HandleRead(string paramsJson)

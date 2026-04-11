@@ -36,6 +36,16 @@ ucp references check
 [OK] Native Rust indexing is available
 ```
 
+You can also verify outgoing references from a specific asset or folder tree:
+
+```bash
+# Check one asset or folder for unresolved outgoing references
+ucp references check Assets/Configs/GameConfig.asset
+ucp references check Assets/Prefabs
+```
+
+This is intended as a fast post-rename / post-move sanity check for missing serialized asset targets. It focuses on actionable missing project/package asset references rather than expanding every normal built-in material/script linkage.
+
 ### `ucp references find`
 
 Find all files and objects that reference a given asset.
@@ -129,6 +139,28 @@ ucp references find --asset "Assets/Materials/Agent.mat" --json --detail summary
   }
 }
 ```
+
+### `ucp references find-strings`
+
+Search serialized/text assets for string-based references that Unity cannot keep intact automatically, such as scene paths, migration IDs, or custom lookup keys.
+
+```bash
+# Literal search
+ucp references find-strings --pattern "SCN_Menu"
+
+# Regex search scoped to one folder
+ucp references find-strings --pattern '^SCN_[A-Z][A-Za-z]+$' --regex --path Assets/Configs
+```
+
+| Flag                | Description                                               |
+| ------------------- | --------------------------------------------------------- |
+| `--pattern <text>`  | Literal string or regex to search for                     |
+| `-p, --path <path>` | Optional asset/folder scope (defaults to `Assets/`)       |
+| `--regex`           | Interpret `--pattern` as a regex                          |
+| `--max-files <n>`   | Maximum files to include in the output (default: 20)      |
+| `--max-per-file <n>`| Maximum matches shown per file (default: 5)               |
+
+Use this alongside `ucp asset move` / `bulk-move` when you suspect custom string fields still need manual migration after a GUID-safe rename.
 
 ### `ucp references index build`
 

@@ -80,6 +80,47 @@ namespace UCP.Bridge
             return CreateReimportResult(requestedPath, assetPath, true, false, null);
         }
 
+        public static Dictionary<string, object> ReimportRecursive(string requestedPath, bool forceSynchronous = true)
+        {
+            var assetPath = GetPrimaryAssetPath(requestedPath);
+            if (string.IsNullOrEmpty(assetPath))
+                throw new ArgumentException("Missing 'path' parameter");
+            if (!IsProjectAssetPath(assetPath))
+                throw new ArgumentException($"Path is not under Assets/ or Packages/: {requestedPath}");
+
+            if (!AssetDatabase.IsValidFolder(assetPath))
+                return Reimport(requestedPath, forceSynchronous);
+
+            var options = ImportAssetOptions.ForceUpdate;
+            if (forceSynchronous)
+                options |= ImportAssetOptions.ForceSynchronousImport;
+
+            var guidResults = AssetDatabase.FindAssets(string.Empty, new[] { assetPath });
+            var importedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var guid in guidResults)
+            {
+                var childPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(childPath) || AssetDatabase.IsValidFolder(childPath))
+                    continue;
+
+                AssetDatabase.ImportAsset(childPath, options);
+                importedPaths.Add(childPath);
+                RecordReimport(childPath);
+            }
+
+            return new Dictionary<string, object>
+            {
+                ["requestedPath"] = requestedPath,
+                ["assetPath"] = assetPath,
+                ["recursive"] = true,
+                ["requested"] = importedPaths.Count,
+                ["reimported"] = importedPaths.Count,
+                ["skipped"] = 0,
+                ["paths"] = new List<object>(importedPaths)
+            };
+        }
+
         public static Dictionary<string, object> SaveImporterSettings(string requestedPath, AssetImporter importer, bool noReimport)
         {
             if (importer == null)

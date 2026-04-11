@@ -1,8 +1,8 @@
 use crate::output;
 use clap::Subcommand;
 
-use super::{Context, UnityLifecyclePolicy};
 use super::snapshot;
+use super::{Context, UnityLifecyclePolicy};
 
 #[derive(Subcommand)]
 pub enum SceneAction {
@@ -11,6 +11,9 @@ pub enum SceneAction {
     /// Load a scene by path
     Load {
         path: String,
+        /// Load additively instead of replacing the current open scene setup
+        #[arg(long)]
+        additive: bool,
         /// Do not auto-save dirty scenes before loading
         #[arg(long)]
         no_save: bool,
@@ -55,6 +58,7 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
         SceneAction::List => client.call("scene/list", serde_json::json!({})).await?,
         SceneAction::Load {
             path,
+            additive,
             no_save,
             keep_untitled,
         } => {
@@ -63,6 +67,7 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     "scene/load",
                     serde_json::json!({
                         "path": path,
+                        "additive": additive,
                         "saveDirtyScenes": !*no_save,
                         "discardUntitled": !*keep_untitled,
                     }),
@@ -128,8 +133,12 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
-            SceneAction::Load { path, .. } => {
-                output::print_success(&format!("Loaded scene: {path}"));
+            SceneAction::Load { path, additive, .. } => {
+                if additive {
+                    output::print_success(&format!("Loaded scene additively: {path}"));
+                } else {
+                    output::print_success(&format!("Loaded scene: {path}"));
+                }
             }
             SceneAction::Active => {
                 if let Some(name) = result.get("name").and_then(|v| v.as_str()) {
@@ -141,7 +150,10 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
             }
             SceneAction::Save => {
                 let path = result.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-                let saved = result.get("saved").and_then(|v| v.as_bool()).unwrap_or(true);
+                let saved = result
+                    .get("saved")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
                 if saved {
                     output::print_success(&format!("Saved active scene: {path}"));
                 } else {
@@ -161,7 +173,9 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
 
 fn scene_preflight_policy(action: &SceneAction) -> super::ActiveSceneGuardPolicy {
     match action {
-        SceneAction::Load { .. } => super::ActiveSceneGuardPolicy::block_if_dirty("load another scene"),
+        SceneAction::Load { .. } => {
+            super::ActiveSceneGuardPolicy::block_if_dirty("load another scene")
+        }
         SceneAction::List
         | SceneAction::Active
         | SceneAction::Save

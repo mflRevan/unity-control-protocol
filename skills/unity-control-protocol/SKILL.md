@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.5.0'
+  version: '0.5.1'
 ---
 
 # Unity Control Protocol (UCP)
@@ -52,7 +52,7 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 
 ## Core agent guidance
 
-- Prefer direct workspace edits plus `ucp compile` when you already have normal filesystem access.
+- Prefer direct workspace edits when you already have normal filesystem access always followed by `ucp compile`.
 - Use `ucp files ...` as a sandboxed fallback for bridge-mediated project file I/O.
 - Run `ucp scene snapshot` before object or prefab work to discover instance IDs.
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
@@ -69,10 +69,12 @@ If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --he
 ucp scene snapshot --filter "Player"
 ucp scene save # save active scene before loading another
 ucp scene load Assets/Scenes/Level1.unity
+ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene focus --id 46894 --axis 1 0 0
 
 ucp editor status
 ucp play
+ucp stop
 ucp compile
 ```
 
@@ -85,9 +87,11 @@ ucp object get-fields --id 46894 --component Transform
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
 
 ucp asset search -t Material --max 10
+ucp asset search -n '^SCN_[0-9]+$' --regex
 ucp asset move "Assets/Legacy/Enemy.prefab" "Assets/Characters/Enemy.prefab"
-ucp asset bulk-move --moves '[{"from":"Assets/Legacy/Enemy.mat","to":"Assets/Characters/Materials/Enemy.mat"}]'
+ucp asset bulk-move --moves '[{"from":"Assets/Legacy/Enemy.mat","to":"Assets/Characters/Materials/Enemy.mat"}]' --dry-run
 ucp asset import-settings write "Assets/Textures/HUD.png" --field m_IsReadable --value true
+ucp asset reimport "Assets/Generated" --recursive
 
 ucp material set-property --path "Assets/Materials/Agent.mat" --property _Metallic --value "0.5"
 ucp prefab apply --id -136722
@@ -129,6 +133,9 @@ Use `ucp references --help` for the full surface. Reference queries are read-onl
 # Check native indexing compatibility
 ucp references check
 
+# Check outgoing references after a move/rename
+ucp references check Assets/Prefabs
+
 # Find all references to a material
 ucp references find --asset "Assets/Materials/Agent.mat"
 
@@ -141,11 +148,16 @@ ucp references find --asset "Assets/Scripts/PlayerController.cs" --detail summar
 # JSON output for structured consumption
 ucp references find --asset "Assets/Prefabs/Enemy.prefab" --json --detail normal
 
+# Find string-based references Unity will not migrate automatically
+ucp references find-strings --pattern "SCN_Menu"
+
 # Force bridge fallback (requires running editor)
 ucp references find --asset "Assets/Materials/Agent.mat" --approach bridge
 ```
 
 Use `--detail summary` in general workflows to minimize context bloat — repetitive patterns (e.g., 200 MeshRenderers referencing one material) collapse to a single count line. Use `--detail verbose` only for small, targeted result sets.
+
+Use `references check <path>` after refactors for fast missing-target verification, and `references find-strings` when custom string IDs or scene-path fields need manual migration help beyond GUID-safe asset moves.
 
 ## Version control (Plastic SCM / Unity VCS)
 

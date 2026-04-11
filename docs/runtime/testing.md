@@ -32,6 +32,8 @@ ucp run-tests --json
 
 `ucp run-tests` now also blocks when the active scene has unsaved changes, so automated test runs do not fall through to Unity-owned save prompts during play-mode or recompilation-heavy test setup.
 
+`ucp run-tests` also treats new Unity console `error` and `exception` logs emitted during the run as a failing console guard. Warnings are reported, but they do not fail the command by themselves.
+
 ## CI/CD Integration
 
 UCP's test runner is designed for CI pipelines. Use `--json` output and the exit code to determine pass/fail:

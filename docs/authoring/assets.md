@@ -17,6 +17,9 @@ ucp asset search -t Material
 # Find by name
 ucp asset search -n "Player"
 
+# Regex search for naming violations or scene-style asset names
+ucp asset search -n '^SCN_[0-9]+$' --regex
+
 # Filter by folder
 ucp asset search -t Prefab -p "Assets/Prefabs"
 
@@ -28,6 +31,7 @@ ucp asset search -t Texture2D --max 10
 | ------------------- | ---------------------------------------------- |
 | `-t, --type <type>` | Asset type (Material, Texture2D, Prefab, etc.) |
 | `-n, --name <name>` | Name filter                                    |
+| `--regex`           | Treat `--name` as a regex                      |
 | `-p, --path <path>` | Folder path filter                             |
 | `--max <n>`         | Maximum results (default: 50)                  |
 
@@ -164,18 +168,27 @@ ucp asset bulk-move --moves '[
   {"from":"Assets/Temp/A.asset","to":"Assets/Archive/A.asset"},
   {"from":"Assets/Temp/B.asset","to":"Assets/Archive/B.asset"}
 ]' --continue-on-error
+
+# Preview a larger refactor before touching anything
+ucp asset bulk-move --moves '[
+  {"from":"Assets/Legacy/Props","to":"Assets/World/Props"},
+  {"from":"Assets/Legacy/Scenes/SCN_Menu.unity","to":"Assets/Scenes/SCN_Menu.unity"}
+]' --dry-run
 ```
 
 | Flag                    | Description                                                   |
 | ----------------------- | ------------------------------------------------------------- |
 | `--moves <json>`        | JSON array of `{from,to}` entries or an object map            |
 | `--continue-on-error`   | Keep processing later entries after an individual move fails  |
+| `--dry-run`             | Validate and preview moves without executing them             |
 
 **Notes:**
 
 - Bulk moves execute in the order provided.
 - Without `--continue-on-error`, UCP stops on the first failed move.
 - Earlier successful moves are not rolled back automatically.
+- `--dry-run` returns the resolved destination, GUID, and would-move status for each entry without changing the project.
+- Missing-path failures now include a stale-AssetDatabase hint and fuzzy "did you mean" suggestions when nearby asset paths exist.
 - Use `--json` when you want per-entry success/error details for larger refactors.
 
 ### `ucp asset reimport <path>`
@@ -185,9 +198,16 @@ Force Unity to reimport a specific asset. The path may point to either the asset
 ```bash
 ucp asset reimport "Assets/Models/Agent.fbx"
 ucp asset reimport "Assets/Textures/HUD.png.meta"
+
+# Reimport a whole folder tree after external YAML/meta edits
+ucp asset reimport "Assets/Generated" --recursive
 ```
 
 Use this when you intentionally skipped an automatic reimport, or when you updated an asset on disk outside the importer-settings workflow and want Unity to apply it immediately. UCP waits for Unity to finish the resulting asset-processing work before the command returns.
+
+| Flag          | Description                                             |
+| ------------- | ------------------------------------------------------- |
+| `--recursive` | Reimport all Unity-managed assets under a folder tree   |
 
 ### `ucp asset import-settings read <path>`
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 
@@ -28,6 +29,7 @@ namespace UCP.Bridge
             string typeFilter = null;
             string nameFilter = null;
             string pathFilter = null;
+            bool useRegex = false;
             int maxResults = 100;
 
             if (p != null)
@@ -38,13 +40,28 @@ namespace UCP.Bridge
                     nameFilter = nObj.ToString();
                 if (p.TryGetValue("path", out var pObj) && pObj != null)
                     pathFilter = pObj.ToString();
+                if (p.TryGetValue("regex", out var regexObj) && regexObj != null)
+                    useRegex = Convert.ToBoolean(regexObj);
                 if (p.TryGetValue("maxResults", out var mObj))
                     maxResults = Convert.ToInt32(mObj);
             }
 
+            Regex nameRegex = null;
+            if (useRegex && !string.IsNullOrEmpty(nameFilter))
+            {
+                try
+                {
+                    nameRegex = new Regex(nameFilter, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new ArgumentException($"Invalid regex for name filter: {ex.Message}");
+                }
+            }
+
             // Build search filter
             string filter = "";
-            if (!string.IsNullOrEmpty(nameFilter))
+            if (!useRegex && !string.IsNullOrEmpty(nameFilter))
                 filter += nameFilter + " ";
             if (!string.IsNullOrEmpty(typeFilter))
                 filter += $"t:{GetSearchTypeFilter(typeFilter)}";
@@ -64,7 +81,7 @@ namespace UCP.Bridge
             for (int i = 0; i < guids.Length; i++)
             {
                 string assetPath = AssetDatabase.GUIDToAssetPath(guids[i]);
-                foreach (var asset in GetMatchingAssets(assetPath, typeFilter, nameFilter))
+                foreach (var asset in GetMatchingAssets(assetPath, typeFilter, nameFilter, nameRegex))
                 {
                     totalMatches++;
                     if (results.Count >= maxResults)
@@ -354,6 +371,7 @@ namespace UCP.Bridge
                 throw new ArgumentException("Missing 'moves' parameter");
 
             var continueOnError = TryGetOptionalBool(parameters, "continueOnError");
+            var dryRun = TryGetOptionalBool(parameters, "dryRun");
             var requests = ParseMoveRequests(movesObject);
             var results = new List<object>();
             var errors = new List<object>();
@@ -361,15 +379,14 @@ namespace UCP.Bridge
             var stopped = false;
             var anyChanged = false;
 
-            AssetDatabase.StartAssetEditing();
-            try
+            if (dryRun)
             {
                 for (var index = 0; index < requests.Count; index++)
                 {
                     var request = requests[index];
                     try
                     {
-                        var moveResult = MoveAssetInternal(request.SourcePath, request.Destination, false);
+                        var moveResult = PreviewMoveInternal(request.SourcePath, request.Destination);
                         results.Add(AddMoveIndex(moveResult, index));
                         if (GetBool(moveResult, "changed"))
                         {
@@ -395,12 +412,75 @@ namespace UCP.Bridge
                     }
                 }
             }
-            finally
+            else
             {
-                AssetDatabase.StopAssetEditing();
+                var preparedMoves = new List<PreparedMove>();
+                for (var index = 0; index < requests.Count; index++)
+                {
+                    var request = requests[index];
+                    try
+                    {
+                        var preparedMove = PrepareMove(request.SourcePath, request.Destination, true);
+                        preparedMoves.Add(new PreparedMove(index, request.SourcePath, preparedMove));
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(new Dictionary<string, object>
+                        {
+                            ["index"] = index,
+                            ["sourcePath"] = request.SourcePath,
+                            ["destinationPath"] = request.Destination,
+                            ["message"] = ex.Message
+                        });
+
+                        if (!continueOnError)
+                        {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+
+                AssetDatabase.StartAssetEditing();
+                try
+                {
+                    foreach (var preparedMove in preparedMoves)
+                    {
+                        try
+                        {
+                            var moveResult = MovePreparedAsset(preparedMove.SourcePath, preparedMove.Move, false);
+                            results.Add(AddMoveIndex(moveResult, preparedMove.Index));
+                            if (GetBool(moveResult, "changed"))
+                            {
+                                movedCount++;
+                                anyChanged = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            errors.Add(new Dictionary<string, object>
+                            {
+                                ["index"] = preparedMove.Index,
+                                ["sourcePath"] = preparedMove.SourcePath,
+                                ["destinationPath"] = preparedMove.Move.ResolvedDestination,
+                                ["message"] = ex.Message
+                            });
+
+                            if (!continueOnError)
+                            {
+                                stopped = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
             }
 
-            if (anyChanged)
+            if (!dryRun && anyChanged)
             {
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -412,6 +492,7 @@ namespace UCP.Bridge
                 ["requested"] = requests.Count,
                 ["moved"] = movedCount,
                 ["failed"] = errors.Count,
+                ["dryRun"] = dryRun,
                 ["stopped"] = stopped,
                 ["results"] = results,
                 ["errors"] = errors
@@ -431,10 +512,19 @@ namespace UCP.Bridge
             }
         }
 
-        private static IEnumerable<UnityEngine.Object> GetMatchingAssets(string assetPath, string typeFilter, string nameFilter)
+        private static IEnumerable<UnityEngine.Object> GetMatchingAssets(
+            string assetPath,
+            string typeFilter,
+            string nameFilter,
+            Regex nameRegex)
         {
             UnityEngine.Object[] candidates;
-            if (string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(nameFilter))
+            if (string.IsNullOrEmpty(typeFilter) && string.IsNullOrEmpty(nameFilter) && nameRegex == null)
+            {
+                var mainAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+                candidates = mainAsset != null ? new[] { mainAsset } : Array.Empty<UnityEngine.Object>();
+            }
+            else if (assetPath.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
             {
                 var mainAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
                 candidates = mainAsset != null ? new[] { mainAsset } : Array.Empty<UnityEngine.Object>();
@@ -447,16 +537,23 @@ namespace UCP.Bridge
             foreach (var candidate in candidates)
             {
                 if (candidate == null) continue;
-                if (!MatchesName(candidate, assetPath, nameFilter)) continue;
+                if (!MatchesName(candidate, assetPath, nameFilter, nameRegex)) continue;
                 if (!MatchesType(candidate, assetPath, typeFilter)) continue;
                 yield return candidate;
             }
         }
 
-        private static bool MatchesName(UnityEngine.Object asset, string assetPath, string nameFilter)
+        private static bool MatchesName(UnityEngine.Object asset, string assetPath, string nameFilter, Regex nameRegex)
         {
-            if (string.IsNullOrEmpty(nameFilter))
+            if (string.IsNullOrEmpty(nameFilter) && nameRegex == null)
                 return true;
+
+            if (nameRegex != null)
+            {
+                var fileStem = System.IO.Path.GetFileNameWithoutExtension(assetPath);
+                return nameRegex.IsMatch(asset.name)
+                    || (!string.IsNullOrEmpty(fileStem) && nameRegex.IsMatch(fileStem));
+            }
 
             return asset.name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase)
                 || System.IO.Path.GetFileNameWithoutExtension(assetPath).Contains(nameFilter, StringComparison.OrdinalIgnoreCase);
@@ -507,30 +604,29 @@ namespace UCP.Bridge
 
         private static Dictionary<string, object> MoveAssetInternal(string sourcePath, string destination, bool finalize)
         {
+            var move = PrepareMove(sourcePath, destination, true);
+            return MovePreparedAsset(NormalizeMovePath(sourcePath), move, finalize);
+        }
+
+        private static Dictionary<string, object> PreviewMoveInternal(string sourcePath, string destination)
+        {
             var normalizedSource = NormalizeMovePath(sourcePath);
-            var isFolder = AssetDatabase.IsValidFolder(normalizedSource);
-            if (!isFolder && !AssetDatabase.AssetPathExists(normalizedSource))
-                throw new ArgumentException($"Asset not found: {normalizedSource}");
+            var move = PrepareMove(normalizedSource, destination, false);
+            return DescribeMovedAsset(normalizedSource, move.ResolvedDestination, move.Changed, move.Identity);
+        }
 
-            if (!IsMovableAssetPath(normalizedSource))
-                throw new ArgumentException($"Asset moves are only supported under Assets/: {normalizedSource}");
+        private static ValidatedMove PrepareMove(string sourcePath, string destination, bool ensureParentFolders)
+        {
+            var normalizedSource = NormalizeMovePath(sourcePath);
+            var move = ValidateMoveRequest(normalizedSource, destination);
+            if (ensureParentFolders)
+                EnsureParentFoldersExist(move.ResolvedDestination);
+            return move;
+        }
 
-            var identity = DescribeExistingAsset(normalizedSource, isFolder);
-            var resolvedDestination = ResolveDestinationPath(normalizedSource, destination);
-            if (!IsMovableAssetPath(resolvedDestination))
-                throw new ArgumentException($"Destination must be under Assets/: {resolvedDestination}");
-
-            if (string.Equals(normalizedSource, resolvedDestination, StringComparison.OrdinalIgnoreCase))
-            {
-                return DescribeMovedAsset(normalizedSource, resolvedDestination, false, identity);
-            }
-
-            if (AssetDatabase.AssetPathExists(resolvedDestination) || AssetDatabase.IsValidFolder(resolvedDestination))
-                throw new ArgumentException($"Destination already exists: {resolvedDestination}");
-
-            EnsureParentFoldersExist(resolvedDestination);
-
-            var moveError = AssetDatabase.MoveAsset(normalizedSource, resolvedDestination);
+        private static Dictionary<string, object> MovePreparedAsset(string normalizedSource, ValidatedMove move, bool finalize)
+        {
+            var moveError = AssetDatabase.MoveAsset(normalizedSource, move.ResolvedDestination);
             if (!string.IsNullOrEmpty(moveError))
                 throw new InvalidOperationException(moveError);
 
@@ -540,7 +636,7 @@ namespace UCP.Bridge
                 AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             }
 
-            return DescribeMovedAsset(normalizedSource, resolvedDestination, true, identity);
+            return DescribeMovedAsset(normalizedSource, move.ResolvedDestination, true, move.Identity);
         }
 
         private static Dictionary<string, object> DescribeMovedAsset(
@@ -648,11 +744,88 @@ namespace UCP.Bridge
             return path?.Trim().Replace('\\', '/');
         }
 
+        private static ValidatedMove ValidateMoveRequest(string normalizedSource, string destination)
+        {
+            var isFolder = AssetDatabase.IsValidFolder(normalizedSource);
+            if (!isFolder && !AssetDatabase.AssetPathExists(normalizedSource))
+                throw new ArgumentException(BuildAssetNotFoundMessage(normalizedSource));
+
+            if (!IsMovableAssetPath(normalizedSource))
+                throw new ArgumentException($"Asset moves are only supported under Assets/: {normalizedSource}");
+
+            var identity = DescribeExistingAsset(normalizedSource, isFolder);
+            var resolvedDestination = ResolveDestinationPath(normalizedSource, destination);
+            if (!IsMovableAssetPath(resolvedDestination))
+                throw new ArgumentException($"Destination must be under Assets/: {resolvedDestination}");
+
+            if (string.Equals(normalizedSource, resolvedDestination, StringComparison.OrdinalIgnoreCase))
+                return new ValidatedMove(identity, resolvedDestination, false);
+
+            if (AssetDatabase.AssetPathExists(resolvedDestination) || AssetDatabase.IsValidFolder(resolvedDestination))
+                throw new ArgumentException($"Destination already exists: {resolvedDestination}");
+
+            return new ValidatedMove(identity, resolvedDestination, true);
+        }
+
         private static bool IsMovableAssetPath(string path)
         {
             return !string.IsNullOrEmpty(path)
                 && (path.Equals("Assets", StringComparison.OrdinalIgnoreCase)
                     || path.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string BuildAssetNotFoundMessage(string normalizedSource)
+        {
+            var message = $"Asset not found: {normalizedSource}.";
+            var suggestions = FindSimilarAssetPaths(normalizedSource, 3);
+            if (suggestions.Count > 0)
+                message += " Did you mean: " + string.Join(", ", suggestions) + "?";
+            message += " If the asset was created or renamed outside Unity, refresh or reimport so AssetDatabase can pick up the latest path.";
+            return message;
+        }
+
+        private static List<string> FindSimilarAssetPaths(string normalizedSource, int maxSuggestions)
+        {
+            var targetName = Path.GetFileNameWithoutExtension(normalizedSource) ?? normalizedSource;
+            var targetFileName = Path.GetFileName(normalizedSource) ?? normalizedSource;
+            var targetExtension = Path.GetExtension(normalizedSource) ?? string.Empty;
+            var matches = new List<(string path, int score)>();
+
+            foreach (var candidate in AssetDatabase.GetAllAssetPaths())
+            {
+                if (!candidate.StartsWith("Assets/", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var score = 0;
+                if (candidate.IndexOf(targetName, StringComparison.OrdinalIgnoreCase) >= 0)
+                    score += 3;
+                if (string.Equals(Path.GetFileName(candidate), targetFileName, StringComparison.OrdinalIgnoreCase))
+                    score += 4;
+                if (string.Equals(Path.GetExtension(candidate), targetExtension, StringComparison.OrdinalIgnoreCase))
+                    score += 1;
+                if (score > 0)
+                    matches.Add((candidate, score));
+            }
+
+            matches.Sort((left, right) =>
+            {
+                var scoreCompare = right.score.CompareTo(left.score);
+                return scoreCompare != 0
+                    ? scoreCompare
+                    : string.Compare(left.path, right.path, StringComparison.OrdinalIgnoreCase);
+            });
+
+            var suggestions = new List<string>();
+            foreach (var match in matches)
+            {
+                if (suggestions.Contains(match.path))
+                    continue;
+                suggestions.Add(match.path);
+                if (suggestions.Count >= maxSuggestions)
+                    break;
+            }
+
+            return suggestions;
         }
 
         private static Dictionary<string, object> ParseParameters(string paramsJson)
@@ -750,6 +923,20 @@ namespace UCP.Bridge
             public string Destination { get; }
         }
 
+        private readonly struct PreparedMove
+        {
+            public PreparedMove(int index, string sourcePath, ValidatedMove move)
+            {
+                Index = index;
+                SourcePath = sourcePath;
+                Move = move;
+            }
+
+            public int Index { get; }
+            public string SourcePath { get; }
+            public ValidatedMove Move { get; }
+        }
+
         private readonly struct AssetIdentity
         {
             public AssetIdentity(string guid, string name, string type, bool isFolder)
@@ -764,6 +951,20 @@ namespace UCP.Bridge
             public string Name { get; }
             public string Type { get; }
             public bool IsFolder { get; }
+        }
+
+        private readonly struct ValidatedMove
+        {
+            public ValidatedMove(AssetIdentity identity, string resolvedDestination, bool changed)
+            {
+                Identity = identity;
+                ResolvedDestination = resolvedDestination;
+                Changed = changed;
+            }
+
+            public AssetIdentity Identity { get; }
+            public string ResolvedDestination { get; }
+            public bool Changed { get; }
         }
 
     }

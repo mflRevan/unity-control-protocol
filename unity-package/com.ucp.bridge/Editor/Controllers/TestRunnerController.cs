@@ -11,6 +11,7 @@ namespace UCP.Bridge
     {
         private static TestRunnerApi s_api;
         private static TestResultCollector s_collector;
+        private const string ConsoleGuardName = "UCP.Bridge.Tests.ConsoleLogGuard";
 
         public static void Register(CommandRouter router)
         {
@@ -42,7 +43,8 @@ namespace UCP.Bridge
             if (s_collector != null)
                 s_api.UnregisterCallbacks(s_collector);
 
-            s_collector = new TestResultCollector();
+            var logCursor = LogsController.GetLatestId();
+            s_collector = new TestResultCollector(logCursor);
             s_api.RegisterCallbacks(s_collector);
 
             var executionSettings = new ExecutionSettings
@@ -130,11 +132,13 @@ namespace UCP.Bridge
         private class TestResultCollector : ICallbacks
         {
             private readonly List<object> _results = new();
+            private readonly long _logCursor;
             private int _passed, _failed, _skipped;
             private double _startTime;
 
-            public TestResultCollector()
+            public TestResultCollector(long logCursor)
             {
+                _logCursor = logCursor;
                 _startTime = EditorApplication.timeSinceStartup;
             }
 
@@ -147,6 +151,21 @@ namespace UCP.Bridge
                 _failed = 0;
                 _skipped = 0;
                 CollectLeafResults(result);
+                var logSummary = LogsController.BuildStatusSummary(_logCursor);
+                var consoleWarnings = GetLevelCount(logSummary, "warning");
+                var consoleErrors = GetLevelCount(logSummary, "error") + GetLevelCount(logSummary, "exception");
+
+                if (consoleErrors > 0)
+                {
+                    _failed++;
+                    _results.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = ConsoleGuardName,
+                        ["status"] = "failed",
+                        ["duration"] = 0.0,
+                        ["message"] = BuildConsoleGuardMessage(consoleErrors, consoleWarnings, logSummary)
+                    });
+                }
 
                 var duration = EditorApplication.timeSinceStartup - _startTime;
 
@@ -156,13 +175,17 @@ namespace UCP.Bridge
                     ["passed"] = _passed,
                     ["failed"] = _failed,
                     ["skipped"] = _skipped,
-                    ["duration"] = (double)duration
+                    ["duration"] = (double)duration,
+                    ["consoleClean"] = consoleErrors == 0,
+                    ["consoleWarnings"] = consoleWarnings,
+                    ["consoleErrors"] = consoleErrors
                 };
 
                 BridgeServer.BroadcastNotification("tests/result", new Dictionary<string, object>
                 {
                     ["summary"] = summary,
-                    ["tests"] = _results
+                    ["tests"] = _results,
+                    ["logs"] = logSummary
                 });
 
                 if (s_api != null)
@@ -234,6 +257,59 @@ namespace UCP.Bridge
                 }
 
                 return result.Name;
+            }
+
+            private static int GetLevelCount(Dictionary<string, object> logSummary, string level)
+            {
+                if (!logSummary.TryGetValue("byLevel", out var byLevelObj)
+                    || byLevelObj is not Dictionary<string, object> byLevel
+                    || !byLevel.TryGetValue(level, out var value))
+                {
+                    return 0;
+                }
+
+                return Convert.ToInt32(value);
+            }
+
+            private static string BuildConsoleGuardMessage(
+                int consoleErrors,
+                int consoleWarnings,
+                Dictionary<string, object> logSummary)
+            {
+                var message = $"Unity emitted {consoleErrors} error/exception log(s) during the test run";
+                if (consoleWarnings > 0)
+                    message += $" and {consoleWarnings} warning log(s)";
+
+                if (!logSummary.TryGetValue("topCategories", out var categoriesObj)
+                    || categoriesObj is not List<object> categories
+                    || categories.Count == 0)
+                {
+                    return message + ".";
+                }
+
+                var parts = new List<string>();
+                foreach (var categoryObj in categories)
+                {
+                    if (categoryObj is not Dictionary<string, object> category)
+                        continue;
+
+                    var count = category.TryGetValue("count", out var countObj)
+                        ? Convert.ToInt32(countObj)
+                        : 0;
+                    var sample = category.TryGetValue("sampleMessage", out var sampleObj)
+                        ? sampleObj?.ToString() ?? string.Empty
+                        : string.Empty;
+                    if (count <= 0 || string.IsNullOrEmpty(sample))
+                        continue;
+
+                    parts.Add($"{count}x {sample}");
+                    if (parts.Count >= 3)
+                        break;
+                }
+
+                return parts.Count == 0
+                    ? message + "."
+                    : $"{message}. Top categories: {string.Join(" | ", parts)}";
             }
         }
     }

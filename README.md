@@ -105,27 +105,28 @@ ucp open       # launch Unity and connect
 
 ## Agent integration
 
-UCP ships as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin. The skill file teaches the agent the full control surface, common workflows, and edge-case handling.
+UCP ships as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin. The skill file (not limited to Claude Code, can be used in other harnesses too) teaches the agent the full control surface, common workflows, and edge-case handling.
 
 ```bash
-# Local
+# Local, only for the duration of the session (https://code.claude.com/docs/en/plugins-reference#plugin-caching-and-file-resolution)
 claude --plugin-dir /path/to/unity-control-protocol
 
-# Marketplace
+# Marketplace, installed for future sessions
 /plugin marketplace add mflRevan/unity-control-protocol
+/plugin install ucp@unity-control-protocol
 ```
 
-Every command supports `--json` — agents always get structured, parseable output.
+Every command supports `--json` — agents can always get structured, parseable output.
 
 <br>
 
 ## Platform support
 
-| Platform | Architecture |
-|---|---|
-| Windows | x64 |
-| macOS | x64, ARM (Apple Silicon) |
-| Linux | x64 |
+| Platform | Architecture             |
+| -------- | ------------------------ |
+| Windows  | x64                      |
+| macOS    | x64, ARM (Apple Silicon) |
+| Linux    | x64                      |
 
 Unity 2021.3+. Tested across Unity 6 (`6000.0` – `6000.4`).
 
@@ -135,7 +136,7 @@ Unity 2021.3+. Tested across Unity 6 (`6000.0` – `6000.4`).
 
 ```
 cli/                              Rust CLI — the ucp binary
-unity-package/com.ucp.bridge/    Unity Editor bridge package
+unity-package/com.ucp.bridge/     Unity Editor bridge package
 npm/                              npm distribution wrapper
 docs/                             Markdown documentation source
 website/                          Docs site (unityctl.dev)

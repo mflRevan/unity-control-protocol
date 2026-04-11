@@ -1,7 +1,24 @@
 use crate::output;
+use anyhow::anyhow;
+use serde_json::Value;
+use std::fmt;
 use tokio::time::{Duration, timeout};
 
 use super::Context;
+
+#[derive(Debug)]
+pub struct TestRunFailure {
+    pub message: String,
+    pub result: Value,
+}
+
+impl fmt::Display for TestRunFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for TestRunFailure {}
 
 pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::Result<()> {
     let (_, _, mut client) = super::connect_client(ctx).await?;
@@ -51,43 +68,124 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
 
     client.close().await;
 
-    if ctx.json {
-        output::print_json(&output::success_json(result));
-    } else {
-        if let Some(summary) = result.get("summary") {
-            let total = summary.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
-            let failed = summary.get("failed").and_then(|v| v.as_u64()).unwrap_or(0);
-            let dur = summary
-                .get("duration")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
+    let summary = result
+        .get("summary")
+        .ok_or_else(|| anyhow!("Unity test runner returned no summary"))?;
+    let total = summary.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+    let failed = summary.get("failed").and_then(|v| v.as_u64()).unwrap_or(0);
+    let dur = summary
+        .get("duration")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let console_warnings = summary
+        .get("consoleWarnings")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let console_errors = summary
+        .get("consoleErrors")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
 
-            if failed == 0 {
-                output::print_success(&format!("All {total} tests passed ({dur:.2}s)"));
-            } else {
-                output::print_error(&format!("{failed}/{total} tests failed ({dur:.2}s)"));
-            }
+    if ctx.json {
+        if failed == 0 {
+            output::print_json(&output::success_json(result));
+            return Ok(());
         }
 
-        if let Some(tests) = result.get("tests").and_then(|v| v.as_array()) {
-            for t in tests {
-                let st = t.get("status").and_then(|v| v.as_str()).unwrap_or("");
-                if st == "failed" {
-                    let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                    let msg = t.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                    let icon = if output::supports_unicode() {
-                        "✖"
-                    } else {
-                        "x"
-                    };
-                    eprintln!("  {icon} {name}");
-                    if !msg.is_empty() {
-                        eprintln!("    {msg}");
-                    }
+        return Err(TestRunFailure {
+            message: format_failure_message(total, failed, dur, console_errors, console_warnings),
+            result,
+        }
+        .into());
+    }
+
+    if failed == 0 {
+        output::print_success(&format!("All {total} tests passed ({dur:.2}s)"));
+    } else {
+        output::print_error(&format!("{failed}/{total} tests failed ({dur:.2}s)"));
+    }
+
+    if console_warnings > 0 {
+        output::print_warn(&format!(
+            "Unity emitted {console_warnings} warning log(s) during the test run"
+        ));
+    }
+
+    if console_errors > 0 {
+        output::print_error(&format!(
+            "Unity emitted {console_errors} error/exception log(s) during the test run"
+        ));
+        print_log_summary(&result);
+    }
+
+    if let Some(tests) = result.get("tests").and_then(|v| v.as_array()) {
+        for t in tests {
+            let st = t.get("status").and_then(|v| v.as_str()).unwrap_or("");
+            if st == "failed" {
+                let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                let msg = t.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                let icon = if output::supports_unicode() { "✖" } else { "x" };
+                eprintln!("  {icon} {name}");
+                if !msg.is_empty() {
+                    eprintln!("    {msg}");
                 }
             }
         }
     }
 
-    Ok(())
+    if failed == 0 {
+        Ok(())
+    } else {
+        Err(TestRunFailure {
+            message: format_failure_message(total, failed, dur, console_errors, console_warnings),
+            result,
+        }
+        .into())
+    }
+}
+
+fn format_failure_message(
+    total: u64,
+    failed: u64,
+    duration: f64,
+    console_errors: u64,
+    console_warnings: u64,
+) -> String {
+    let mut message = format!("{failed}/{total} tests failed ({duration:.2}s)");
+    if console_errors > 0 {
+        message.push_str(&format!(
+            "; Unity emitted {console_errors} error/exception log(s)"
+        ));
+    } else if console_warnings > 0 {
+        message.push_str(&format!(
+            "; Unity emitted {console_warnings} warning log(s)"
+        ));
+    }
+    message
+}
+
+fn print_log_summary(result: &Value) {
+    let Some(logs) = result.get("logs") else {
+        return;
+    };
+    let Some(categories) = logs.get("topCategories").and_then(|v| v.as_array()) else {
+        return;
+    };
+    if categories.is_empty() {
+        return;
+    }
+
+    eprintln!("  Top log categories:");
+    for category in categories.iter().take(3) {
+        let count = category.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+        let level = category
+            .get("level")
+            .and_then(|v| v.as_str())
+            .unwrap_or("info");
+        let sample = category
+            .get("sampleMessage")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        eprintln!("    {count}x [{level}] {sample}");
+    }
 }

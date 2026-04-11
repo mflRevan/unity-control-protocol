@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.5.1] - 2026-04-11
+
+### Added
+
+- Added console-aware Unity test-runner hardening so `ucp run-tests` records post-start log deltas, reports `consoleClean` / warning/error counts in structured output, and injects a synthetic failing guard when new Unity `error` or `exception` logs appear during a run.
+- Added targeted smoke coverage for delta-scoped log status queries and scene-safe asset search behavior that avoids Unity's `ReadObjectThreaded` scene-object errors.
+
+### Changed
+
+- Rewrote project README as agent-first documentation with rendered architecture and capabilities diagrams, replacing the previous command-reference style with workflow-oriented descriptions of what agents can automate through UCP.
+- `ucp run-tests --json` now fails structurally with the full Unity result payload attached, making CI and agent workflows rely on `success: false` plus detailed failure data instead of a generic process error.
+- Human-readable test output now includes concise console warning/error summaries so non-test Unity issues stay visible at the command surface.
+- Updated runtime testing docs to describe the console-log guard behavior and its failure semantics.
+
+### Fixed
+
+- Fixed `ucp asset search` loading `.unity` assets through `LoadAllAssetsAtPath(...)`, which could emit `Do not use ReadObjectThreaded on scene objects!` noise during broad searches; scene assets now use the safe main-asset path.
+- Fixed batched `ucp asset bulk-move` folder preparation so destination parent folders are created before Unity enters asset-editing mode, avoiding `Parent directory is not in asset database` failures during real bulk moves.
+- Fixed `ucp scene load --additive` response serialization to return a stable dictionary payload compatible with smoke tests and downstream structured consumers.
+- Fixed the dev sandbox fixtures and smoke baseline by cleaning malformed scene YAML, removing broken prefab/script attachments, and eliminating orphaned prefab component references that were surfacing hundreds of Unity console errors despite nominally passing tests.
+
 ## [0.5.0] - 2026-04-04
 
 ### Added
@@ -15,12 +36,17 @@
 - Added `docs/authoring/references.md` with full usage documentation, syntax reference, flag descriptions, and output examples.
 - Added `ucp asset move <path> <destination>` for Unity-aware asset and folder moves through `AssetDatabase.MoveAsset`, preserving `.meta` files and GUIDs so references stay intact.
 - Added `ucp asset bulk-move --moves <json>` for ordered batch move/refactor workflows with structured per-entry results and optional `--continue-on-error`.
+- Added `ucp references find-strings --pattern ...` for string-based migration audits across serialized/text assets, plus `ucp references check <path>` for fast missing-target verification after moves/refactors.
+- Added `ucp scene load --additive` for multi-scene workflows without replacing the active setup.
+- Added `.agents/skills/release/SKILL.md` documenting the end-to-end release flow, local validation expectations, matrix guidance, tag/publish steps, and workflow monitoring.
 
 ### Changed
 
 - `ucp install` now automatically appends `.ucp/` to the project's shared ignore file for the active VCS when available: `.gitignore` for Git worktrees and `ignore.conf` for Unity VCS / Plastic workspaces. Repeated installs detect existing entries and do not duplicate them.
 - Updated SKILL.md with reference search guidance, including when to use `--detail summary` for agent-optimized context efficiency.
 - Expanded asset docs and skill guidance to cover Unity-safe move and bulk-move workflows for asset cleanup and refactoring.
+- Asset search now supports regex name matching, bulk-move supports `--dry-run` previews plus better missing-path hints, and asset reimport supports recursive folder reimport for larger serialized edit passes.
+- `ucp play` now fails clearly when already in play mode instead of appearing to re-enter, and scene/reference docs now cover additive scene loading plus post-refactor verification flows.
 - Reorganized documentation into workflow-oriented `overview`, `authoring`, `runtime`, and `project` sections, replaced the old command inventory overview with stable lifecycle/setup guidance, and preserved legacy `/docs/commands/*` links through website aliases.
 - Frontend/docs redesign
 

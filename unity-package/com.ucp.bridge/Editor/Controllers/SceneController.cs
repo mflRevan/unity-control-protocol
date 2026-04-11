@@ -44,20 +44,26 @@ namespace UCP.Bridge
                 throw new System.ArgumentException("Missing 'path' parameter");
 
             var path = pathObj.ToString();
+            var additive = GetBoolParam(p, "additive", false);
             var saveDirtyScenes = GetBoolParam(p, "saveDirtyScenes", true);
             var discardUntitled = GetBoolParam(p, "discardUntitled", true);
 
             if (EditorApplication.isPlaying)
             {
-                SceneManager.LoadScene(path);
+                SceneManager.LoadScene(path, additive ? LoadSceneMode.Additive : LoadSceneMode.Single);
             }
             else
             {
                 SaveDirtyScenesIfRequested(saveDirtyScenes, discardUntitled);
-                EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                EditorSceneManager.OpenScene(path, additive ? OpenSceneMode.Additive : OpenSceneMode.Single);
             }
 
-            return new { status = "ok", loaded = path };
+            return new Dictionary<string, object>
+            {
+                ["status"] = "ok",
+                ["loaded"] = path,
+                ["additive"] = additive
+            };
         }
 
         private static bool GetBoolParam(Dictionary<string, object> parameters, string key, bool defaultValue)

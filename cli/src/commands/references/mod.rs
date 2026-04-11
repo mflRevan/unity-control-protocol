@@ -73,7 +73,28 @@ pub enum ReferencesAction {
         action: IndexAction,
     },
     /// Check project serialization compatibility for native indexing
-    Check,
+    Check {
+        /// Optional asset or folder path to verify for unresolved outgoing references
+        path: Option<String>,
+    },
+    /// Find string-based references in serialized/text assets
+    FindStrings {
+        /// Literal string or regex pattern to search for
+        #[arg(long)]
+        pattern: String,
+        /// Optional asset or folder path scope (defaults to Assets/)
+        #[arg(long, short = 'p')]
+        path: Option<String>,
+        /// Interpret --pattern as a regex
+        #[arg(long)]
+        regex: bool,
+        /// Maximum files to include in results (default: 20)
+        #[arg(long, default_value = "20")]
+        max_files: usize,
+        /// Maximum matches to include per file (default: 5)
+        #[arg(long, default_value = "5")]
+        max_per_file: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -172,7 +193,52 @@ pub async fn run(action: ReferencesAction, ctx: &Context) -> anyhow::Result<()> 
     let project = super::resolve_project_path(ctx)?;
 
     match action {
-        ReferencesAction::Check => {
+        ReferencesAction::Check { path } => {
+            if let Some(path) = path {
+                let check = engine::check_outgoing_references(&project, &path)?;
+                if ctx.json {
+                    output::print_json(&output::success_json(serde_json::to_value(&check)?));
+                } else {
+                    if check.missing_references == 0 {
+                        output::print_success(&format!(
+                            "All {} outgoing reference(s) resolved across {} file(s)",
+                            check.total_references, check.files_scanned
+                        ));
+                    } else {
+                        output::print_warn(&format!(
+                            "Found {} unresolved reference(s) across {} file(s)",
+                            check.missing_references, check.files_scanned
+                        ));
+                    }
+
+                    for hit in check.missing.iter().take(12) {
+                        let object = hit
+                            .source_object_name
+                            .as_deref()
+                            .unwrap_or(&hit.source_object_type);
+                        eprintln!(
+                            "  {} [{}#{}] {} → {}",
+                            hit.source_path,
+                            object,
+                            hit.source_file_id,
+                            hit.property_hint,
+                            hit.target_guid
+                        );
+                    }
+                    if check.missing.len() > 12 {
+                        eprintln!(
+                            "  {}",
+                            console::style(format!(
+                                "... and {} more unresolved reference(s)",
+                                check.missing.len() - 12
+                            ))
+                            .dim()
+                        );
+                    }
+                }
+                return Ok(());
+            }
+
             let status = check_serialization(&project);
             if ctx.json {
                 output::print_json(&output::success_json(serde_json::to_value(&status)?));
@@ -188,21 +254,45 @@ pub async fn run(action: ReferencesAction, ctx: &Context) -> anyhow::Result<()> 
                     "[ERR]"
                 };
                 let ft_icon = if status.force_text { icon_ok } else { icon_err };
-                let vm_icon = if status.visible_meta { icon_ok } else { icon_err };
+                let vm_icon = if status.visible_meta {
+                    icon_ok
+                } else {
+                    icon_err
+                };
                 eprintln!(
                     "  {} Force Text serialization",
                     console::style(ft_icon).bold()
                 );
-                eprintln!(
-                    "  {} Visible Meta Files",
-                    console::style(vm_icon).bold()
-                );
+                eprintln!("  {} Visible Meta Files", console::style(vm_icon).bold());
                 eprintln!();
                 if status.native_capable {
                     output::print_success("Native Rust indexing is available");
                 } else {
                     output::print_warn(&status.message);
                 }
+            }
+            Ok(())
+        }
+        ReferencesAction::FindStrings {
+            pattern,
+            path,
+            regex,
+            max_files,
+            max_per_file,
+        } => {
+            let results = engine::find_string_references(
+                &project,
+                path.as_deref(),
+                &pattern,
+                regex,
+                max_files,
+                max_per_file,
+            )?;
+
+            if ctx.json {
+                output::print_json(&output::success_json(serde_json::to_value(&results)?));
+            } else {
+                print_string_results(&results);
             }
             Ok(())
         }
@@ -278,9 +368,7 @@ pub async fn run(action: ReferencesAction, ctx: &Context) -> anyhow::Result<()> 
                 if !ctx.json {
                     output::print_success("Reference index cleared");
                 } else {
-                    output::print_json(&output::success_json(
-                        serde_json::json!({"cleared": true}),
-                    ));
+                    output::print_json(&output::success_json(serde_json::json!({"cleared": true})));
                 }
                 Ok(())
             }
@@ -297,8 +385,6 @@ pub async fn run(action: ReferencesAction, ctx: &Context) -> anyhow::Result<()> 
             if asset.is_some() == object.is_some() {
                 anyhow::bail!("Provide exactly one of --asset or --object");
             }
-
-            let status = check_serialization(&project);
 
             let target_guid = if let Some(ref asset_arg) = asset {
                 resolve_guid(&project, asset_arg)?
@@ -317,6 +403,7 @@ pub async fn run(action: ReferencesAction, ctx: &Context) -> anyhow::Result<()> 
             })?;
 
             let detail_level = detail.into_detail_level();
+            let status = check_serialization(&project);
 
             let effective_approach = match approach {
                 FindApproachArg::RustGrep => engine::IndexApproach::Grep,
@@ -432,10 +519,7 @@ fn resolve_guid(project: &Path, asset_arg: &str) -> anyhow::Result<Option<String
         }
     }
 
-    Err(anyhow::anyhow!(
-        "No GUID found in meta file: {}",
-        meta_path
-    ))
+    Err(anyhow::anyhow!("No GUID found in meta file: {}", meta_path))
 }
 
 #[cfg(test)]
@@ -541,10 +625,7 @@ async fn run_bridge_find(
         output::print_success(&format!("Found {} reference(s) via bridge", count));
         if let Some(refs) = result.get("references").and_then(|v| v.as_array()) {
             for r in refs {
-                let source = r
-                    .get("sourcePath")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("?");
+                let source = r.get("sourcePath").and_then(|v| v.as_str()).unwrap_or("?");
                 let prop = r
                     .get("propertyPath")
                     .and_then(|v| v.as_str())
@@ -561,15 +642,15 @@ async fn run_bridge_find(
 fn print_human_grouped(grouped: &engine::GroupedResults, detail: engine::DetailLevel) {
     output::print_success(&format!(
         "Found {} reference(s) across {} file(s) ({} distinct objects) in {}ms",
-        grouped.total_refs,
-        grouped.total_files,
-        grouped.total_distinct_objects,
-        grouped.elapsed_ms,
+        grouped.total_refs, grouped.total_files, grouped.total_distinct_objects, grouped.elapsed_ms,
     ));
 
     // Print top-level pattern summary if patterns detected
     if !grouped.top_patterns.is_empty()
-        && matches!(detail, engine::DetailLevel::Summary | engine::DetailLevel::Normal)
+        && matches!(
+            detail,
+            engine::DetailLevel::Summary | engine::DetailLevel::Normal
+        )
     {
         eprintln!();
         eprintln!("  {}", console::style("Dominant patterns:").dim());
@@ -657,6 +738,54 @@ fn print_human_grouped(grouped: &engine::GroupedResults, detail: engine::DetailL
                 "Showing {}/{} files (use --max-files to see more)",
                 grouped.files.len(),
                 grouped.total_files
+            ))
+            .dim()
+        );
+    }
+}
+
+fn print_string_results(results: &engine::StringReferenceResults) {
+    output::print_success(&format!(
+        "Found {} string match(es) across {} file(s)",
+        results.total_matches, results.total_files
+    ));
+
+    for file in &results.files {
+        eprintln!();
+        eprintln!(
+            "  {} ({})",
+            console::style(&file.path).bold(),
+            if file.total_matches == 1 {
+                "1 match".to_string()
+            } else {
+                format!("{} matches", file.total_matches)
+            }
+        );
+
+        for hit in &file.matches {
+            eprintln!("    L{}: {}", hit.line, hit.excerpt);
+        }
+
+        if file.truncated {
+            eprintln!(
+                "    {}",
+                console::style(format!(
+                    "... and {} more match(es) in this file",
+                    file.total_matches.saturating_sub(file.matches.len())
+                ))
+                .dim()
+            );
+        }
+    }
+
+    if results.files.len() < results.total_files {
+        eprintln!();
+        eprintln!(
+            "  {}",
+            console::style(format!(
+                "Showing {}/{} files (use --max-files to see more)",
+                results.files.len(),
+                results.total_files
             ))
             .dim()
         );
