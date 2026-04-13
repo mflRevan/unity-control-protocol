@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Give your AI agent full control of the Unity Editor.</strong><br>
-  Scenes, objects, assets, builds, tests, profiling — everything, from the terminal.
+  Scenes, objects, assets, builds, tests, profiling - everything, from the terminal.
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ## What is UCP
 
-Unity has no CLI. If an agent wants to move assets, run tests, tweak a material, or trigger a build — it can't. The editor is a GUI-only black box.
+Unity has no CLI. If an agent wants to move assets, run tests, tweak a material, or trigger a build - it can't. The editor is a GUI-only black box.
 
 UCP opens that box. It's a Rust CLI that connects to a bridge package running inside the Unity Editor over localhost WebSocket. Every editor operation becomes a structured command with `--json` output. The agent talks to the CLI, the CLI talks to Unity, and Unity does the work.
 
@@ -38,7 +38,7 @@ No cloud. No accounts. No plugins to configure. Install the bridge, connect, and
 
 ## What the agent gets
 
-The entire Unity Editor lifecycle — from bootstrapping a project to shipping a build — exposed as structured, automatable operations.
+The entire Unity Editor lifecycle - from bootstrapping a project to shipping a build - exposed as structured, automatable operations.
 
 <p align="center">
   <img src="assets/readme/capabilities.png" alt="UCP capabilities across Setup, Author, Runtime, and Ship phases" width="820" />
@@ -50,11 +50,11 @@ The entire Unity Editor lifecycle — from bootstrapping a project to shipping a
 
 ### Autonomous refactoring
 
-An agent can search every reference to a material, rename and relocate hundreds of assets in a single batch, verify nothing broke, recompile, and run the full test suite — without a human touching the editor. Moves go through Unity's `AssetDatabase`, so GUIDs, `.meta` files, and serialized references stay intact.
+An agent can search every reference to a material, rename and relocate hundreds of assets in a single batch, verify nothing broke, recompile, and run the full test suite - without a human touching the editor. Moves go through Unity's `AssetDatabase`, so GUIDs, `.meta` files, and serialized references stay intact.
 
 ### End-to-end feature implementation
 
-Write scripts in the workspace, recompile through the bridge, assemble GameObjects and components in the live scene, persist them as prefabs, capture screenshots for visual verification, and run tests — all in one continuous agent loop. The agent never leaves the terminal.
+Write scripts in the workspace, recompile through the bridge, assemble GameObjects and components in the live scene, persist them as prefabs, capture screenshots for visual verification, and run tests - all in one continuous agent loop. The agent never leaves the terminal.
 
 ### Automated testing and CI/CD
 
@@ -62,7 +62,7 @@ Connect to the editor, trigger compilation, run edit-mode or play-mode test suit
 
 ### Live profiling and debugging
 
-Start a profiler session, enter play mode, capture frame data, analyze hot paths and hierarchy timings, export structured snapshots — all programmatically. The agent can diagnose performance issues without a human opening the profiler window.
+Start a profiler session, enter play mode, capture frame data, analyze hot paths and hierarchy timings, export structured snapshots - all programmatically. The agent can diagnose performance issues without a human opening the profiler window.
 
 ### Visual iteration loops
 
@@ -99,7 +99,7 @@ ucp install    # add the bridge package
 ucp open       # launch Unity and connect
 ```
 
-> `ucp doctor` validates your setup — Unity resolution, bridge health, and project serialization settings.
+> `ucp doctor` validates your setup - Unity resolution, bridge health, and project serialization settings.
 
 <br>
 
@@ -116,7 +116,7 @@ claude --plugin-dir /path/to/unity-control-protocol
 /plugin install ucp@unity-control-protocol
 ```
 
-Every command supports `--json` — agents can always get structured, parseable output.
+Every command supports `--json` - agents can always get structured, parseable output.
 
 <br>
 
@@ -135,7 +135,7 @@ Unity 2021.3+. Tested across Unity 6 (`6000.0` – `6000.4`).
 ## Repository layout
 
 ```
-cli/                              Rust CLI — the ucp binary
+cli/                              Rust CLI - the ucp binary
 unity-package/com.ucp.bridge/     Unity Editor bridge package
 npm/                              npm distribution wrapper
 docs/                             Markdown documentation source
