@@ -103,3 +103,17 @@ ucp scene snapshot --json
   Directional Light [46896] children=0 tag=Untagged layer=Default components=Transform, Light
   Player [46900] children=4 tag=Player layer=Default components=Transform, Rigidbody, PlayerController
 ```
+
+### `ucp scene query`
+
+Query the active scene hierarchy without piping the full snapshot through an external JSON tool.
+
+```bash
+# Find a camera by name and return only the fields an agent needs
+ucp scene query "name=XRCamera" --fields active,components
+
+# Find all active Camera objects under the first 8 hierarchy levels
+ucp scene query "component=Camera and active=true" --fields instanceId,name,active,components --depth 8
+```
+
+Supported query keys are `name`, `component`, `active`, `tag`, and `layer`. Multiple terms can be joined with `and` or commas. `--fields` is a comma-separated selector; when omitted, UCP returns `instanceId,name,active,components`.

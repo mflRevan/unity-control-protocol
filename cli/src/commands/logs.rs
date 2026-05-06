@@ -3,6 +3,7 @@ use crate::output;
 use clap::{Args, Subcommand};
 use console::style;
 use serde_json::Value;
+use std::collections::HashSet;
 
 use super::Context;
 
@@ -19,6 +20,12 @@ pub struct LogsArgs {
     /// Search buffered logs by regex pattern
     #[arg(long)]
     pub pattern: Option<String>,
+    /// Filter logs by coarse channel/category text, such as Shader
+    #[arg(long)]
+    pub channel: Option<String>,
+    /// Filter expression, e.g. level>=warning, channel=Shader, text=depth
+    #[arg(long = "filter")]
+    pub filters: Vec<String>,
     /// Read one buffered log entry by id
     #[arg(long)]
     pub id: Option<u64>,
@@ -35,16 +42,18 @@ pub struct LogsArgs {
 
 #[derive(Subcommand, Clone, Debug)]
 pub enum LogsAction {
+    /// Tail buffered logs or follow live logs when --follow is set
+    Tail {
+        #[command(flatten)]
+        args: LogsArgs,
+    },
     /// Print a curated summary of the buffered debug log state
     Status,
 }
 
-pub async fn run(
-    action: Option<LogsAction>,
-    args: LogsArgs,
-    ctx: &Context,
-) -> anyhow::Result<()> {
+pub async fn run(action: Option<LogsAction>, args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
     match action {
+        Some(LogsAction::Tail { args }) => run_query(args, ctx).await,
         Some(LogsAction::Status) => run_status(ctx).await,
         None => run_query(args, ctx).await,
     }
@@ -61,15 +70,25 @@ pub fn print_status(status: &Value, ctx: &Context) {
     }
 
     let total = status.get("total").and_then(Value::as_u64).unwrap_or(0);
-    let unique = status.get("uniqueCount").and_then(Value::as_u64).unwrap_or(0);
-    output::print_success(&format!("Buffered logs: {total} entries across {unique} categories"));
+    let unique = status
+        .get("uniqueCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    output::print_success(&format!(
+        "Buffered logs: {total} entries across {unique} categories"
+    ));
 
     if let Some(by_level) = status.get("byLevel").and_then(Value::as_object) {
         let info = by_level.get("info").and_then(Value::as_u64).unwrap_or(0);
         let warnings = by_level.get("warning").and_then(Value::as_u64).unwrap_or(0);
         let errors = by_level.get("error").and_then(Value::as_u64).unwrap_or(0);
-        let exceptions = by_level.get("exception").and_then(Value::as_u64).unwrap_or(0);
-        eprintln!("  Levels: info={info}, warning={warnings}, error={errors}, exception={exceptions}");
+        let exceptions = by_level
+            .get("exception")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        eprintln!(
+            "  Levels: info={info}, warning={warnings}, error={errors}, exception={exceptions}"
+        );
     }
 
     if let Some(window) = status.get("historyWindowSeconds").and_then(Value::as_f64) {
@@ -85,9 +104,15 @@ pub fn print_status(status: &Value, ctx: &Context) {
     }
 
     if let Some(play) = status.get("play") {
-        let playing = play.get("playing").and_then(Value::as_bool).unwrap_or(false);
+        let playing = play
+            .get("playing")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         if playing {
-            if let Some(duration) = play.get("currentPlayDurationSeconds").and_then(Value::as_f64) {
+            if let Some(duration) = play
+                .get("currentPlayDurationSeconds")
+                .and_then(Value::as_f64)
+            {
                 eprintln!("  Play: active for {duration:.2}s");
             } else {
                 eprintln!("  Play: active");
@@ -99,13 +124,18 @@ pub fn print_status(status: &Value, ctx: &Context) {
 
     if let Some(last_play) = status.get("lastPlayWindow").and_then(Value::as_object) {
         let total = last_play.get("total").and_then(Value::as_u64).unwrap_or(0);
-        let warnings = last_play.get("warnings").and_then(Value::as_u64).unwrap_or(0);
+        let warnings = last_play
+            .get("warnings")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let errors = last_play.get("errors").and_then(Value::as_u64).unwrap_or(0);
         let duration = last_play
             .get("durationSeconds")
             .and_then(Value::as_f64)
             .unwrap_or(0.0);
-        eprintln!("  Last play window: {total} log(s), {warnings} warning(s), {errors} error/exception(s) over {duration:.2}s");
+        eprintln!(
+            "  Last play window: {total} log(s), {warnings} warning(s), {errors} error/exception(s) over {duration:.2}s"
+        );
     }
 
     if let Some(categories) = status.get("topCategories").and_then(Value::as_array) {
@@ -136,10 +166,19 @@ async fn run_status(ctx: &Context) -> anyhow::Result<()> {
 }
 
 async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
+    let mut args = args;
+    apply_filter_expressions(&mut args)?;
+
     if args.id.is_some()
-        && (args.pattern.is_some() || args.before_id.is_some() || args.after_id.is_some() || args.follow)
+        && (args.pattern.is_some()
+            || args.channel.is_some()
+            || args.before_id.is_some()
+            || args.after_id.is_some()
+            || args.follow)
     {
-        anyhow::bail!("--id cannot be combined with --pattern, --before-id, --after-id, or --follow");
+        anyhow::bail!(
+            "--id cannot be combined with --pattern, --channel, --before-id, --after-id, or --follow"
+        );
     }
 
     let (_, _, mut client) = super::connect_client(ctx).await?;
@@ -161,8 +200,15 @@ async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
     }
 
     if wants_live_follow {
-        stream_live_logs(args.level, args.count, &mut client, ctx).await?;
-        client.close().await;
+        stream_live_logs(
+            args.level,
+            args.pattern,
+            args.channel,
+            args.count,
+            client,
+            ctx,
+        )
+        .await?;
         return Ok(());
     }
 
@@ -180,6 +226,9 @@ async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
     }
     if let Some(pattern) = args.pattern.as_deref() {
         params["pattern"] = serde_json::json!(pattern);
+    }
+    if let Some(channel) = args.channel.as_deref() {
+        params["channel"] = serde_json::json!(channel);
     }
     if let Some(before_id) = args.before_id {
         params["beforeId"] = serde_json::json!(before_id);
@@ -202,20 +251,25 @@ async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
 
 async fn stream_live_logs(
     level: Option<String>,
+    pattern: Option<String>,
+    channel: Option<String>,
     count: Option<u32>,
-    client: &mut BridgeClient,
+    mut client: BridgeClient,
     ctx: &Context,
 ) -> anyhow::Result<()> {
-    let params = serde_json::json!({
+    let subscribe_params = serde_json::json!({
         "level": level.as_deref().unwrap_or("info"),
     });
-    client.call("logs/subscribe", params).await?;
+    client
+        .call("logs/subscribe", subscribe_params.clone())
+        .await?;
 
     if !ctx.json {
         output::print_info("Streaming live logs (Ctrl+C to stop)...");
     }
 
     let mut received = 0_u32;
+    let mut seen = HashSet::new();
     loop {
         if let Some(limit) = count {
             if received >= limit {
@@ -225,19 +279,192 @@ async fn stream_live_logs(
 
         match client.next_notification().await {
             Some(notif) if notif.method == "log" => {
-                received += 1;
-                if ctx.json {
-                    output::print_json_compact(&notif.params);
-                } else {
-                    eprintln!("{}", render_log_summary(&notif.params));
+                if !matches_live_filter(
+                    &notif.params,
+                    level.as_deref(),
+                    pattern.as_deref(),
+                    channel.as_deref(),
+                ) {
+                    continue;
+                }
+                if seen.insert(log_identity(&notif.params)) {
+                    received += 1;
+                    if ctx.json {
+                        output::print_json_compact(&notif.params);
+                    } else {
+                        eprintln!("{}", render_log_summary(&notif.params));
+                    }
                 }
             }
             Some(_) => continue,
-            None => break,
+            None => {
+                let (_, _, mut reconnected) = super::connect_client(ctx).await?;
+                received = drain_buffered_logs(
+                    &mut reconnected,
+                    level.as_deref(),
+                    pattern.as_deref(),
+                    channel.as_deref(),
+                    count,
+                    received,
+                    &mut seen,
+                    ctx,
+                )
+                .await?;
+                if let Some(limit) = count {
+                    if received >= limit {
+                        reconnected.close().await;
+                        break;
+                    }
+                }
+                reconnected
+                    .call("logs/subscribe", subscribe_params.clone())
+                    .await?;
+                if !ctx.json {
+                    output::print_info("Log stream reconnected.");
+                }
+                client = reconnected;
+            }
         }
     }
 
+    client.close().await;
     Ok(())
+}
+
+async fn drain_buffered_logs(
+    client: &mut BridgeClient,
+    level: Option<&str>,
+    pattern: Option<&str>,
+    channel: Option<&str>,
+    count: Option<u32>,
+    mut received: u32,
+    seen: &mut HashSet<String>,
+    ctx: &Context,
+) -> anyhow::Result<u32> {
+    let method = if pattern.is_some() {
+        "logs/search"
+    } else {
+        "logs/tail"
+    };
+
+    let remaining = count.map(|limit| limit.saturating_sub(received)).unwrap_or(50);
+    let fetch_count = remaining.max(20);
+    let mut params = serde_json::json!({
+        "count": fetch_count,
+    });
+    if let Some(level) = level {
+        params["level"] = serde_json::json!(level);
+    }
+    if let Some(pattern) = pattern {
+        params["pattern"] = serde_json::json!(pattern);
+    }
+    if let Some(channel) = channel {
+        params["channel"] = serde_json::json!(channel);
+    }
+
+    let result = client.call(method, params).await?;
+    let logs = result
+        .get("logs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let client_pattern_filter = if method == "logs/search" { None } else { pattern };
+
+    for log in logs.into_iter().rev() {
+        if let Some(limit) = count {
+            if received >= limit {
+                break;
+            }
+        }
+
+        if !matches_live_filter(&log, level, client_pattern_filter, channel) {
+            continue;
+        }
+
+        if !seen.insert(log_identity(&log)) {
+            continue;
+        }
+
+        received += 1;
+        if ctx.json {
+            output::print_json_compact(&log);
+        } else {
+            eprintln!("{}", render_log_summary(&log));
+        }
+    }
+
+    Ok(received)
+}
+
+fn apply_filter_expressions(args: &mut LogsArgs) -> anyhow::Result<()> {
+    for filter in args.filters.clone() {
+        let normalized = filter.trim();
+        if let Some(value) = normalized.strip_prefix("level>=") {
+            args.level = Some(value.to_string());
+        } else if let Some(value) = normalized.strip_prefix("level=") {
+            args.level = Some(value.to_string());
+        } else if let Some(value) = normalized.strip_prefix("channel=") {
+            args.channel = Some(value.to_string());
+        } else if let Some(value) = normalized.strip_prefix("text=") {
+            args.pattern = Some(value.to_string());
+        } else if let Some(value) = normalized.strip_prefix("message=") {
+            args.pattern = Some(value.to_string());
+        } else {
+            anyhow::bail!(
+                "Unsupported log filter '{normalized}'. Use level>=warning, channel=Shader, or text=pattern."
+            );
+        }
+    }
+    Ok(())
+}
+
+fn matches_live_filter(
+    log: &serde_json::Value,
+    level: Option<&str>,
+    pattern: Option<&str>,
+    channel: Option<&str>,
+) -> bool {
+    if let Some(level) = level {
+        let actual = log.get("level").and_then(|v| v.as_str()).unwrap_or("info");
+        if severity(actual) < severity(level) {
+            return false;
+        }
+    }
+
+    let message = log
+        .get("message")
+        .or_else(|| log.get("messagePreview"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let stack_trace = log.get("stackTrace").and_then(|v| v.as_str()).unwrap_or("");
+
+    if let Some(channel) = channel {
+        let channel = channel.to_ascii_lowercase();
+        if !message.to_ascii_lowercase().contains(&channel)
+            && !stack_trace.to_ascii_lowercase().contains(&channel)
+        {
+            return false;
+        }
+    }
+
+    if let Some(pattern) = pattern {
+        let pattern = pattern.to_ascii_lowercase();
+        if !message.to_ascii_lowercase().contains(&pattern)
+            && !stack_trace.to_ascii_lowercase().contains(&pattern)
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn severity(level: &str) -> u8 {
+    match level.to_ascii_lowercase().as_str() {
+        "error" | "exception" | "err" => 2,
+        "warning" | "warn" => 1,
+        _ => 0,
+    }
 }
 
 fn print_log_detail(result: &serde_json::Value, ctx: &Context) {
@@ -318,6 +545,18 @@ fn render_log_summary(log: &serde_json::Value) -> String {
     format!("  #{id:<5} {styled_level}{timestamp} {message}")
 }
 
+fn log_identity(log: &serde_json::Value) -> String {
+    let level = log.get("level").and_then(Value::as_str).unwrap_or("info");
+    let timestamp = log.get("timestamp").and_then(Value::as_str).unwrap_or("");
+    let message = log
+        .get("message")
+        .or_else(|| log.get("messagePreview"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let stack_trace = log.get("stackTrace").and_then(Value::as_str).unwrap_or("");
+    format!("{level}\u{1f}{timestamp}\u{1f}{message}\u{1f}{stack_trace}")
+}
+
 fn preview_text(value: &str, max_chars: usize) -> String {
     if value.chars().count() <= max_chars {
         value.to_string()
@@ -329,7 +568,7 @@ fn preview_text(value: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{preview_text, render_log_summary};
+    use super::{LogsArgs, apply_filter_expressions, preview_text, render_log_summary};
 
     #[test]
     fn preview_text_truncates_long_messages() {
@@ -348,5 +587,18 @@ mod tests {
 
         assert!(rendered.contains("#42"));
         assert!(rendered.contains("Something happened"));
+    }
+
+    #[test]
+    fn parses_filter_expressions_into_args() {
+        let mut args = LogsArgs {
+            filters: vec!["level>=warning".into(), "channel=Shader".into()],
+            ..Default::default()
+        };
+
+        apply_filter_expressions(&mut args).expect("filters should parse");
+
+        assert_eq!(args.level.as_deref(), Some("warning"));
+        assert_eq!(args.channel.as_deref(), Some("Shader"));
     }
 }

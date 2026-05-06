@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
+using UnityEditor;
 using UnityEngine;
 
 namespace UCP.Bridge
@@ -14,7 +17,10 @@ namespace UCP.Bridge
 
         private static readonly object s_historyLock = new object();
         private static readonly List<LogRecord> s_history = new List<LogRecord>();
+        private static Func<List<ConsoleBackfillEntry>> s_consoleBackfillProvider = CaptureRecentConsoleEntries;
         private static long s_nextId = 1;
+        private static StreamWriter s_captureWriter;
+        private static string s_capturePath;
 
         public static void Register(CommandRouter router)
         {
@@ -24,6 +30,8 @@ namespace UCP.Bridge
             router.Register("logs/search", HandleSearch);
             router.Register("logs/get", HandleGet);
             router.Register("logs/status", HandleStatus);
+            router.Register("logs/capture/start", HandleCaptureStart);
+            router.Register("logs/capture/stop", HandleCaptureStop);
         }
 
         public static Dictionary<string, object> RecordLog(string message, string stackTrace, LogType type)
@@ -37,6 +45,7 @@ namespace UCP.Bridge
             {
                 s_history.Clear();
                 s_nextId = 1;
+                s_consoleBackfillProvider = CaptureRecentConsoleEntries;
             }
         }
 
@@ -45,8 +54,64 @@ namespace UCP.Bridge
             return RecordLog(level, message, stackTrace);
         }
 
+        public static void SetConsoleBackfillProviderForTests(Func<List<ConsoleBackfillEntry>> provider)
+        {
+            lock (s_historyLock)
+            {
+                s_consoleBackfillProvider = provider ?? CaptureRecentConsoleEntries;
+            }
+        }
+
+        public static void SeedHistoryFromConsole()
+        {
+            lock (s_historyLock)
+            {
+                SeedHistoryFromConsoleLocked();
+            }
+        }
+
+        public static Dictionary<string, object> StartFileCapture(string path)
+        {
+            lock (s_historyLock)
+            {
+                StopFileCaptureLocked();
+
+                var resolvedPath = ResolveCapturePath(path);
+                var directory = Path.GetDirectoryName(resolvedPath);
+                if (!string.IsNullOrEmpty(directory))
+                    Directory.CreateDirectory(directory);
+
+                s_captureWriter = new StreamWriter(resolvedPath, false);
+                s_captureWriter.AutoFlush = true;
+                s_capturePath = resolvedPath;
+                s_captureWriter.WriteLine($"# UCP play-mode log capture started {DateTime.UtcNow:o}");
+
+                return new Dictionary<string, object>
+                {
+                    ["status"] = "ok",
+                    ["path"] = resolvedPath
+                };
+            }
+        }
+
+        public static Dictionary<string, object> StopFileCapture()
+        {
+            lock (s_historyLock)
+            {
+                var path = s_capturePath;
+                StopFileCaptureLocked();
+                return new Dictionary<string, object>
+                {
+                    ["status"] = "ok",
+                    ["path"] = path ?? string.Empty,
+                    ["active"] = false
+                };
+            }
+        }
+
         public static long GetLatestId()
         {
+            SeedHistoryFromConsole();
             lock (s_historyLock)
             {
                 return s_history.Count == 0 ? 0 : s_history[s_history.Count - 1].Id;
@@ -55,6 +120,7 @@ namespace UCP.Bridge
 
         public static Dictionary<string, object> BuildStatusSummary(long afterId = 0)
         {
+            SeedHistoryFromConsole();
             lock (s_historyLock)
             {
                 var ordered = s_history
@@ -86,6 +152,7 @@ namespace UCP.Bridge
 
             long id = Convert.ToInt64(idObj);
 
+            SeedHistoryFromConsole();
             lock (s_historyLock)
             {
                 var entry = s_history.FirstOrDefault(record => record.Id == id);
@@ -106,26 +173,72 @@ namespace UCP.Bridge
             return BuildStatusSummary(afterId);
         }
 
+        private static object HandleCaptureStart(string paramsJson)
+        {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (p == null || !p.TryGetValue("path", out var pathObj) || pathObj == null)
+                throw new ArgumentException("Missing 'path' parameter");
+
+            return StartFileCapture(pathObj.ToString());
+        }
+
+        private static object HandleCaptureStop(string paramsJson)
+        {
+            return StopFileCapture();
+        }
+
         private static Dictionary<string, object> RecordLog(string level, string message, string stackTrace)
         {
             lock (s_historyLock)
             {
-                var entry = new LogRecord
-                {
-                    Id = s_nextId++,
-                    Level = NormalizeLevel(level),
-                    Message = message ?? string.Empty,
-                    StackTrace = stackTrace ?? string.Empty,
-                    TimestampUtc = DateTime.UtcNow
-                };
-                entry.Timestamp = entry.TimestampUtc.ToString("o");
-
-                s_history.Add(entry);
-                if (s_history.Count > MaxHistoryEntries)
-                    s_history.RemoveAt(0);
+                var entry = AppendRecordLocked(
+                    NormalizeLevel(level),
+                    message ?? string.Empty,
+                    stackTrace ?? string.Empty,
+                    DateTime.UtcNow
+                );
+                WriteCaptureLineLocked(entry);
 
                 return SerializeFull(entry);
             }
+        }
+
+        private static void WriteCaptureLineLocked(LogRecord entry)
+        {
+            if (s_captureWriter == null)
+                return;
+
+            var message = (entry.Message ?? string.Empty).Replace("\r", "\\r").Replace("\n", "\\n");
+            s_captureWriter.WriteLine($"{entry.Timestamp} [{entry.Level}] {message}");
+            if (!string.IsNullOrEmpty(entry.StackTrace))
+            {
+                var stack = entry.StackTrace.Replace("\r", "\\r").Replace("\n", "\\n");
+                s_captureWriter.WriteLine($"{entry.Timestamp} [stack] {stack}");
+            }
+        }
+
+        private static void StopFileCaptureLocked()
+        {
+            if (s_captureWriter != null)
+            {
+                s_captureWriter.WriteLine($"# UCP log capture stopped {DateTime.UtcNow:o}");
+                s_captureWriter.Dispose();
+                s_captureWriter = null;
+            }
+
+            s_capturePath = null;
+        }
+
+        private static string ResolveCapturePath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                throw new ArgumentException("Log capture path cannot be empty");
+
+            if (Path.IsPathRooted(path))
+                return Path.GetFullPath(path);
+
+            var projectRoot = Path.GetDirectoryName(Application.dataPath);
+            return Path.GetFullPath(Path.Combine(projectRoot, path));
         }
 
         private static LogQuery ParseQuery(string paramsJson, bool includePattern)
@@ -137,6 +250,8 @@ namespace UCP.Bridge
             {
                 if (p.TryGetValue("level", out var levelObj) && levelObj != null)
                     query.Level = NormalizeLevel(levelObj.ToString());
+                if (p.TryGetValue("channel", out var channelObj) && channelObj != null)
+                    query.Channel = channelObj.ToString();
                 if (p.TryGetValue("count", out var countObj) && countObj != null)
                     query.Count = Math.Max(1, Convert.ToInt32(countObj));
                 if (p.TryGetValue("beforeId", out var beforeObj) && beforeObj != null)
@@ -166,6 +281,7 @@ namespace UCP.Bridge
 
         private static LogQueryResult QueryHistory(LogQuery query)
         {
+            SeedHistoryFromConsole();
             lock (s_historyLock)
             {
                 IEnumerable<LogRecord> candidates = s_history;
@@ -176,6 +292,10 @@ namespace UCP.Bridge
                     candidates = candidates.Where(entry => entry.Id > query.AfterId.Value);
                 if (!string.IsNullOrEmpty(query.Level))
                     candidates = candidates.Where(entry => PassesLevel(entry.Level, query.Level));
+                if (!string.IsNullOrEmpty(query.Channel))
+                    candidates = candidates.Where(entry =>
+                        (entry.Message ?? string.Empty).IndexOf(query.Channel, StringComparison.OrdinalIgnoreCase) >= 0
+                        || (entry.StackTrace ?? string.Empty).IndexOf(query.Channel, StringComparison.OrdinalIgnoreCase) >= 0);
 
                 if (query.Regex != null)
                 {
@@ -361,6 +481,184 @@ namespace UCP.Bridge
             }
         }
 
+        private static void SeedHistoryFromConsoleLocked()
+        {
+            if (s_history.Count > 0)
+                return;
+
+            List<ConsoleBackfillEntry> consoleEntries;
+            try
+            {
+                consoleEntries = s_consoleBackfillProvider != null
+                    ? s_consoleBackfillProvider.Invoke()
+                    : new List<ConsoleBackfillEntry>();
+            }
+            catch
+            {
+                return;
+            }
+
+            if (consoleEntries == null || consoleEntries.Count == 0)
+                return;
+
+            var baseTimestamp = DateTime.UtcNow;
+            for (var index = 0; index < consoleEntries.Count; index++)
+            {
+                var entry = consoleEntries[index];
+                if (entry == null || string.IsNullOrEmpty(entry.Message) || entry.Message.StartsWith("[UCP]", StringComparison.Ordinal))
+                    continue;
+
+                AppendRecordLocked(
+                    entry.Level,
+                    entry.Message,
+                    entry.StackTrace,
+                    baseTimestamp.AddMilliseconds(index)
+                );
+            }
+        }
+
+        private static LogRecord AppendRecordLocked(string level, string message, string stackTrace, DateTime timestampUtc)
+        {
+            var entry = new LogRecord
+            {
+                Id = s_nextId++,
+                Level = NormalizeLevel(level),
+                Message = message ?? string.Empty,
+                StackTrace = stackTrace ?? string.Empty,
+                TimestampUtc = timestampUtc
+            };
+            entry.Timestamp = entry.TimestampUtc.ToString("o");
+
+            s_history.Add(entry);
+            if (s_history.Count > MaxHistoryEntries)
+                s_history.RemoveAt(0);
+
+            return entry;
+        }
+
+        private static List<ConsoleBackfillEntry> CaptureRecentConsoleEntries()
+        {
+            try
+            {
+                var assembly = typeof(Editor).Assembly;
+                var logEntriesType = assembly.GetType("UnityEditor.LogEntries");
+                var logEntryType = assembly.GetType("UnityEditor.LogEntry");
+                if (logEntriesType == null || logEntryType == null)
+                    return new List<ConsoleBackfillEntry>();
+
+                var getCount = logEntriesType.GetMethod("GetCount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                var getEntry = logEntriesType
+                    .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                    .FirstOrDefault(method => method.Name == "GetEntryInternal");
+                var messageField = logEntryType.GetField("message", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var modeField = logEntryType.GetField("mode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (getCount == null || getEntry == null || messageField == null || modeField == null)
+                    return new List<ConsoleBackfillEntry>();
+
+                var count = Convert.ToInt32(getCount.Invoke(null, null));
+                if (count <= 0)
+                    return new List<ConsoleBackfillEntry>();
+
+                var captured = new List<ConsoleBackfillEntry>();
+                var start = Math.Max(0, count - MaxHistoryEntries);
+                for (var index = start; index < count; index++)
+                {
+                    var args = new object[] { index, Activator.CreateInstance(logEntryType) };
+                    if (!Convert.ToBoolean(getEntry.Invoke(null, args)))
+                        continue;
+
+                    var entry = CreateConsoleBackfillEntry(
+                        messageField.GetValue(args[1]) as string,
+                        Convert.ToInt32(modeField.GetValue(args[1]))
+                    );
+                    if (entry != null)
+                        captured.Add(entry);
+                }
+
+                return captured;
+            }
+            catch
+            {
+                return new List<ConsoleBackfillEntry>();
+            }
+        }
+
+        private static ConsoleBackfillEntry CreateConsoleBackfillEntry(string rawMessage, int mode)
+        {
+            var normalized = (rawMessage ?? string.Empty).Replace("\r\n", "\n").TrimEnd();
+            if (string.IsNullOrEmpty(normalized) || normalized.StartsWith("[UCP]", StringComparison.Ordinal))
+                return null;
+
+            var split = SplitConsoleMessage(normalized);
+            return new ConsoleBackfillEntry
+            {
+                Level = InferConsoleLevel(mode, split.Message, split.StackTrace),
+                Message = split.Message,
+                StackTrace = split.StackTrace
+            };
+        }
+
+        private static SplitLogMessage SplitConsoleMessage(string rawMessage)
+        {
+            var firstNewline = rawMessage.IndexOf('\n');
+            if (firstNewline < 0)
+            {
+                return new SplitLogMessage
+                {
+                    Message = rawMessage,
+                    StackTrace = string.Empty
+                };
+            }
+
+            var firstLine = rawMessage.Substring(0, firstNewline).TrimEnd();
+            var remainder = rawMessage.Substring(firstNewline + 1).Trim();
+            if (LooksLikeStackTrace(remainder))
+            {
+                return new SplitLogMessage
+                {
+                    Message = firstLine,
+                    StackTrace = remainder
+                };
+            }
+
+            return new SplitLogMessage
+            {
+                Message = rawMessage,
+                StackTrace = string.Empty
+            };
+        }
+
+        private static bool LooksLikeStackTrace(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return false;
+
+            return value.StartsWith("UnityEngine.", StringComparison.Ordinal)
+                || value.StartsWith("UnityEditor.", StringComparison.Ordinal)
+                || value.StartsWith("System.", StringComparison.Ordinal)
+                || value.StartsWith("---", StringComparison.Ordinal)
+                || value.Contains(" (at ")
+                || value.IndexOf(":Log", StringComparison.Ordinal) >= 0
+                || value.IndexOf(":LogWarning", StringComparison.Ordinal) >= 0
+                || value.IndexOf(":LogError", StringComparison.Ordinal) >= 0
+                || value.IndexOf(":LogException", StringComparison.Ordinal) >= 0;
+        }
+
+        private static string InferConsoleLevel(int mode, string message, string stackTrace)
+        {
+            var combined = (message ?? string.Empty) + "\n" + (stackTrace ?? string.Empty);
+            if ((mode & 0x100) != 0 || combined.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0)
+                return combined.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0 ? "exception" : "error";
+            if ((mode & 0x200) != 0)
+                return "warning";
+            if (Regex.IsMatch(combined, @"\bwarning\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                return "warning";
+            if (Regex.IsMatch(combined, @"\berror\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                return combined.IndexOf("Exception", StringComparison.OrdinalIgnoreCase) >= 0 ? "exception" : "error";
+
+            return "info";
+        }
+
         private static string Preview(string value, int maxChars)
         {
             if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
@@ -417,9 +715,23 @@ namespace UCP.Bridge
             public DateTime TimestampUtc;
         }
 
+        public sealed class ConsoleBackfillEntry
+        {
+            public string Level;
+            public string Message;
+            public string StackTrace;
+        }
+
+        private sealed class SplitLogMessage
+        {
+            public string Message;
+            public string StackTrace;
+        }
+
         private sealed class LogQuery
         {
             public string Level;
+            public string Channel;
             public string Pattern;
             public Regex Regex;
             public int Count;

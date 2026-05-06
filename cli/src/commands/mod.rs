@@ -7,18 +7,22 @@ pub mod doctor;
 pub mod editor;
 pub mod exec;
 pub mod files;
+pub mod frame;
 pub mod install;
 pub mod logs;
 pub mod material;
 pub mod object;
 pub mod packages;
 pub mod play;
-pub mod profiler;
 pub mod prefab;
+pub mod profile;
+pub mod profiler;
 pub mod references;
 pub mod scene;
 pub mod screenshot;
+pub mod script;
 pub mod settings;
+pub mod shader;
 pub mod snapshot;
 pub mod tests;
 pub mod vcs;
@@ -213,6 +217,9 @@ pub enum Command {
         /// Keep dirty untitled scenes instead of discarding them when auto-save runs
         #[arg(long)]
         keep_untitled: bool,
+        /// Capture play-mode Debug.Log output to this file until play mode exits
+        #[arg(long)]
+        log_file: Option<String>,
     },
     /// Exit play mode
     Stop,
@@ -256,6 +263,13 @@ pub enum Command {
         #[command(flatten)]
         args: logs::LogsArgs,
     },
+    /// Alias for `logs`, including `ucp log tail --follow`
+    Log {
+        #[command(subcommand)]
+        action: Option<logs::LogsAction>,
+        #[command(flatten)]
+        args: logs::LogsArgs,
+    },
     /// Run tests
     RunTests {
         /// Test mode: edit or play
@@ -269,6 +283,11 @@ pub enum Command {
     Exec {
         #[command(subcommand)]
         action: ExecAction,
+    },
+    /// Diagnose script/project-file freshness
+    Script {
+        #[command(subcommand)]
+        action: script::ScriptAction,
     },
     /// Version control (Unity VCS / Plastic SCM)
     Vcs {
@@ -284,6 +303,16 @@ pub enum Command {
     Asset {
         #[command(subcommand)]
         action: asset::AssetAction,
+    },
+    /// Shader diagnostics
+    Shader {
+        #[command(subcommand)]
+        action: shader::ShaderAction,
+    },
+    /// Frame debugger/profiler export helpers
+    Frame {
+        #[command(subcommand)]
+        action: FrameAction,
     },
     /// Read and modify project settings
     Settings {
@@ -315,6 +344,15 @@ pub enum Command {
         #[command(subcommand)]
         action: profiler::ProfilerAction,
     },
+    /// Capture a short profiler summary over a time window
+    Profile {
+        /// Number of seconds to profile
+        #[arg(long, default_value_t = 5)]
+        seconds: u64,
+        /// Profiling mode: play or edit
+        #[arg(long)]
+        mode: Option<String>,
+    },
     /// Find and index asset/object references across the project
     References {
         #[command(subcommand)]
@@ -333,6 +371,16 @@ pub enum ExecAction {
         /// JSON parameters
         #[arg(long)]
         params: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FrameAction {
+    /// Write a structured frame/profiler capture to JSON
+    Capture {
+        /// Output JSON path
+        #[arg(long, short = 'o')]
+        out: String,
     },
 }
 
@@ -560,7 +608,10 @@ pub async fn enforce_active_scene_guard(
         return Ok(());
     }
 
-    anyhow::bail!("{}", format_active_scene_guard_message(command_label, &summary));
+    anyhow::bail!(
+        "{}",
+        format_active_scene_guard_message(command_label, &summary)
+    );
 }
 
 pub async fn enforce_active_scene_guard_for_project(
@@ -597,7 +648,10 @@ pub async fn save_active_scene(
         output::print_info("Saving active scene...");
     }
 
-    match client.call("scene/save-active", serde_json::json!({})).await {
+    match client
+        .call("scene/save-active", serde_json::json!({}))
+        .await
+    {
         Ok(value) => Ok(value),
         Err(err) => Err(map_bridge_method_error(
             err,
@@ -607,15 +661,9 @@ pub async fn save_active_scene(
     }
 }
 
-pub fn map_bridge_method_error(
-    err: UcpError,
-    method: &str,
-    capability: &str,
-) -> anyhow::Error {
+pub fn map_bridge_method_error(err: UcpError, method: &str, capability: &str) -> anyhow::Error {
     match err {
-        UcpError::BridgeError { code, message }
-            if code == -32601 && message.contains(method) =>
-        {
+        UcpError::BridgeError { code, message } if code == -32601 && message.contains(method) => {
             anyhow::anyhow!(
                 "The connected Unity bridge does not expose `{method}` yet, so {capability} is unavailable. Refresh or update the bridge package, then let Unity finish recompiling before retrying."
             )
@@ -656,7 +704,10 @@ fn format_active_scene_guard_message(
             lines.push(format!("  {id} {} [{component_summary}]", change.name));
         }
         if summary.omitted_count > 0 {
-            lines.push(format!("  ... {} more object(s) modified", summary.omitted_count));
+            lines.push(format!(
+                "  ... {} more object(s) modified",
+                summary.omitted_count
+            ));
         }
     }
 
@@ -697,10 +748,12 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Play {
             no_save,
             keep_untitled,
+            log_file,
         } => {
             let payload = serde_json::json!({
                 "saveDirtyScenes": !no_save,
                 "discardUntitled": !keep_untitled,
+                "logFile": log_file,
             });
             play::run("play", payload, &ctx).await
         }
@@ -716,20 +769,27 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             output,
         } => screenshot::run(&view, width, height, output, &ctx).await,
         Command::Logs { action, args } => logs::run(action, args, &ctx).await,
+        Command::Log { action, args } => logs::run(action, args, &ctx).await,
         Command::RunTests { mode, filter } => tests::run(&mode, filter, &ctx).await,
         Command::Exec { action } => match action {
             ExecAction::List => exec::list(&ctx).await,
             ExecAction::Run { name, params } => exec::run(&name, params, &ctx).await,
         },
+        Command::Script { action } => script::run(action, &ctx).await,
         Command::Vcs { action } => vcs::run(action, &ctx).await,
         Command::Object { action } => object::run(action, &ctx).await,
         Command::Asset { action } => asset::run(action, &ctx).await,
+        Command::Shader { action } => shader::run(action, &ctx).await,
+        Command::Frame { action } => match action {
+            FrameAction::Capture { out } => frame::capture(out, &ctx).await,
+        },
         Command::Settings { action } => settings::run(action, &ctx).await,
         Command::Material { action } => material::run(action, &ctx).await,
         Command::Prefab { action } => prefab::run(action, &ctx).await,
         Command::Packages { action } => packages::run(action, &ctx).await,
         Command::Build { action } => build::run(action, &ctx).await,
         Command::Profiler { action } => profiler::run(action, &ctx).await,
+        Command::Profile { seconds, mode } => profile::run(seconds, mode, &ctx).await,
         Command::References { action } => references::run(action, &ctx).await,
     }
 }

@@ -43,6 +43,17 @@ pub enum SceneAction {
         #[arg(long, default_value_t = 0)]
         depth: u32,
     },
+    /// Query the active scene hierarchy, e.g. `name=XRCamera` or `component=Camera`
+    Query {
+        /// Query expression
+        query: String,
+        /// Comma-separated fields to return
+        #[arg(long)]
+        fields: Option<String>,
+        /// Max hierarchy depth to search
+        #[arg(long, default_value_t = 32)]
+        depth: u32,
+    },
 }
 
 pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
@@ -82,6 +93,17 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                 params["axis"] = serde_json::json!(axis_values);
             }
             client.call("scene/focus", params).await?
+        }
+        SceneAction::Query {
+            query,
+            fields,
+            depth,
+        } => {
+            let mut params = serde_json::json!({ "query": query, "depth": depth });
+            if let Some(fields) = fields {
+                params["fields"] = serde_json::json!(fields);
+            }
+            client.call("scene/query", params).await?
         }
         SceneAction::Snapshot { .. } => unreachable!(),
     };
@@ -164,6 +186,11 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("Focused Scene view on {name} ({id})"));
             }
+            SceneAction::Query { .. } => {
+                let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+                output::print_success(&format!("Scene query returned {count} object(s)"));
+                output::print_json(&result);
+            }
             SceneAction::Snapshot { .. } => unreachable!(),
         }
     }
@@ -180,6 +207,7 @@ fn scene_preflight_policy(action: &SceneAction) -> super::ActiveSceneGuardPolicy
         | SceneAction::Active
         | SceneAction::Save
         | SceneAction::Focus { .. }
+        | SceneAction::Query { .. }
         | SceneAction::Snapshot { .. } => super::ActiveSceneGuardPolicy::None,
     }
 }

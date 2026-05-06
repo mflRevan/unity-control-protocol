@@ -7,6 +7,15 @@ const MAX_FIELD_LINES: usize = 40;
 
 #[derive(Subcommand)]
 pub enum ObjectAction {
+    /// List a GameObject's direct children or a deeper child hierarchy
+    GetChildren {
+        /// Instance ID of the target GameObject
+        #[arg(long, allow_hyphen_values = true)]
+        id: i64,
+        /// Child hierarchy depth to include (1 = direct children only)
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..))]
+        depth: u32,
+    },
     /// List all fields on a GameObject's component
     GetFields {
         /// Instance ID of the target GameObject
@@ -151,6 +160,14 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
     super::enforce_active_scene_guard(&mut client, object_preflight_policy(&action)).await?;
 
     let mut result = match &action {
+        ObjectAction::GetChildren { id, depth } => {
+            client
+                .call(
+                    "object/get-children",
+                    serde_json::json!({ "instanceId": id, "depth": depth }),
+                )
+                .await?
+        }
         ObjectAction::GetFields { id, component } => {
             client
                 .call(
@@ -296,6 +313,32 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
+            ObjectAction::GetChildren { id, .. } => {
+                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                let child_count = result
+                    .get("childCount")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or_default();
+                let requested_depth = result
+                    .get("requestedDepth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1);
+
+                output::print_success(&format!("{name} ({id}): {child_count} child(ren)"));
+                if requested_depth > 1 {
+                    eprintln!("  Showing hierarchy depth: {requested_depth}");
+                }
+
+                if let Some(children) = result.get("children").and_then(|v| v.as_array()) {
+                    if children.is_empty() {
+                        eprintln!("  (no children)");
+                    } else {
+                        for child in children {
+                            print_child_node(child, 1);
+                        }
+                    }
+                }
+            }
             ObjectAction::GetFields { .. } => {
                 if let Some(fields) = result.get("fields").and_then(|v| v.as_array()) {
                     let obj_name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
@@ -368,7 +411,9 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
 
 fn object_lifecycle_policy(action: &ObjectAction) -> UnityLifecyclePolicy {
     match action {
-        ObjectAction::GetFields { .. } | ObjectAction::GetProperty { .. } => UnityLifecyclePolicy::None,
+        ObjectAction::GetChildren { .. }
+        | ObjectAction::GetFields { .. }
+        | ObjectAction::GetProperty { .. } => UnityLifecyclePolicy::None,
         ObjectAction::SetProperty { .. }
         | ObjectAction::SetActive { .. }
         | ObjectAction::SetName { .. }
@@ -386,9 +431,9 @@ fn object_lifecycle_policy(action: &ObjectAction) -> UnityLifecyclePolicy {
 
 fn object_preflight_policy(action: &ObjectAction) -> super::ActiveSceneGuardPolicy {
     match action {
-        ObjectAction::GetFields { .. } | ObjectAction::GetProperty { .. } => {
-            super::ActiveSceneGuardPolicy::None
-        }
+        ObjectAction::GetChildren { .. }
+        | ObjectAction::GetFields { .. }
+        | ObjectAction::GetProperty { .. } => super::ActiveSceneGuardPolicy::None,
         _ => super::ActiveSceneGuardPolicy::None,
     }
 }
@@ -404,6 +449,44 @@ fn object_should_save(action: &ObjectAction) -> bool {
         | ObjectAction::Instantiate { save, .. }
         | ObjectAction::AddComponent { save, .. }
         | ObjectAction::RemoveComponent { save, .. } => *save,
-        ObjectAction::GetFields { .. } | ObjectAction::GetProperty { .. } => false,
+        ObjectAction::GetChildren { .. }
+        | ObjectAction::GetFields { .. }
+        | ObjectAction::GetProperty { .. } => false,
+    }
+}
+
+fn print_child_node(node: &serde_json::Value, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+    let id = node
+        .get("instanceId")
+        .and_then(|v| v.as_i64())
+        .unwrap_or_default();
+    let child_count = node
+        .get("childCount")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
+    let components = node
+        .get("components")
+        .and_then(|v| v.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    if components.is_empty() {
+        eprintln!("{indent}- {name} (id: {id}, children: {child_count})");
+    } else {
+        eprintln!("{indent}- {name} (id: {id}, children: {child_count}, components: {components})");
+    }
+
+    if let Some(children) = node.get("children").and_then(|v| v.as_array()) {
+        for child in children {
+            print_child_node(child, depth + 1);
+        }
     }
 }

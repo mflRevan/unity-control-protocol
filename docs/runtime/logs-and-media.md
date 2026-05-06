@@ -47,6 +47,8 @@ Use the logs command in three modes:
 - buffered history mode for tail/search/get operations against logs captured since the bridge started
 - curated status mode for a quick summary of buffered log health and recent play-session activity
 
+`ucp log tail` is an alias-friendly form for agents that expect a singular log command; it accepts the same tail/follow flags as `ucp logs`.
+
 ```bash
 # Summarize the current buffered log state
 ucp logs status
@@ -56,6 +58,9 @@ ucp logs --follow
 
 # Stream only new errors
 ucp logs --follow --level error
+
+# Stream warnings/errors whose message or stack mentions Shader
+ucp log tail --follow --filter level>=warning --filter channel=Shader
 
 # Read the latest buffered logs
 ucp logs --count 10
@@ -71,12 +76,18 @@ ucp logs --id 42
 
 # JSON output
 ucp logs --pattern "warning|error" --json
+
+# Capture all play-mode logs to a file until play mode exits
+ucp play --log-file Logs/play-session.log
+ucp stop
 ```
 
 | Flag                          | Description                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | `--follow`                    | Follow live incoming logs instead of querying buffered history                             |
 | `--level <info\|warn\|error>` | Filter by log severity threshold                                                           |
+| `--channel <text>`            | Filter by coarse channel/category text in the message or stack trace                       |
+| `--filter <expr>`             | Convenience filter expression such as `level>=warning`, `channel=Shader`, or `text=depth`  |
 | `--count <n>`                 | History window size for tail/search, or number of live logs before stopping in follow mode |
 | `--pattern <regex>`           | Regex search against buffered message and stack trace text                                 |
 | `--id <logId>`                | Read a single buffered log entry in full                                                   |
@@ -88,3 +99,5 @@ Bulk history reads are intentionally capped to `10` returned entries even if mor
 `ucp logs status` reports total buffered entries, per-level counts, collapsed category counts, the buffered-history window, and play-session timing/log counts when applicable.
 
 The same curated summary is also appended automatically by blocking lifecycle commands that wait for Unity to settle after reimport, compilation, or domain reload work.
+
+`ucp play --log-file <path>` writes a plain-text play-session log from Unity's `Application.logMessageReceived` stream. Relative paths are resolved from the Unity project root, and capture stops automatically when Unity exits play mode.

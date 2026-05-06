@@ -256,14 +256,14 @@ If a requested slot has no compatible installed editor, it is skipped with a war
 The QA harness exercises all major bridge command families in sequence:
 
 - **Lifecycle**: open, connect, scene load
-- **Object operations**: create, add-component, set/get-property, remove-component, destroy
+- **Object operations**: create, get-children, add-component, set/get-property, remove-component, destroy
 - **Prefabs**: create, instantiate, unpack, apply overrides, revert, delete
-- **Assets**: search, info, reimport, delete
+- **Assets**: search, info, inspect, reimport, delete
 - **Materials**: list, info
 - **Files**: read, write, search
 - **Settings**: get, set
 - **Build**: status, set-scenes
-- **Logs**: status, recent
+- **Logs/observability**: status, filtered tail/search, shader diagnostics, frame capture, profile snapshot, play log-file capture
 - **Screenshot**: capture
 - **Play mode**: play, pause, stop (with domain-reload resilience)
 - **Test runner**: run-tests in edit mode

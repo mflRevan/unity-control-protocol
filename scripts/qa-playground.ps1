@@ -370,6 +370,12 @@ $snapshot = Run-Step -Name 'snapshot-root' -UcpArgs @('scene', 'snapshot') -Asse
 	[pscustomobject]@{ Passed = ($r.Json.success -and $count -ge 1); Detail = "rootCount=$count" }
 }
 
+Run-Step -Name 'scene-query-main' -UcpArgs @('scene', 'query', 'name=Main', '--fields', 'instanceId,name,active,components', '--depth', '8') -Assert {
+	param($r)
+	$count = [int]$r.Json.data.count
+	[pscustomobject]@{ Passed = ($r.Json.success -and $count -ge 1); Detail = "returned=$count" }
+} | Out-Null
+
 $sceneList = Run-Step -Name 'scene-list' -UcpArgs @('scene', 'list') -Assert {
 	param($r)
 	$count = @($r.Json.data.scenes).Count
@@ -396,6 +402,29 @@ if ($qaRootId -ne 0) {
 	Run-Step -Name 'object-set-name' -UcpArgs @('object', 'set-name', '--id', "$qaRootId", '--name', 'UcpQaRootRenamed') -Assert {
 		param($r)
 		[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
+	} | Out-Null
+
+	$qaChild = Run-Step -Name 'object-create-child' -UcpArgs @('object', 'create', 'UcpQaChild', '--parent', "$qaRootId") -Assert {
+		param($r)
+		[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.instanceId); Detail = "id=$($r.Json.data.instanceId)" }
+	}
+
+	$qaChildId = if ($qaChild) { [int]$qaChild.Json.data.instanceId } else { 0 }
+	if ($qaChildId -ne 0) {
+		Run-Step -Name 'object-create-grandchild' -UcpArgs @('object', 'create', 'UcpQaGrandchild', '--parent', "$qaChildId") -Assert {
+			param($r)
+			[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.instanceId); Detail = "id=$($r.Json.data.instanceId)" }
+		} | Out-Null
+	}
+
+	Run-Step -Name 'object-get-children' -UcpArgs @('object', 'get-children', '--id', "$qaRootId", '--depth', '2') -Assert {
+		param($r)
+		$children = if ($null -ne $r.Json.data.children) { @($r.Json.data.children) } else { @() }
+		$child = $children | Where-Object { $_.name -eq 'UcpQaChild' } | Select-Object -First 1
+		$grandchildren = if ($null -ne $child -and $null -ne $child.children) { @($child.children) } else { @() }
+		$passed = $r.Json.success -and [int]$r.Json.data.childCount -ge 1 -and $null -ne $child -and $grandchildren.Count -ge 1 -and $grandchildren[0].name -eq 'UcpQaGrandchild'
+		$detail = "childCount=$($r.Json.data.childCount) returned=$($children.Count) nested=$($grandchildren.Count)"
+		[pscustomobject]@{ Passed = $passed; Detail = $detail }
 	} | Out-Null
 
 	Run-Step -Name 'object-set-active-false' -UcpArgs @('object', 'set-active', '--id', "$qaRootId", '--active', 'false') -Assert {
@@ -486,6 +515,11 @@ Run-Step -Name 'asset-info-prefab' -UcpArgs @('asset', 'info', $prefabPath) -Ass
 	[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
 } | Out-Null
 
+Run-Step -Name 'asset-inspect-prefab' -UcpArgs @('asset', 'inspect', $prefabPath, '--max-fields', '8') -Assert {
+	param($r)
+	[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.type); Detail = $r.Raw }
+} | Out-Null
+
 $materialSearch = Run-Step -Name 'material-search' -UcpArgs @('asset', 'search', '-t', 'Material', '--max', '1') -Assert {
 	param($r)
 	$count = [int]$r.Json.data.returned
@@ -494,6 +528,11 @@ $materialSearch = Run-Step -Name 'material-search' -UcpArgs @('asset', 'search',
 
 if ($materialSearch -and [int]$materialSearch.Json.data.returned -ge 1) {
 	$materialPath = $materialSearch.Json.data.results[0].path
+	Run-Step -Name 'asset-inspect-material' -UcpArgs @('asset', 'inspect', $materialPath, '--max-fields', '8') -Assert {
+		param($r)
+		[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.shader); Detail = $r.Raw }
+	} | Out-Null
+
 	Run-Step -Name 'material-get-properties' -UcpArgs @('material', 'get-properties', '--path', $materialPath) -Assert {
 		param($r)
 		[pscustomobject]@{ Passed = ($r.Json.success -and @($r.Json.data.properties).Count -ge 1); Detail = $r.Raw }
@@ -567,6 +606,25 @@ if ($defines) {
 
 Run-Step -Name 'logs-tail' -UcpArgs @('logs', '--count', '5') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
 Run-Step -Name 'logs-search' -UcpArgs @('logs', '--pattern', 'Exception|Error', '--count', '20') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
+Run-Step -Name 'log-tail-filtered' -UcpArgs @('log', 'tail', '--count', '5', '--filter', 'level>=warning', '--filter', 'channel=Shader') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
+
+Run-Step -Name 'script-doctor' -UcpArgs @('script', 'doctor') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
+Run-Step -Name 'shader-errors' -UcpArgs @('shader', 'errors') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
+
+$frameCapturePath = Join-Path $Project 'UcpQaFrameCapture.json'
+if (Test-Path $frameCapturePath) {
+	Remove-Item -Force $frameCapturePath
+}
+Run-Step -Name 'frame-capture' -UcpArgs @('frame', 'capture', '--out', $frameCapturePath) -Assert {
+	param($r)
+	[pscustomobject]@{ Passed = ($r.Json.success -and (Test-Path $frameCapturePath)); Detail = $r.Raw }
+} | Out-Null
+
+Run-Step -Name 'profile-one-shot' -UcpArgs @('profile', '--seconds', '1', '--mode', 'edit') -Assert {
+	param($r)
+	$frameCount = [int]$r.Json.data.summary.stats.frameCount
+	[pscustomobject]@{ Passed = ($r.Json.success -and $frameCount -ge 0); Detail = "frameCount=$frameCount" }
+} | Out-Null
 
 $screenshotPath = Join-Path $Project 'Assets/UcpQaCapture.png'
 if (Test-Path $screenshotPath) {
@@ -585,7 +643,11 @@ Run-Step -Name 'scene-save-before-play' -UcpArgs @('scene', 'save') -Assert {
 } | Out-Null
 
 Run-Step -Name 'compile-no-wait' -UcpArgs @('compile', '--no-wait') -Assert { param($r) [pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw } } | Out-Null
-Run-Step -Name 'play' -UcpArgs @('play') -AllowFailure -Assert {
+$playLogPath = Join-Path $Project 'UcpQaPlay.log'
+if (Test-Path $playLogPath) {
+	Remove-Item -Force $playLogPath
+}
+Run-Step -Name 'play' -UcpArgs @('play', '--log-file', $playLogPath) -AllowFailure -Assert {
 	param($r)
 	$reconnected = Wait-BridgeReady -Reason 'play-domain-reload' -MaxAttempts 15 -DelaySeconds 2
 	$passed = $reconnected.Ready
@@ -615,9 +677,10 @@ Run-Step -Name 'stop' -UcpArgs @('stop') -AllowFailure -Assert {
 		$r = Invoke-UcpJson -UcpArgs @('stop') -AllowFailure
 	}
 	$ready = Wait-BridgeReady -Reason 'post-stop-stable' -MaxAttempts 15 -DelaySeconds 2
+	$logExists = Test-Path $playLogPath
 	[pscustomobject]@{
-		Passed = ((Test-UcpSuccess $r) -and $ready.Ready)
-		Detail = if ($ready.Ready) { $r.Raw } else { "timeout after stop: $($ready.Detail)" }
+		Passed = ((Test-UcpSuccess $r) -and $ready.Ready -and $logExists)
+		Detail = if ($ready.Ready) { "$($r.Raw) playLog=$logExists" } else { "timeout after stop: $($ready.Detail)" }
 	}
 } | Out-Null
 

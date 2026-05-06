@@ -436,6 +436,78 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void LogsStatus_BackfillsConsoleEntriesWhenHistoryStartsEmpty()
+        {
+            LogsController.SetConsoleBackfillProviderForTests(() => new List<LogsController.ConsoleBackfillEntry>
+            {
+                new LogsController.ConsoleBackfillEntry { Level = "warning", Message = "Compiler warning" },
+                new LogsController.ConsoleBackfillEntry { Level = "error", Message = "Compiler error" }
+            });
+
+            var response = _router.Dispatch("logs/status", 1, "{}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToInt32(result["total"]), Is.EqualTo(2));
+
+            var byLevel = (Dictionary<string, object>)result["byLevel"];
+            Assert.That(Convert.ToInt32(byLevel["warning"]), Is.EqualTo(1));
+            Assert.That(Convert.ToInt32(byLevel["error"]), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void LogsTail_BackfillIgnoresUcpBridgeNoise()
+        {
+            LogsController.SetConsoleBackfillProviderForTests(() => new List<LogsController.ConsoleBackfillEntry>
+            {
+                new LogsController.ConsoleBackfillEntry { Level = "info", Message = "[UCP] Bridge server started on port 21342" },
+                new LogsController.ConsoleBackfillEntry { Level = "warning", Message = "User-facing warning" }
+            });
+
+            var response = _router.Dispatch("logs/tail", 1, "{\"count\":20}");
+
+            Assert.That(response.error, Is.Null);
+
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(Convert.ToInt32(result["total"]), Is.EqualTo(1));
+
+            var logs = (List<object>)result["logs"];
+            var only = (Dictionary<string, object>)logs[0];
+            Assert.That(only["messagePreview"], Is.EqualTo("User-facing warning"));
+        }
+
+        [Test]
+        public void LogsGet_CanReadBackfilledConsoleEntries()
+        {
+            LogsController.SetConsoleBackfillProviderForTests(() => new List<LogsController.ConsoleBackfillEntry>
+            {
+                new LogsController.ConsoleBackfillEntry
+                {
+                    Level = "exception",
+                    Message = "Backfilled exception",
+                    StackTrace = "stack line 1\nstack line 2"
+                }
+            });
+
+            var tail = _router.Dispatch("logs/tail", 1, "{\"count\":20}");
+            Assert.That(tail.error, Is.Null);
+
+            var tailResult = (Dictionary<string, object>)tail.result;
+            var logs = (List<object>)tailResult["logs"];
+            var first = (Dictionary<string, object>)logs[0];
+            var id = Convert.ToInt64(first["id"]);
+
+            var get = _router.Dispatch("logs/get", 1, "{\"id\":" + id + "}");
+            Assert.That(get.error, Is.Null);
+
+            var getResult = (Dictionary<string, object>)get.result;
+            Assert.That(getResult["level"], Is.EqualTo("exception"));
+            Assert.That(getResult["message"], Is.EqualTo("Backfilled exception"));
+            Assert.That(getResult["stackTrace"], Is.EqualTo("stack line 1\nstack line 2"));
+        }
+
+        [Test]
         public void ObjectLifecycle_CreateMutateAndDelete_WorksEndToEnd()
         {
             var create = _router.Dispatch("object/create", 1, "{\"name\":\"SmokeObject\"}");

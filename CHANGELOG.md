@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.2] - 2026-05-06
+
+### Added
+
+- Added `ucp object get-children --id <instanceId> [--depth <levels>]` for targeted hierarchy reads scoped to a single GameObject, returning the same child metadata shape used by `ucp scene snapshot` without requiring a scene-wide crawl.
+- Added runtime observability surfaces: `ucp log tail --follow` alias support, filter expressions (`level>=warning`, `channel=Shader`, `text=...`), and `ucp play --log-file <path>` play-session log capture.
+- Added live log follow recovery so `ucp log tail --follow` reconnects after compile/play bridge restarts and drains buffered catch-up logs instead of silently dropping restart-window output.
+- Added `ucp shader errors` for project-wide shader compiler diagnostics, `ucp frame capture --out <file>.json` for structured frame/profiler exports, and `ucp profile --seconds <n>` for one-shot frame-time profiling.
+- Added `ucp asset inspect <path>` for material shader/keyword/texture/property summaries and prefab renderer/material inspection.
+- Added `ucp scene query "<expr>" --fields ...` for lightweight hierarchy queries over name/component/active/tag/layer without external JSON traversal.
+- Added `ucp script doctor [--fix]` to detect and repair stale generated `.csproj` compile entries after raw filesystem script deletes.
+
+### Changed
+
+- Expanded object authoring docs with a focused object-command workflow, `get-children` output examples, JSON shape reference, and extra guidance for common property-write patterns and hierarchy operations.
+- Extended the QA playground harness to create a root/child/grandchild hierarchy and validate the new `object get-children` subtree response in the canonical dev project.
+- `ucp compile` now performs a synchronous asset database refresh and best-effort solution regeneration before requesting script compilation, so newly written `IUCPScript` files are discoverable immediately after compile in raw-file agent workflows.
+- Log collection now seeds buffered history from the Unity Console after domain reloads and listens on the threaded Unity log callback, making compile-time, play-start, and explicit audit reads much more reliable for agent workflows.
+- Expanded runtime, asset, scene, scripting, and material docs for the new observability/query/inspection/script freshness workflows.
+
+### Fixed
+
+- Fixed `ucp logs` reliability gaps where buffered history could appear empty immediately after compilation, during play-mode transitions, or after explicit log audits because the bridge had restarted and lost its in-memory log buffer.
+
 ## [0.5.1] - 2026-04-11
 
 ### Added
@@ -354,3 +378,4 @@
 - JSON-RPC 2.0 protocol
 - Lock file discovery mechanism
 - Per-session token authentication
+

@@ -125,7 +125,8 @@ async fn main() -> anyhow::Result<()> {
     let json_output = ctx.json;
     if let Err(e) = commands::run(cli.command, ctx).await {
         if json_output {
-            let err = if let Some(test_run_failure) = e.downcast_ref::<commands::tests::TestRunFailure>()
+            let err = if let Some(test_run_failure) =
+                e.downcast_ref::<commands::tests::TestRunFailure>()
             {
                 serde_json::json!({
                     "success": false,
@@ -175,6 +176,30 @@ mod tests {
                 action: commands::scene::SceneAction::Snapshot { filter, depth },
             } => {
                 assert!(filter.is_none());
+                assert_eq!(depth, 2);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_object_get_children_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "object",
+            "get-children",
+            "--id",
+            "-42",
+            "--depth",
+            "2",
+        ])
+        .expect("object get-children command should parse");
+
+        match cli.command {
+            commands::Command::Object {
+                action: commands::object::ObjectAction::GetChildren { id, depth },
+            } => {
+                assert_eq!(id, -42);
                 assert_eq!(depth, 2);
             }
             _ => panic!("unexpected command variant"),
@@ -359,6 +384,100 @@ mod tests {
             }
             _ => panic!("unexpected command variant"),
         }
+    }
+
+    #[test]
+    fn parses_log_tail_follow_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "log",
+            "tail",
+            "--follow",
+            "--filter",
+            "level>=warning",
+            "--filter",
+            "channel=Shader",
+        ])
+        .expect("log tail command should parse");
+
+        match cli.command {
+            commands::Command::Log { action, .. } => match action {
+                Some(commands::logs::LogsAction::Tail { args }) => {
+                    assert!(args.follow);
+                    assert_eq!(args.filters.len(), 2);
+                }
+                _ => panic!("unexpected logs action"),
+            },
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_observability_commands() {
+        let shader = Cli::try_parse_from(["ucp", "shader", "errors", "--errors-only"])
+            .expect("shader errors command should parse");
+        assert!(matches!(
+            shader.command,
+            commands::Command::Shader {
+                action: commands::shader::ShaderAction::Errors {
+                    errors_only: true,
+                    ..
+                }
+            }
+        ));
+
+        let frame = Cli::try_parse_from(["ucp", "frame", "capture", "--out", "frame.json"])
+            .expect("frame capture command should parse");
+        assert!(matches!(
+            frame.command,
+            commands::Command::Frame {
+                action: commands::FrameAction::Capture { .. }
+            }
+        ));
+
+        let profile = Cli::try_parse_from(["ucp", "profile", "--seconds", "2"])
+            .expect("profile command should parse");
+        match profile.command {
+            commands::Command::Profile { seconds, .. } => assert_eq!(seconds, 2),
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_query_inspect_and_script_doctor_commands() {
+        let scene = Cli::try_parse_from([
+            "ucp",
+            "scene",
+            "query",
+            "name=XRCamera",
+            "--fields",
+            "active,components",
+        ])
+        .expect("scene query command should parse");
+        assert!(matches!(
+            scene.command,
+            commands::Command::Scene {
+                action: commands::scene::SceneAction::Query { .. }
+            }
+        ));
+
+        let asset = Cli::try_parse_from(["ucp", "asset", "inspect", "Assets/Materials/Foo.mat"])
+            .expect("asset inspect command should parse");
+        assert!(matches!(
+            asset.command,
+            commands::Command::Asset {
+                action: commands::asset::AssetAction::Inspect { .. }
+            }
+        ));
+
+        let script = Cli::try_parse_from(["ucp", "script", "doctor", "--fix"])
+            .expect("script doctor command should parse");
+        assert!(matches!(
+            script.command,
+            commands::Command::Script {
+                action: commands::script::ScriptAction::Doctor { fix: true }
+            }
+        ));
     }
 
     #[test]

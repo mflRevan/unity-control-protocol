@@ -20,6 +20,8 @@ Capture, inspect, and summarize Unity Profiler data through the bridge.
 | `ucp profiler hierarchy` | Read hierarchy items for a frame/thread |
 | `ucp profiler callstacks` | Resolve raw-sample or hierarchy-item callstacks when Unity exposes them |
 | `ucp profiler summary` | Aggregate bounded profiler stats and top markers |
+| `ucp profile --seconds <n>` | Start a short profiler session, wait, stop, and print a compact frame-time summary |
+| `ucp frame capture --out <file>.json` | Export the current profiler/frame buffer as structured JSON for frame-debugging workflows |
 
 ## Key workflow notes
 
@@ -28,6 +30,8 @@ Capture, inspect, and summarize Unity Profiler data through the bridge.
 - In the Unity Editor, `Profiler.enableBinaryLog` stays disabled at runtime. `ucp profiler capture save --output <file>.json` exports a structured snapshot instead; use the Profiler window for manual raw/data export if you need Unity's native file formats.
 - Frame ids can churn quickly in a live buffer. For `timeline`, `hierarchy`, `callstacks`, and narrow `summary` queries, prefer grabbing a fresh frame id from `ucp profiler frames list` or `ucp profiler frames show` immediately before the follow-up command.
 - Callstacks may legitimately come back empty for samples that do not carry stack data. Enabling allocation callstacks increases overhead and is most useful when you are specifically hunting allocations.
+- `ucp profile --seconds N` is the quick "did this optimization help?" path. It clears stale frames, profiles for the requested window, stops, and reports average CPU/GPU/FPS plus top markers from the buffered frames.
+- `ucp frame capture --out frame.json` writes the same structured capture payload used by `ucp profiler capture save`, giving agents a durable frame dump without opening the Profiler window. Unity does not expose every Frame Debugger event through public APIs, so the export focuses on profiler frame/timeline/hierarchy data and reports warnings when frame data is unavailable.
 
 ## Example edit-mode workflow
 
@@ -41,6 +45,12 @@ ucp profiler hierarchy --frame 61792 --thread 0 --limit 10
 ucp profiler summary --limit 5
 ucp profiler capture save --output ProfilerCaptures/edit-loop.json
 ucp profiler session stop
+
+# One-shot profile summary
+ucp profile --seconds 5 --mode edit
+
+# Structured frame dump
+ucp frame capture --out ProfilerCaptures/frame.json
 ```
 
 ## Example play-mode workflow

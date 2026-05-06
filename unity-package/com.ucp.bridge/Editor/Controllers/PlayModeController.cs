@@ -64,7 +64,10 @@ namespace UCP.Bridge
 
             var saveDirtyScenes = GetBoolParam(paramsJson, "saveDirtyScenes", true);
             var discardUntitled = GetBoolParam(paramsJson, "discardUntitled", true);
+            var logFile = GetStringParam(paramsJson, "logFile");
             SaveDirtyScenesIfRequested(saveDirtyScenes, discardUntitled);
+            if (!string.IsNullOrEmpty(logFile))
+                LogsController.StartFileCapture(logFile);
 
             lock (s_sessionLock)
             {
@@ -151,9 +154,19 @@ namespace UCP.Bridge
                         break;
                     case PlayModeStateChange.EnteredEditMode:
                         s_lastExitedPlayAtUtc = DateTime.UtcNow;
+                        LogsController.StopFileCapture();
                         break;
                 }
             }
+        }
+
+        private static string GetStringParam(string paramsJson, string key)
+        {
+            var parameters = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (parameters != null && parameters.TryGetValue(key, out var valueObj) && valueObj != null)
+                return valueObj.ToString();
+
+            return null;
         }
 
         private static object SerializeSessionSnapshot(SessionSnapshot snapshot)

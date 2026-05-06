@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace UCP.Bridge
 {
@@ -14,6 +15,7 @@ namespace UCP.Bridge
         {
             router.Register("asset/search", HandleSearch);
             router.Register("asset/info", HandleInfo);
+            router.Register("asset/inspect", HandleInspect);
             router.Register("asset/read", HandleReadScriptableObject);
             router.Register("asset/write", HandleWriteScriptableObject);
             router.Register("asset/write-batch", HandleWriteScriptableObjectBatch);
@@ -152,6 +154,47 @@ namespace UCP.Bridge
             return info;
         }
 
+        private static object HandleInspect(string paramsJson)
+        {
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            if (p == null || !p.TryGetValue("path", out var pathObj))
+                throw new ArgumentException("Missing 'path' parameter");
+
+            string assetPath = pathObj.ToString();
+            int maxFields = 80;
+            if (p.TryGetValue("maxFields", out var maxObj) && maxObj != null)
+                maxFields = Math.Max(1, Convert.ToInt32(maxObj));
+
+            var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+            if (asset == null)
+                throw new ArgumentException($"Asset not found: {assetPath}");
+
+            var result = HandleInfo(paramsJson) as Dictionary<string, object>;
+            result["inspectedAtUtc"] = DateTime.UtcNow.ToString("o");
+
+            var importer = AssetImporter.GetAtPath(assetPath);
+            if (importer != null)
+                result["importer"] = InspectSerializedObject(importer, maxFields);
+
+            if (asset is Material material)
+            {
+                result["shader"] = material.shader != null ? material.shader.name : string.Empty;
+                result["shaderPath"] = material.shader != null ? AssetDatabase.GetAssetPath(material.shader) : string.Empty;
+                result["keywords"] = InspectMaterialKeywords(material);
+                result["properties"] = InspectMaterialProperties(material, maxFields);
+            }
+            else if (asset is GameObject gameObject)
+            {
+                result["renderers"] = InspectPrefabRenderers(gameObject);
+            }
+            else
+            {
+                result["fields"] = InspectSerializedObject(asset, maxFields);
+            }
+
+            return result;
+        }
+
         private static object HandleReadScriptableObject(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
@@ -209,6 +252,133 @@ namespace UCP.Bridge
                 ["type"] = asset.GetType().Name,
                 ["fields"] = fields
             };
+        }
+
+        private static List<object> InspectSerializedObject(UnityEngine.Object target, int maxFields)
+        {
+            var serializedObject = new SerializedObject(target);
+            var fields = new List<object>();
+            try
+            {
+                var iterator = serializedObject.GetIterator();
+                if (iterator.NextVisible(true))
+                {
+                    do
+                    {
+                        if (iterator.name == "m_Script") continue;
+                        fields.Add(SerializedPropertyControllerSupport.Describe(iterator));
+                    }
+                    while (fields.Count < maxFields && iterator.NextVisible(false));
+                }
+            }
+            finally
+            {
+                serializedObject.Dispose();
+            }
+
+            return fields;
+        }
+
+        private static List<object> InspectMaterialKeywords(Material material)
+        {
+            var keywords = new List<object>();
+            foreach (var keyword in material.enabledKeywords)
+                keywords.Add(keyword.name);
+            return keywords;
+        }
+
+        private static List<object> InspectMaterialProperties(Material material, int maxFields)
+        {
+            var properties = new List<object>();
+            var shader = material.shader;
+            if (shader == null)
+                return properties;
+
+            var count = Math.Min(shader.GetPropertyCount(), maxFields);
+            for (int i = 0; i < count; i++)
+            {
+                var name = shader.GetPropertyName(i);
+                var type = shader.GetPropertyType(i);
+                properties.Add(new Dictionary<string, object>
+                {
+                    ["name"] = name,
+                    ["description"] = shader.GetPropertyDescription(i),
+                    ["type"] = type.ToString(),
+                    ["value"] = ReadMaterialValue(material, name, type)
+                });
+            }
+
+            return properties;
+        }
+
+        private static object ReadMaterialValue(Material material, string name, ShaderPropertyType type)
+        {
+            switch (type)
+            {
+                case ShaderPropertyType.Color:
+                    var color = material.GetColor(name);
+                    return new List<object> { color.r, color.g, color.b, color.a };
+                case ShaderPropertyType.Vector:
+                    var vector = material.GetVector(name);
+                    return new List<object> { vector.x, vector.y, vector.z, vector.w };
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    return material.GetFloat(name);
+                case ShaderPropertyType.Texture:
+                    var texture = material.GetTexture(name);
+                    return texture != null
+                        ? new Dictionary<string, object>
+                        {
+                            ["name"] = texture.name,
+                            ["path"] = AssetDatabase.GetAssetPath(texture),
+                            ["type"] = texture.GetType().Name
+                        }
+                        : null;
+                default:
+                    return null;
+            }
+        }
+
+        private static List<object> InspectPrefabRenderers(GameObject gameObject)
+        {
+            var renderers = new List<object>();
+            foreach (var renderer in gameObject.GetComponentsInChildren<Renderer>(true))
+            {
+                var materials = new List<object>();
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    materials.Add(material != null
+                        ? new Dictionary<string, object>
+                        {
+                            ["name"] = material.name,
+                            ["path"] = AssetDatabase.GetAssetPath(material),
+                            ["shader"] = material.shader != null ? material.shader.name : string.Empty
+                        }
+                        : null);
+                }
+
+                renderers.Add(new Dictionary<string, object>
+                {
+                    ["path"] = GetTransformPath(renderer.transform),
+                    ["type"] = renderer.GetType().Name,
+                    ["enabled"] = renderer.enabled,
+                    ["materials"] = materials
+                });
+            }
+
+            return renderers;
+        }
+
+        private static string GetTransformPath(Transform transform)
+        {
+            var names = new List<string>();
+            var current = transform;
+            while (current != null)
+            {
+                names.Insert(0, current.name);
+                current = current.parent;
+            }
+            return string.Join("/", names);
         }
 
         private static object HandleWriteScriptableObject(string paramsJson)

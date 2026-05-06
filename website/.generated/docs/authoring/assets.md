@@ -51,6 +51,17 @@ ucp asset info "Assets/Materials/Agent.mat"
   GUID: adbf4a7415ede7c42ada304e953520f6
 ```
 
+### `ucp asset inspect <path>`
+
+Inspect an asset with type-aware details in one payload. This is the fastest way to answer questions such as which shader a material uses, which keywords are enabled, which textures are referenced, or which renderers/materials are present in a prefab.
+
+```bash
+ucp asset inspect "Assets/Materials/Agent.mat"
+ucp asset inspect "Assets/Prefabs/Agent.prefab" --max-fields 40
+```
+
+For materials, the payload includes `shader`, `shaderPath`, `keywords`, and shader `properties` with current values. For prefabs, it includes child renderers, enabled state, and shared material references. Other asset types include importer details and a bounded serialized-field sample.
+
 ### `ucp asset read <path>`
 
 Read serialized fields from an asset.

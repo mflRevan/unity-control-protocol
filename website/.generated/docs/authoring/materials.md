@@ -2,6 +2,15 @@
 
 Inspect and modify material properties, shader keywords, and shaders.
 
+For shader compiler diagnostics across the project, use:
+
+```bash
+ucp shader errors
+ucp shader errors --errors-only --filter Atmosphere
+```
+
+`ucp shader errors` refreshes the asset database and lists shader warnings/errors known to the editor, including shader name, asset path, severity, message, and line when Unity exposes it.
+
 ## Commands
 
 ### `ucp material create <path>`

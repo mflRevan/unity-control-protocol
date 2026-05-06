@@ -31,6 +31,14 @@ pub enum AssetAction {
         /// Asset path (e.g. "Assets/Materials/MyMat.mat")
         path: String,
     },
+    /// Inspect an asset with type-aware details such as material shader state or prefab renderers
+    Inspect {
+        /// Asset path (e.g. "Assets/Materials/MyMat.mat")
+        path: String,
+        /// Maximum serialized fields/properties to include
+        #[arg(long, default_value_t = 80)]
+        max_fields: u32,
+    },
     /// Read fields from an asset (ScriptableObject, Material, etc.)
     Read {
         /// Asset path
@@ -171,6 +179,14 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         AssetAction::Info { path } => {
             client
                 .call("asset/info", serde_json::json!({ "path": path }))
+                .await?
+        }
+        AssetAction::Inspect { path, max_fields } => {
+            client
+                .call(
+                    "asset/inspect",
+                    serde_json::json!({ "path": path, "maxFields": max_fields }),
+                )
                 .await?
         }
         AssetAction::Read { path, field } => {
@@ -360,6 +376,18 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                 if let Some(guid) = result.get("guid").and_then(|v| v.as_str()) {
                     eprintln!("  GUID: {guid}");
                 }
+            }
+            AssetAction::Inspect { .. } => {
+                let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+                let atype = result.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+                output::print_success(&format!("{name} ({atype})"));
+                if let Some(shader) = result.get("shader").and_then(|v| v.as_str()) {
+                    eprintln!("  Shader: {shader}");
+                }
+                if let Some(renderers) = result.get("renderers").and_then(|v| v.as_array()) {
+                    eprintln!("  Renderers: {}", renderers.len());
+                }
+                output::print_json(&result);
             }
             AssetAction::Read { .. } => {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
@@ -623,6 +651,7 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
             }
         },
         AssetAction::Search { .. } | AssetAction::Info { .. } | AssetAction::Read { .. } => false,
+        AssetAction::Inspect { .. } => false,
     }
 }
 

@@ -12,6 +12,8 @@ List all available UCP scripts in the project.
 ucp exec list
 ```
 
+The list includes each script's `Name` and `Description`, so agents can discover callable editor automation without grepping the project for `IUCPScript`.
+
 ### `ucp exec run <name>`
 
 Execute a named script with optional JSON parameters.
@@ -40,8 +42,9 @@ using UnityEngine;
 public class SetupScene : IUCPScript
 {
     public string Name => "SetupScene";
+    public string Description => "Create a simple starter scene";
 
-    public object Execute(Dictionary<string, object> parameters)
+    public object Execute(string paramsJson)
     {
         // Create a ground plane
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -58,4 +61,18 @@ public class SetupScene : IUCPScript
 }
 ```
 
-Scripts are discovered automatically and can be executed remotely by name.
+Scripts are discovered automatically and can be executed remotely by name. `ucp compile` now performs a synchronous asset refresh before requesting compilation, which covers the common raw-file workflow: write a new `.cs` file, run `ucp compile`, then immediately call it with `ucp exec run`.
+
+### `ucp script doctor`
+
+Diagnose generated C# project files and stale script references.
+
+```bash
+# Report stale .csproj Compile entries
+ucp script doctor
+
+# Delete stale generated project files and ask Unity to regenerate them
+ucp script doctor --fix
+```
+
+Use this after raw filesystem deletes of `.cs` files if Unity or the C# compiler reports `CS2001` for files that no longer exist.

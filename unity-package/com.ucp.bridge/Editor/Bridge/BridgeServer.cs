@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.5.1";
+        private const string ProtocolVersion = "0.5.2";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -72,11 +72,12 @@ namespace UCP.Bridge
             try
             {
                 RegisterHandlers();
+                LogsController.SeedHistoryFromConsole();
 
                 EditorApplication.update += PumpMainThread;
                 EditorApplication.quitting += Shutdown;
                 AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
-                Application.logMessageReceived += OnLogMessage;
+                Application.logMessageReceivedThreaded += OnLogMessage;
 
                 s_token = Guid.NewGuid().ToString("N").Substring(0, 16);
                 StartServer();
@@ -165,6 +166,9 @@ namespace UCP.Bridge
 
             // Reference search (bridge fallback)
             ReferenceController.Register(s_router);
+
+            // Shader diagnostics
+            ShaderController.Register(s_router);
         }
 
         private static void StartServer()
@@ -555,7 +559,7 @@ namespace UCP.Bridge
             CleanLockFile();
 
             EditorApplication.update -= PumpMainThread;
-            Application.logMessageReceived -= OnLogMessage;
+            Application.logMessageReceivedThreaded -= OnLogMessage;
         }
 
         private static Dictionary<string, object> ResponseToDict(JsonRpcResponse r)
