@@ -61,7 +61,7 @@ namespace UCP.Bridge
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
-                ["instanceId"] = go.GetInstanceID(),
+                ["instanceId"] = go.GetId(),
                 ["name"] = go.name
             };
         }
@@ -192,7 +192,7 @@ namespace UCP.Bridge
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
-                ["instanceId"] = instance.GetInstanceID(),
+                ["instanceId"] = instance.GetId(),
                 ["name"] = instance.name
             };
         }
@@ -314,7 +314,7 @@ namespace UCP.Bridge
 
         private static GameObject FindInHierarchy(GameObject go, int instanceId)
         {
-            if (go.GetInstanceID() == instanceId) return go;
+            if (go.GetId() == instanceId) return go;
             for (int i = 0; i < go.transform.childCount; i++)
             {
                 var found = FindInHierarchy(go.transform.GetChild(i).gameObject, instanceId);

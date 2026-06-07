@@ -14,7 +14,7 @@ namespace UCP.Bridge
 
             var result = new Dictionary<string, object>
             {
-                ["instanceId"] = obj.GetInstanceID(),
+                ["instanceId"] = obj.GetId(),
                 ["name"] = obj.name,
                 ["type"] = obj.GetType().Name
             };

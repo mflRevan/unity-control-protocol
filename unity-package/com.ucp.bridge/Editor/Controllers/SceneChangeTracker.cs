@@ -17,7 +17,7 @@ namespace UCP.Bridge
             public HashSet<string> Components = new();
         }
 
-        private static readonly Dictionary<int, Dictionary<string, TrackedSceneChange>> s_changesByScene = new();
+        private static readonly Dictionary<long, Dictionary<string, TrackedSceneChange>> s_changesByScene = new();
 
         static SceneChangeTracker()
         {
@@ -33,7 +33,7 @@ namespace UCP.Bridge
             if (gameObject == null)
                 return;
 
-            RecordSceneChange(gameObject.scene, gameObject.GetInstanceID(), gameObject.name, componentName);
+            RecordSceneChange(gameObject.scene, gameObject.GetId(), gameObject.name, componentName);
         }
 
         public static void RecordDeletedObject(Scene scene, int instanceId, string name, string componentName)
@@ -56,7 +56,7 @@ namespace UCP.Bridge
             var modifications = new List<object>();
             var omittedCount = 0;
 
-            if (scene.IsValid() && s_changesByScene.TryGetValue(scene.handle, out var trackedChanges))
+            if (scene.IsValid() && s_changesByScene.TryGetValue(UnityObjectCompat.GetSceneHandle(scene), out var trackedChanges))
             {
                 var ordered = trackedChanges.Values
                     .OrderBy(change => change.InstanceId.HasValue ? 0 : 1)
@@ -101,7 +101,7 @@ namespace UCP.Bridge
             if (!scene.IsValid())
                 return;
 
-            s_changesByScene.Remove(scene.handle);
+            s_changesByScene.Remove(UnityObjectCompat.GetSceneHandle(scene));
         }
 
         private static UndoPropertyModification[] OnPostprocessModifications(UndoPropertyModification[] modifications)
@@ -140,10 +140,10 @@ namespace UCP.Bridge
             if (!scene.IsValid() || !scene.isLoaded)
                 return;
 
-            if (!s_changesByScene.TryGetValue(scene.handle, out var sceneChanges))
+            if (!s_changesByScene.TryGetValue(UnityObjectCompat.GetSceneHandle(scene), out var sceneChanges))
             {
                 sceneChanges = new Dictionary<string, TrackedSceneChange>();
-                s_changesByScene[scene.handle] = sceneChanges;
+                s_changesByScene[UnityObjectCompat.GetSceneHandle(scene)] = sceneChanges;
             }
 
             var key = instanceId.HasValue ? instanceId.Value.ToString() : $"scene::{name}";

@@ -86,7 +86,7 @@ namespace UCP.Bridge
 
             var entry = new Dictionary<string, object>
             {
-                ["instanceId"] = go.GetInstanceID(),
+                ["instanceId"] = go.GetId(),
                 ["name"] = go.name,
                 ["active"] = go.activeSelf,
                 ["tag"] = go.tag,
@@ -230,7 +230,7 @@ namespace UCP.Bridge
         private static Dictionary<string, object> ProjectGameObject(GameObject go, HashSet<string> fields, int depth)
         {
             var entry = new Dictionary<string, object>();
-            AddField(entry, fields, "instanceId", go.GetInstanceID());
+            AddField(entry, fields, "instanceId", go.GetId());
             AddField(entry, fields, "name", go.name);
             AddField(entry, fields, "active", go.activeSelf);
             AddField(entry, fields, "activeInHierarchy", go.activeInHierarchy);
@@ -426,7 +426,7 @@ namespace UCP.Bridge
 
         private static GameObject FindInHierarchy(GameObject go, int instanceId)
         {
-            if (go.GetInstanceID() == instanceId)
+            if (go.GetId() == instanceId)
                 return go;
 
             for (int i = 0; i < go.transform.childCount; i++)
@@ -479,7 +479,7 @@ namespace UCP.Bridge
         {
             return new Dictionary<string, object>
             {
-                ["instanceId"] = go.GetInstanceID(),
+                ["instanceId"] = go.GetId(),
                 ["name"] = go.name,
                 ["active"] = go.activeSelf,
                 ["tag"] = go.tag,
