@@ -991,6 +991,62 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void ModalGuard_AutoSavesDirtyTitledScene_WithoutPrompting()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Assert.That(EditorSceneManager.SaveScene(scene, TempScenePath), Is.True);
+            new GameObject("ModalGuardDirtyMaker");
+            EditorSceneManager.MarkSceneDirty(scene);
+            Assert.That(scene.isDirty, Is.True);
+
+            EditorModalGuard.SaveOpenDirtyScenes(true, true);
+
+            Assert.That(scene.isDirty, Is.False);
+            Assert.That(string.IsNullOrEmpty(scene.path), Is.False);
+        }
+
+        [Test]
+        public void ModalGuard_DiscardsDirtyUntitledScene_WhenDiscardAllowed()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("ModalGuardUntitledDirtyMaker");
+            EditorSceneManager.MarkSceneDirty(scene);
+            Assert.That(string.IsNullOrEmpty(scene.path), Is.True);
+            Assert.That(scene.isDirty, Is.True);
+
+            EditorModalGuard.SaveOpenDirtyScenes(true, true);
+
+            var active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            Assert.That(string.IsNullOrEmpty(active.path), Is.True);
+            Assert.That(active.isDirty, Is.False);
+            Assert.That(GameObject.Find("ModalGuardUntitledDirtyMaker"), Is.Null);
+        }
+
+        [Test]
+        public void ModalGuard_ThrowsOnDirtyUntitledScene_WhenDiscardDisallowed()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("ModalGuardUntitledDirtyMaker");
+            EditorSceneManager.MarkSceneDirty(scene);
+
+            Assert.That(
+                () => EditorModalGuard.SaveOpenDirtyScenes(true, false),
+                Throws.TypeOf<System.InvalidOperationException>());
+        }
+
+        [Test]
+        public void ModalGuard_LeavesSceneUntouched_WhenSavingDisabled()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("ModalGuardUntitledDirtyMaker");
+            EditorSceneManager.MarkSceneDirty(scene);
+            Assert.That(scene.isDirty, Is.True);
+
+            Assert.That(() => EditorModalGuard.SaveOpenDirtyScenes(false, false), Throws.Nothing);
+            Assert.That(UnityEngine.SceneManagement.SceneManager.GetActiveScene().isDirty, Is.True);
+        }
+
+        [Test]
         public void PackagesController_DependencySetInfoAndRemove_LocalFilePackage()
         {
             CreateTempLocalPackage();

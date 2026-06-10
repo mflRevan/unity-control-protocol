@@ -54,7 +54,7 @@ namespace UCP.Bridge
             }
             else
             {
-                SaveDirtyScenesIfRequested(saveDirtyScenes, discardUntitled);
+                EditorModalGuard.SaveOpenDirtyScenes(saveDirtyScenes, discardUntitled);
                 EditorSceneManager.OpenScene(path, additive ? OpenSceneMode.Additive : OpenSceneMode.Single);
             }
 
@@ -72,38 +72,6 @@ namespace UCP.Bridge
                 return value;
 
             return defaultValue;
-        }
-
-        private static void SaveDirtyScenesIfRequested(bool saveDirtyScenes, bool discardUntitled)
-        {
-            if (!saveDirtyScenes)
-                return;
-
-            var requiresUntitledDiscard = false;
-
-            for (var index = 0; index < SceneManager.sceneCount; index++)
-            {
-                var scene = SceneManager.GetSceneAt(index);
-                if (!scene.isLoaded || !scene.isDirty)
-                    continue;
-
-                if (string.IsNullOrEmpty(scene.path))
-                {
-                    if (!discardUntitled)
-                        throw new System.InvalidOperationException("Dirty untitled scene cannot be auto-saved. Retry with discardUntitled=true.");
-
-                    requiresUntitledDiscard = true;
-                    continue;
-                }
-
-                if (!EditorSceneManager.SaveScene(scene))
-                    throw new System.InvalidOperationException($"Failed to auto-save dirty scene: {scene.path}");
-
-                SceneChangeTracker.ClearScene(scene);
-            }
-
-            if (requiresUntitledDiscard)
-                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
 
         private static object HandleSaveActive(string paramsJson)
