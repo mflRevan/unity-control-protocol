@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Restored Unity 6000.0–6000.4 bridge compilation. The 6000.5 EntityId compatibility work introduced an ambiguous `SceneHandle`-to-`long` conversion (CS0457) in the pre-6000.5 code path, which broke the editor bridge across the entire 6.0–6.4 support matrix. Validated by running the editmode suite on 6000.4.0f1.
+- `ucp` commands no longer hang indefinitely when the Unity Editor is wedged behind a modal dialog (or stuck compiling/importing). RPC responses are now bounded by `--timeout` and surface a clear, actionable error instead of blocking forever. Operations that intentionally block the editor's main thread for a long time — `build start`, `compile`, and package add/remove — are exempt so they are never cut short.
+- Linux release binaries are now built on Ubuntu 22.04 (glibc 2.35) instead of `ubuntu-latest` (glibc 2.39), restoring support for older distributions such as Ubuntu 22.04. ([#1](https://github.com/mflRevan/unity-control-protocol/issues/1))
+
+### Changed
+
+- Consolidated the dirty-scene auto-save behavior shared by `scene load` and `play` into a single modal-safe guard (`EditorModalGuard`), removing duplicated logic and centralizing the contract that bridge commands must never trigger a blocking editor dialog. Added editmode coverage for titled auto-save, untitled discard, and the no-discard error path.
+
 ## [0.5.2] - 2026-05-06
 
 ### Added
