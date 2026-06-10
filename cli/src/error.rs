@@ -18,6 +18,13 @@ pub enum UcpError {
     #[error("Command timed out after {0}s")]
     Timeout(u64),
 
+    #[error(
+        "Unity did not respond to '{method}' within {secs}s. The Editor may be blocked by a \
+         modal dialog (check the Unity window), compiling, or importing. Re-run with a larger \
+         --timeout if the operation is expected to take longer."
+    )]
+    RequestTimeout { method: String, secs: u64 },
+
     #[error("Protocol version mismatch -- CLI: {cli}, Bridge: {bridge}")]
     VersionMismatch { cli: String, bridge: String },
 

@@ -11,6 +11,10 @@ use tar::Archive;
 
 use super::{Context, UnityLifecyclePolicy};
 
+/// Floor for the packages/* RPC deadline, in seconds. Matches the bridge's own
+/// `DefaultTimeoutMs` (120s) plus slack so the editor-side budget expires first.
+const PACKAGE_RPC_TIMEOUT_SECS: u64 = 130;
+
 const DEFAULT_SEARCH_RESULTS: usize = 50;
 
 #[derive(Subcommand)]
@@ -445,7 +449,15 @@ where
         .await?;
     }
 
-    let mut result = client.call(method, params).await?;
+    // Every packages/* handler blocks the editor main thread on a synchronous UPM
+    // request bounded by the bridge's own 120s budget. Give the RPC at least that long
+    // (the bridge returns its own error first on a slow-but-alive editor) so we don't trip
+    // --timeout prematurely, while still capping a truly wedged/modal-blocked editor.
+    let pkg_timeout = match ctx.timeout {
+        0 => None,
+        secs => Some(std::time::Duration::from_secs(secs.max(PACKAGE_RPC_TIMEOUT_SECS))),
+    };
+    let mut result = client.call_with_timeout(method, params, pkg_timeout).await?;
     client.close().await;
 
     if let Some(no_wait) = wait_for_settle {

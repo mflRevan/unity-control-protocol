@@ -38,6 +38,7 @@ use crate::output;
 use clap::Subcommand;
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Context {
@@ -429,10 +430,21 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
     Ok((project, lock))
 }
 
+/// Per-request RPC deadline derived from the `--timeout` flag. `--timeout 0` opts out
+/// (wait indefinitely) for callers that need the legacy unbounded behavior.
+pub fn request_timeout(ctx: &Context) -> Option<Duration> {
+    if ctx.timeout == 0 {
+        None
+    } else {
+        Some(Duration::from_secs(ctx.timeout))
+    }
+}
+
 pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile, BridgeClient)> {
     let (project, lock) = ensure_bridge_ready(ctx).await?;
 
     if let Ok(mut client) = BridgeClient::connect(&lock).await {
+        client.set_request_timeout(request_timeout(ctx));
         if client.handshake().await.is_ok() {
             return Ok((project, lock, client));
         }
@@ -457,6 +469,7 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
 
     let lock = discovery::read_lock_file(&project)?;
     let mut client = BridgeClient::connect(&lock).await?;
+    client.set_request_timeout(request_timeout(ctx));
     client.handshake().await?;
     Ok((project, lock, client))
 }

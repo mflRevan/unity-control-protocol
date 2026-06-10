@@ -15,7 +15,11 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
         output::print_info("Triggering recompilation...");
     }
 
-    let result = client.call("compile", serde_json::json!({})).await?;
+    // A synchronous AssetDatabase.Refresh can take well over the default --timeout on
+    // large projects; don't bound this call. Domain-reload waiting is handled below.
+    let result = client
+        .call_with_timeout("compile", serde_json::json!({}), None)
+        .await?;
     client.close().await;
 
     if no_wait {
