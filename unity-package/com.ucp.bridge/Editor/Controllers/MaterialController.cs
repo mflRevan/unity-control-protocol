@@ -50,7 +50,7 @@ namespace UCP.Bridge
                 ["path"] = path,
                 ["name"] = material.name,
                 ["shader"] = shader.name,
-                ["instanceId"] = material.GetInstanceID()
+                ["instanceId"] = material.GetId()
             };
         }
 
@@ -278,7 +278,7 @@ namespace UCP.Bridge
                         {
                             ["name"] = tex.name,
                             ["path"] = texPath,
-                            ["instanceId"] = tex.GetInstanceID()
+                            ["instanceId"] = tex.GetId()
                         };
                     }
                     return null;

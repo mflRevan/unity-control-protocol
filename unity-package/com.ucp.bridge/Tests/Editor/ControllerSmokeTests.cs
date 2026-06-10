@@ -544,7 +544,7 @@ namespace UCP.Bridge.Tests
             );
             Assert.That(getPosition.error, Is.Null);
 
-            var updated = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var updated = UnityObjectCompat.ResolveByInstanceId(instanceId) as GameObject;
             Assert.That(updated, Is.Not.Null);
             var localPosition = updated.transform.localPosition;
             Assert.That(localPosition.x, Is.EqualTo(1f).Within(0.001f));
@@ -556,7 +556,7 @@ namespace UCP.Bridge.Tests
 
             var delete = _router.Dispatch("object/delete", 1, "{\"instanceId\":" + instanceId + "}");
             Assert.That(delete.error, Is.Null);
-            Assert.That(EditorUtility.InstanceIDToObject(instanceId), Is.Null);
+            Assert.That(UnityObjectCompat.ResolveByInstanceId(instanceId), Is.Null);
         }
 
         [Test]
@@ -573,7 +573,7 @@ namespace UCP.Bridge.Tests
             var response = _router.Dispatch(
                 "object/set-property",
                 1,
-                "{\"instanceId\":" + go.GetInstanceID() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"" + TempReferenceAssetPath + "\"}}"
+                "{\"instanceId\":" + go.GetId() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"" + TempReferenceAssetPath + "\"}}"
             );
 
             Assert.That(response.error, Is.Null);
@@ -598,7 +598,7 @@ namespace UCP.Bridge.Tests
             var response = _router.Dispatch(
                 "object/set-property",
                 1,
-                "{\"instanceId\":" + cube.GetInstanceID() + ",\"component\":\"MeshRenderer\",\"property\":\"m_Materials\",\"value\":[{\"path\":\"" + TempMaterialPath + "\"}]}"
+                "{\"instanceId\":" + cube.GetId() + ",\"component\":\"MeshRenderer\",\"property\":\"m_Materials\",\"value\":[{\"path\":\"" + TempMaterialPath + "\"}]}"
             );
 
             Assert.That(response.error, Is.Null);
@@ -616,7 +616,7 @@ namespace UCP.Bridge.Tests
             var response = _router.Dispatch(
                 "object/set-property",
                 1,
-                "{\"instanceId\":" + go.GetInstanceID() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"Assets/Missing.asset\"}}"
+                "{\"instanceId\":" + go.GetId() + ",\"component\":\"ReferenceComponent\",\"property\":\"referenceAsset\",\"value\":{\"path\":\"Assets/Missing.asset\"}}"
             );
 
             Assert.That(response.error, Is.Not.Null);
@@ -1071,7 +1071,7 @@ namespace UCP.Bridge.Tests
             var response = _router.Dispatch(
                 "scene/focus",
                 1,
-                "{\"instanceId\":" + cube.GetInstanceID() + ",\"axis\":[1,0,1]}"
+                "{\"instanceId\":" + cube.GetId() + ",\"axis\":[1,0,1]}"
             );
 
             Assert.That(response.error, Is.Null);
@@ -1102,7 +1102,7 @@ namespace UCP.Bridge.Tests
             var response = _router.Dispatch(
                 "scene/focus",
                 1,
-                "{\"instanceId\":" + cube.GetInstanceID() + ",\"axis\":[0,0,0]}"
+                "{\"instanceId\":" + cube.GetId() + ",\"axis\":[0,0,0]}"
             );
 
             Assert.That(response.error, Is.Not.Null);

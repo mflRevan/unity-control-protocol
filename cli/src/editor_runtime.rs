@@ -470,6 +470,30 @@ fn unity_install_roots() -> Vec<PathBuf> {
         }
     }
 
+    #[cfg(unix)]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = PathBuf::from(home);
+            roots.push(home.join("Unity").join("Hub").join("Editor"));
+            roots.push(home.join(".local").join("share").join("Unity").join("Hub").join("Editor"));
+            roots.push(home.join(".unityhub").join("Editor"));
+        }
+        roots.push(PathBuf::from("/opt/Unity").join("Hub").join("Editor"));
+        roots.push(PathBuf::from("/usr/local/Unity").join("Hub").join("Editor"));
+
+        if let Ok(config_dir) = std::env::var("XDG_CONFIG_HOME") {
+            let hub_dir = PathBuf::from(config_dir).join("unityhub");
+            if let Some(path) = read_hub_path_string(&hub_dir.join("secondaryInstallPath.json")) {
+                roots.push(path);
+            }
+        } else if let Some(home) = std::env::var_os("HOME") {
+            let hub_dir = PathBuf::from(home).join(".config").join("unityhub");
+            if let Some(path) = read_hub_path_string(&hub_dir.join("secondaryInstallPath.json")) {
+                roots.push(path);
+            }
+        }
+    }
+
     dedupe_paths(roots)
 }
 
@@ -484,21 +508,52 @@ fn read_hub_path_string(path: &Path) -> Option<PathBuf> {
     Some(PathBuf::from(trimmed))
 }
 
+fn hub_projects_path() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        let app_data = std::env::var_os("APPDATA")?;
+        Some(PathBuf::from(app_data).join("UnityHub").join("projects-v1.json"))
+    }
+
+    #[cfg(unix)]
+    {
+        let config_dir = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+        Some(config_dir.join("unityhub").join("projects-v1.json"))
+    }
+}
+
 fn read_hub_project_version(project: &Path) -> Option<String> {
-    let app_data = std::env::var_os("APPDATA")?;
-    let path = PathBuf::from(app_data)
-        .join("UnityHub")
-        .join("projects-v1.json");
+    let path = hub_projects_path()?;
     let content = fs::read_to_string(path).ok()?;
     let json_start = content.find('{')?;
     let value: serde_json::Value = serde_json::from_str(&content[json_start..]).ok()?;
-    let project_key = project.display().to_string().replace('/', "\\");
-    value
-        .get("data")?
-        .get(&project_key)?
-        .get("version")?
-        .as_str()
-        .map(ToOwned::to_owned)
+    let project_key = project.display().to_string();
+
+    // Try exact match first, then with normalized separators
+    let data = value.get("data")?;
+    if let Some(version) = data
+        .get(&project_key)
+        .and_then(|entry| entry.get("version"))
+        .and_then(|v| v.as_str())
+    {
+        return Some(version.to_owned());
+    }
+
+    #[cfg(windows)]
+    {
+        let alt_key = project_key.replace('/', "\\");
+        data.get(&alt_key)
+            .and_then(|entry| entry.get("version"))
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned)
+    }
+
+    #[cfg(unix)]
+    {
+        None
+    }
 }
 
 fn installed_unity_versions(roots: &[PathBuf]) -> Vec<String> {

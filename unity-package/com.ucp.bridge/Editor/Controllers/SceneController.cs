@@ -302,7 +302,7 @@ namespace UCP.Bridge
 
         private static GameObject FindInHierarchy(GameObject gameObject, int instanceId)
         {
-            if (gameObject.GetInstanceID() == instanceId)
+            if (gameObject.GetId() == instanceId)
                 return gameObject;
 
             foreach (Transform child in gameObject.transform)

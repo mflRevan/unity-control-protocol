@@ -179,8 +179,8 @@ namespace UCP.Bridge
                 ["status"] = "ok",
                 ["path"] = savePath,
                 ["name"] = prefab.name,
-                ["instanceId"] = prefab.GetInstanceID(),
-                ["sceneInstanceId"] = go.GetInstanceID(),
+                ["instanceId"] = prefab.GetId(),
+                ["sceneInstanceId"] = go.GetId(),
                 ["isPrefabInstance"] = PrefabUtility.IsPartOfPrefabInstance(go)
             };
         }
@@ -221,7 +221,7 @@ namespace UCP.Bridge
                 added.Add(new Dictionary<string, object>
                 {
                     ["component"] = ac.instanceComponent.GetType().Name,
-                    ["instanceId"] = ac.instanceComponent.GetInstanceID()
+                    ["instanceId"] = ac.instanceComponent.GetId()
                 });
             }
 

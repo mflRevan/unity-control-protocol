@@ -125,7 +125,7 @@ namespace UCP.Bridge
                 ["name"] = asset.name,
                 ["type"] = asset.GetType().Name,
                 ["fullType"] = asset.GetType().FullName,
-                ["instanceId"] = asset.GetInstanceID(),
+                ["instanceId"] = asset.GetId(),
                 ["guid"] = AssetDatabase.AssetPathToGUID(assetPath)
             };
 
@@ -496,7 +496,7 @@ namespace UCP.Bridge
                 ["status"] = "ok",
                 ["path"] = assetPath,
                 ["type"] = soType.Name,
-                ["instanceId"] = instance.GetInstanceID()
+                ["instanceId"] = instance.GetId()
             };
         }
 

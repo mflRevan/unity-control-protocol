@@ -31,7 +31,7 @@ namespace UCP.Bridge
                 {
                     { "serializationMode", mode },
                     { "forceText", mode == 2 },
-                    { "visibleMetaFiles", EditorSettings.externalVersionControl == "Visible Meta Files" }
+                    { "visibleMetaFiles", VersionControlSettings.mode == "Visible Meta Files" }
                 };
             }
             finally
