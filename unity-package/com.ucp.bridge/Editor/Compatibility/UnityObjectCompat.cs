@@ -20,7 +20,10 @@ namespace UCP.Bridge
 #if UNITY_6000_5_OR_NEWER
             return unchecked((long)scene.handle.GetRawData());
 #else
-            return scene.handle;
+            // On 6000.0–6000.4, Scene.handle is a SceneHandle with implicit int and
+            // uint operators; widening straight to long is ambiguous (CS0457). Pin the
+            // int conversion explicitly — handles are 32-bit on these versions.
+            return (int)scene.handle;
 #endif
         }
 
