@@ -42,9 +42,7 @@ export function Navbar() {
     <header
       className={cn(
         'fixed top-0 left-0 right-0 z-50 transition-all duration-500',
-        scrolled
-          ? 'bg-background/70 backdrop-blur-xl border-b border-border/40 shadow-[0_10px_40px_-24px_rgba(0,0,0,0.55)]'
-          : 'bg-transparent',
+        scrolled ? 'bg-background border-b border-border' : 'bg-background border-b border-transparent',
       )}
     >
       <nav className="mx-auto max-w-7xl flex items-center justify-between px-6 py-4">
@@ -53,7 +51,7 @@ export function Navbar() {
             <img
               src="/favicon.svg"
               alt="UCP logo"
-              className="h-11 w-11 drop-shadow-[0_10px_20px_rgba(109,40,217,0.28)]"
+              className="h-11 w-11"
             />
           </div>
           <div className="leading-none">
@@ -65,7 +63,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop Nav – sliding indicator */}
-        <div className="hidden md:flex items-center rounded-xl border border-border/40 bg-muted/25 p-1 backdrop-blur-xl shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
+        <div className="hidden md:flex items-center rounded-xl border border-border bg-muted/40 p-1">
           {navLinks.map((link) => {
             const isActive =
               location.pathname === link.href ||
@@ -75,7 +73,7 @@ export function Navbar() {
                 {isActive && (
                   <motion.div
                     layoutId="nav-indicator"
-                    className="absolute inset-0.5 rounded-[9px] bg-primary shadow-[0_0_20px_rgba(167,139,250,0.25)]"
+                    className="absolute inset-0.5 rounded-[9px] bg-primary"
                     transition={{ type: 'spring', stiffness: 500, damping: 32 }}
                   />
                 )}
@@ -98,7 +96,7 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="icon"
-            className="rounded-full border border-border/60 bg-background/72 backdrop-blur-xl hover:border-primary/30 hover:bg-primary/8"
+            className="rounded-full border border-border hover:border-primary/30 hover:bg-primary/8"
             onClick={() => setTheme(resolved === 'dark' ? 'light' : 'dark')}
           >
             {resolved === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -107,7 +105,7 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full border border-border/60 bg-background/72 backdrop-blur-xl hover:border-primary/30 hover:bg-primary/8"
+              className="rounded-full border border-border hover:border-primary/30 hover:bg-primary/8"
             >
               <Github className="h-4 w-4" />
             </Button>
@@ -116,13 +114,13 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full border border-[#5865F2]/70 bg-[#5865F2] text-white backdrop-blur-xl hover:border-[#4752C4] hover:bg-[#4752C4] flex items-center justify-center"
+              className="rounded-full border border-[#5865F2]/70 bg-[#5865F2] text-white hover:border-[#4752C4] hover:bg-[#4752C4] flex items-center justify-center"
             >
               <DiscordIcon className="h-4 w-4" />
             </Button>
           </a>
           <Link to="/docs">
-            <Button size="sm" className="ml-2 rounded-full px-4 shadow-[0_14px_32px_-18px_rgba(109,40,217,0.9)]">
+            <Button size="sm" className="ml-2 rounded-full px-4">
               Get Started
             </Button>
           </Link>
@@ -136,7 +134,7 @@ export function Navbar() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="md:hidden bg-background/95 backdrop-blur-xl border-b border-border">
+        <div className="md:hidden bg-background border-b border-border">
           <div className="px-6 py-4 space-y-2">
             {navLinks.map((link) => (
               <Link

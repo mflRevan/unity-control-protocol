@@ -31,9 +31,8 @@ export function Architecture() {
         <FadeIn>
           <div className="text-center mb-16">
             <p className="text-primary font-medium text-sm tracking-wider uppercase mb-3">Architecture</p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              How it{' '}
-              <span className="bg-linear-to-r from-primary to-purple-400 bg-clip-text text-transparent">works</span>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+              How it <span className="text-primary">works</span>
             </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
               UCP connects your tools to Unity Editor through a lightweight WebSocket bridge running inside the editor.
@@ -42,14 +41,11 @@ export function Architecture() {
         </FadeIn>
 
         <FadeIn delay={0.2}>
-          <div className="relative rounded-2xl border border-border/50 bg-linear-to-b from-card to-card/50 p-8 md:p-12 overflow-hidden">
-            {/* Background glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-125 h-75 bg-primary/5 rounded-full blur-[100px]" />
-
+          <div className="relative rounded-2xl border border-border bg-card p-8 md:p-12 overflow-hidden">
             <div className="relative grid md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-6 md:gap-4 items-center">
               {/* CLI Side */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-primary/15 to-primary/5 border border-primary/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-primary/40 group-hover:shadow-[0_0_24px_rgba(167,139,250,0.15)]">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-center transition-colors duration-200 group-hover:border-primary/40">
                   <Terminal className="h-8 w-8 text-primary" />
                 </div>
                 <div className="min-h-[4.5rem]">
@@ -75,7 +71,7 @@ export function Architecture() {
 
               {/* Connection */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-blue-500/15 to-cyan-500/5 border border-blue-500/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-blue-500/40 group-hover:shadow-[0_0_24px_rgba(59,130,246,0.15)]">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-blue-500/5 border border-blue-500/20 flex items-center justify-center transition-colors duration-200 group-hover:border-blue-500/40">
                   <Wifi className="h-8 w-8 text-blue-400" />
                 </div>
                 <div className="min-h-[4.5rem]">
@@ -92,7 +88,7 @@ export function Architecture() {
 
               {/* Unity Side */}
               <div className="text-center space-y-4 group">
-                <div className="mx-auto w-20 h-20 rounded-2xl bg-linear-to-br from-emerald-500/15 to-green-500/5 border border-emerald-500/20 flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-emerald-500/40 group-hover:shadow-[0_0_24px_rgba(16,185,129,0.15)]">
+                <div className="mx-auto w-20 h-20 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 flex items-center justify-center transition-colors duration-200 group-hover:border-emerald-500/40">
                   <Box className="h-8 w-8 text-emerald-400" />
                 </div>
                 <div className="min-h-[4.5rem]">

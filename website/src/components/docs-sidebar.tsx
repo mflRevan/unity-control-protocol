@@ -70,8 +70,8 @@ export function DocsSidebar({ mobile, onNavigate }: DocsSidebarProps) {
       {docsNavigation.map((group, gi) => (
         <div key={group.title} className={gi > 0 ? 'pt-5' : ''}>
           <div className="flex items-center gap-2.5 mb-3 px-3">
-            <div className="h-4 w-[3px] rounded-full bg-primary/50" />
-            <h4 className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-primary/55" style={{ textShadow: '0 0 12px var(--color-primary)' }}>
+            <div className="h-4 w-[3px] rounded-full bg-primary/40" />
+            <h4 className="text-[0.75rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
               {group.title}
             </h4>
           </div>

@@ -39,21 +39,16 @@ ucp vcs commit -m "update"     # commit via VCS`,
 export function QuickStart() {
   return (
     <section className="py-24 relative" id="quickstart">
-      {/* Subtle background accent */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
-        <div className="absolute top-1/2 left-0 w-100 h-100 bg-primary/4 rounded-full blur-[150px] -translate-y-1/2" />
-        <div className="absolute bottom-0 right-0 w-75 h-75 bg-primary/3 rounded-full blur-[120px]" />
-      </div>
-
       <div className="mx-auto max-w-4xl px-6">
         <FadeIn>
           <div className="text-center mb-16">
             <p className="text-primary font-medium text-sm tracking-wider uppercase mb-3">Quick Start</p>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              Up and running in{' '}
-              <span className="bg-linear-to-r from-primary to-purple-400 bg-clip-text text-transparent">3 steps</span>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
+              Install, connect, <span className="text-primary">automate</span>
             </h2>
-            <p className="mt-4 text-lg text-muted-foreground">From install to full Unity control in under a minute.</p>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Install the CLI, add the bridge package to your project, then drive the editor from the terminal.
+            </p>
           </div>
         </FadeIn>
 

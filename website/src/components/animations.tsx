@@ -18,11 +18,11 @@ export function SplitText({ text, className = '', delay = 0 }: SplitTextProps) {
         <motion.span
           key={i}
           className="inline-block"
-          initial={{ opacity: 0, y: 20, filter: 'blur(4px)' }}
-          animate={isInView ? { opacity: 1, y: 0, filter: 'blur(0px)' } : {}}
+          initial={{ opacity: 0, y: 8 }}
+          animate={isInView ? { opacity: 1, y: 0 } : {}}
           transition={{
-            duration: 0.4,
-            delay: delay + i * 0.05,
+            duration: 0.35,
+            delay: delay + i * 0.04,
             ease: [0.25, 0.4, 0.25, 1],
           }}
         >
@@ -40,32 +40,16 @@ interface FadeInProps {
   direction?: 'up' | 'down' | 'left' | 'right';
 }
 
-export function FadeIn({ children, className = '', delay = 0, direction = 'up' }: FadeInProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: '-50px' });
-
-  const directionMap = {
-    up: { y: 30, x: 0 },
-    down: { y: -30, x: 0 },
-    left: { x: 30, y: 0 },
-    right: { x: -30, y: 0 },
-  };
-
+export function FadeIn({ children, className = '', delay = 0 }: FadeInProps) {
+  // Content is always rendered and visible — no opacity gating behind scroll, so nothing is
+  // hidden from a full render, a JS crawler, or a static capture. A single subtle one-shot
+  // entrance plays on mount without ever blocking content.
+  void delay;
   return (
     <motion.div
-      ref={ref}
       className={className}
-      initial={{
-        opacity: 0,
-        ...directionMap[direction],
-        filter: 'blur(4px)',
-      }}
-      animate={isInView ? { opacity: 1, x: 0, y: 0, filter: 'blur(0px)' } : {}}
-      transition={{
-        duration: 0.6,
-        delay,
-        ease: [0.25, 0.4, 0.25, 1],
-      }}
+      initial={{ opacity: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0 }}
     >
       {children}
     </motion.div>
@@ -117,35 +101,10 @@ interface GlowCardProps {
 }
 
 export function GlowCard({ children, className = '' }: GlowCardProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    setMousePos({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    });
-  };
-
   return (
     <div
-      ref={cardRef}
-      className={`relative overflow-hidden rounded-xl border border-border bg-card transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_30px_rgba(167,139,250,0.06)] hover:-translate-y-0.5 ${className}`}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className={`relative overflow-hidden rounded-xl border border-border bg-card transition-colors duration-200 hover:border-primary/40 ${className}`}
     >
-      {isHovered && (
-        <div
-          className="pointer-events-none absolute -inset-px opacity-20 transition-opacity"
-          style={{
-            background: `radial-gradient(400px circle at ${mousePos.x}px ${mousePos.y}px, var(--color-primary), transparent 60%)`,
-          }}
-        />
-      )}
       <div className="relative z-10">{children}</div>
     </div>
   );

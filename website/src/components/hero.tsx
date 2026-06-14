@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AnimatedTerminal } from '@/components/animated-terminal';
 import { FadeIn } from '@/components/animations';
-import { TextType } from '@/components/text-type';
 import { useState } from 'react';
 
 export function Hero() {
@@ -18,16 +17,6 @@ export function Hero() {
 
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden">
-      {/* Subtle gradient blurs for depth */}
-      <div className="absolute inset-0 -z-10 pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/4 w-200 h-150 bg-primary/10 rounded-full blur-[150px]" />
-        <div className="absolute bottom-0 right-0 w-125 h-100 bg-primary/5 rounded-full blur-[120px]" />
-        <div className="absolute top-0 left-0 w-75 h-75 bg-primary/5 rounded-full blur-[100px]" />
-      </div>
-
-      {/* Gradient overlay at bottom for smooth section transition */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-linear-to-t from-background to-transparent z-0" />
-
       <div className="mx-auto max-w-7xl px-6 py-32 w-full relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left - Content */}
@@ -35,31 +24,28 @@ export function Hero() {
             <FadeIn delay={0.1}>
               <Badge
                 variant="secondary"
-                className="px-3 py-1.5 text-xs font-medium border border-primary/20 bg-primary/5 text-primary"
+                className="px-3 py-1.5 text-xs font-medium border border-border bg-muted/40 text-muted-foreground"
               >
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2 animate-pulse" />
-                Now available on npm
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mr-2" />
+                Open source · MIT · npm + cargo + binaries
               </Badge>
             </FadeIn>
 
             <div>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.05]">
-                <TextType text="Unity Control" speed={70} delay={300} cursor={true} />
-                <br />
-                <span className="bg-linear-to-r from-primary via-purple-400 to-primary bg-clip-text text-transparent">
-                  <TextType text="Protocol" speed={70} delay={1300} />
-                </span>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-foreground">
+                Unity Control Protocol
               </h1>
             </div>
 
-            <FadeIn delay={0.6}>
+            <FadeIn delay={0.1}>
               <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                A cross-platform CLI + Unity Editor bridge for programmatic control. Enable AI agents, CI/CD pipelines,
-                and automation tools to interact with Unity over WebSocket.
+                Drive the Unity Editor from your terminal. Snapshot scene hierarchies, author transforms, enter play
+                mode, run tests, capture screenshots, and manage assets, packages, and builds &mdash; over one local
+                WebSocket bridge. Scriptable and headless for CI, tooling, and AI agents.
               </p>
             </FadeIn>
 
-            <FadeIn delay={0.8}>
+            <FadeIn delay={0.25}>
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Link to="/docs">
