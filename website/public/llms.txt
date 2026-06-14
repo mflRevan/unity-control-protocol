@@ -1,0 +1,44 @@
+# Unity Control Protocol (UCP)
+
+> A cross-platform CLI and Unity Editor bridge for programmatic control of Unity projects over a WebSocket/JSON-RPC 2.0 connection.
+
+## Getting Started
+
+- [Introduction](https://unityctl.dev/docs/index.md): Welcome to the Unity Control Protocol documentation. UCP is a cross-platform CLI + Unity Editor bridge that enables programmatic control of the Unity Editor over WebSocket.
+- [Installation](https://unityctl.dev/docs/installation.md): Download the latest release for your platform from GitHub Releases.
+- [Quick Start](https://unityctl.dev/docs/quickstart.md): Get from zero to full Unity automation in under a minute.
+
+## Overview
+
+- [CLI Overview](https://unityctl.dev/docs/overview.md): This page covers the stable cross-cutting behavior of UCP itself: global flags, output modes, editor/bridge lifecycle, and recommended workflows. Detailed command surfaces now live under workflow-oriented sections instead of one flat command bucket.
+- [Project Setup & Bridge](https://unityctl.dev/docs/overview/project-setup.md): This section covers installing the bridge, establishing connectivity, and diagnosing project-level setup issues before you start authoring or runtime workflows.
+- [Editor Lifecycle](https://unityctl.dev/docs/overview/editor-lifecycle.md): UCP now manages the Unity Editor process directly instead of assuming Unity is already open. Any bridge-backed command can auto-start the editor when a project is detected and a Unity executable is available.
+
+## Authoring
+
+- [Scenes](https://unityctl.dev/docs/authoring/scenes.md): Manage scenes and capture hierarchy snapshots.
+- [Objects & Components](https://unityctl.dev/docs/authoring/objects.md): Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an --id flag with the instance ID of the target GameObject (use ucp scene snapshot to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
+- [Prefabs](https://unityctl.dev/docs/authoring/prefabs.md): Inspect and manage prefab instances and overrides in the scene.
+- [Assets](https://unityctl.dev/docs/authoring/assets.md): Search, inspect, and manage project assets. Works with materials, textures, ScriptableObjects, and any asset type Unity recognizes.
+- [Materials](https://unityctl.dev/docs/authoring/materials.md): Inspect and modify material properties, shader keywords, and shaders.
+- [Reference Search](https://unityctl.dev/docs/authoring/references.md): Find all references to any asset, prefab, material, script, or object across the entire Unity project. The Rust-native engine parses Unity's text-serialized YAML directly from disk with parallel scanning — no running Unity editor required.
+- [Files](https://unityctl.dev/docs/authoring/files.md): Read, write, and patch project files. All file paths are relative to the project root and sandboxed within the project directory for safety.
+- [Scripting](https://unityctl.dev/docs/authoring/scripting.md): Execute custom C# scripts in the Unity Editor remotely. UCP provides a Playwright-like scripting system where you define IUCPScript classes in your project and run them from the CLI with parameters.
+
+## Runtime & Diagnostics
+
+- [Play Mode & Compilation](https://unityctl.dev/docs/runtime/play-mode.md): Control Unity's play mode state from the command line.
+- [Screenshots & Logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
+- [Testing](https://unityctl.dev/docs/runtime/testing.md): Run Unity Test Framework tests from the command line.
+- [Profiler](https://unityctl.dev/docs/runtime/profiler.md): Capture, inspect, and summarize Unity Profiler data through the bridge.
+
+## Project Operations
+
+- [Packages](https://unityctl.dev/docs/project/packages.md): Browse Unity packages, manage manifest dependencies and scoped registries, and inspect or selectively import .unitypackage archives.
+- [Settings](https://unityctl.dev/docs/project/settings.md): Read and modify Unity project settings: PlayerSettings, QualitySettings, Physics, Lighting, Tags, and Layers.
+- [Build Pipeline](https://unityctl.dev/docs/project/build.md): Configure build targets, scene lists, scripting defines, and trigger builds from the CLI.
+- [Version Control](https://unityctl.dev/docs/project/version-control.md): Bridge-backed fallback commands for Unity Version Control (Plastic SCM / UVCS).
+
+## Agents
+
+- [Skills](https://unityctl.dev/docs/agents/skills.md): UCP ships with Agent Skills-compatible skill files that allow AI coding agents to understand and use the full UCP toolset automatically.
