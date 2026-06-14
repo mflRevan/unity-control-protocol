@@ -1,6 +1,6 @@
 {
-  "version": "0.5.2",
-  "protocolVersion": "0.5.2",
+  "version": "0.6.0",
+  "protocolVersion": "0.6.0",
   "repository": {
     "owner": "mflRevan",
     "name": "unity-control-protocol",

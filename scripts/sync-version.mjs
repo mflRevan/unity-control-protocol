@@ -102,12 +102,7 @@ const replacements = [
   ['docs/project/settings.md', (content) => replaceOne(content, /  Version: .*/, `  Version: ${version}`)],
   [
     'website/src/components/animated-terminal.tsx',
-    (content) =>
-      replaceOne(
-        content,
-        /  \{ text: '  Protocol: v.*', type: 'info', delay: 200 \},/,
-        `  { text: '  Protocol: v${protocolVersion}', type: 'info', delay: 200 },`,
-      ),
+    (content) => replaceOne(content, /Protocol: v[\d.]+/, `Protocol: v${protocolVersion}`),
     { optionalFile: true },
   ],
   [

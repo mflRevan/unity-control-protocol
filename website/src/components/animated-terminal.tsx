@@ -9,7 +9,7 @@ interface Line {
 const session: Line[] = [
   { text: '$ ucp connect', type: 'command' },
   { text: '✓ Connected to Unity 6000.3.1f1', type: 'success' },
-  { text: '  Project: "MyGame"   Protocol: v0.5.2', type: 'info' },
+  { text: '  Project: "MyGame"   Protocol: v0.6.0', type: 'info' },
   { text: '', type: 'output' },
   { text: '$ ucp scene snapshot', type: 'command' },
   { text: 'Scene: SampleScene (3 roots)', type: 'output' },
