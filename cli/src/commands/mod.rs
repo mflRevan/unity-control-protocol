@@ -279,7 +279,8 @@ pub enum Command {
         /// Test mode: edit or play
         #[arg(long, default_value = "edit")]
         mode: String,
-        /// Filter test names
+        /// Limit to tests whose fully-qualified name (Namespace.Fixture.Test) matches this regex,
+        /// falling back to a substring match (e.g. "Combat", "Player.*Jump")
         #[arg(long)]
         filter: Option<String>,
     },
@@ -379,25 +380,31 @@ pub enum Command {
     },
 }
 
+/// Run editor-side automation scripts (Playwright-like). A script is an editor class implementing
+/// `IUCPScript`, addressed by its registered name; discover available ones with `exec list`. Reach
+/// for this when a task needs custom editor logic no built-in command exposes.
 #[derive(Subcommand)]
 pub enum ExecAction {
-    /// List available scripts
+    /// List available scripts (the `IUCPScript` implementations registered in the editor)
     List,
-    /// Run a named script
+    /// Run a named script (from `exec list`), passing optional JSON params it interprets
     Run {
-        /// Script name
+        /// Registered script name (from `ucp exec list`)
         name: String,
-        /// JSON parameters
+        /// Params forwarded to the script as a JSON object (e.g. '{"count":3,"dry":true}'); the
+        /// schema is script-defined
         #[arg(long)]
         params: Option<String>,
     },
 }
 
+/// Export profiler/frame captures to disk for offline analysis. Use this to snapshot a structured
+/// frame from the running editor when you need the raw data rather than a live summary.
 #[derive(Subcommand)]
 pub enum FrameAction {
     /// Write a structured frame/profiler capture to JSON
     Capture {
-        /// Output JSON path
+        /// Destination JSON file path (e.g. frame.json)
         #[arg(long, short = 'o')]
         out: String,
     },

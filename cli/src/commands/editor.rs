@@ -8,6 +8,9 @@ use std::io::{self, Write};
 
 use super::{Context, resolve_project_path};
 
+/// Manage the Unity editor process for the detected project: open, close, restart, and inspect it.
+/// Operates on whichever editor UCP launched or discovered for the project, no id needed. Reach for
+/// this to bring the editor up before other commands, recover from a wedged session, or read its log.
 #[derive(Subcommand)]
 pub enum EditorAction {
     /// Open the Unity editor and wait for the bridge

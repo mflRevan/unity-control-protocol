@@ -5,6 +5,9 @@ use console::style;
 
 use super::{Context, UnityLifecyclePolicy};
 
+/// Drive the project's version control (Unity VCS / Plastic SCM) from the editor. Files are
+/// addressed by project-relative asset path; some subcommands need the `cm` CLI on PATH. Reach for
+/// this to check out, revert, commit, lock, or sync changes without leaving the automation flow.
 #[derive(Subcommand)]
 pub enum VcsAction {
     /// Show version control provider info and connection status

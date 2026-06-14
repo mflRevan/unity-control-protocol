@@ -5,6 +5,9 @@ use super::{Context, UnityLifecyclePolicy};
 
 const MAX_FIELD_LINES: usize = 40;
 
+/// Inspect and edit GameObjects, their components, and properties. Objects are addressed by the
+/// short-lived instance id from `ucp scene snapshot` (it changes after reloads/compiles). Reach for
+/// this to read/write component fields or restructure the hierarchy; use `transform` for spatial moves.
 #[derive(Subcommand)]
 pub enum ObjectAction {
     /// List a GameObject's direct children or a deeper child hierarchy
@@ -45,10 +48,10 @@ pub enum ObjectAction {
         /// Component type name
         #[arg(long)]
         component: String,
-        /// Property name
+        /// Property name (e.g. "m_LocalPosition", "enabled")
         #[arg(long)]
         property: String,
-        /// Value as JSON
+        /// New value as JSON (e.g. true, 5, [1,2,3], "text")
         #[arg(long)]
         value: String,
         /// Save the active scene after applying the change
@@ -123,7 +126,9 @@ pub enum ObjectAction {
     },
     /// Instantiate a prefab or clone a scene object
     Instantiate {
-        /// Asset path to prefab, or instance ID to clone
+        /// Source, auto-detected: anything containing "/" or "." is treated as a prefab asset path
+        /// (e.g. "Assets/Enemy.prefab") and instantiated; a bare integer (e.g. -4231) is treated as
+        /// an instance id and clones that scene object
         source: String,
         /// Optional name for the new instance
         #[arg(long)]

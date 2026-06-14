@@ -5,6 +5,9 @@ use super::{Context, UnityLifecyclePolicy};
 
 const MAX_PROPERTIES: usize = 40;
 
+/// Inspect and edit material assets: shader, properties, and keywords. Materials are addressed by
+/// project-relative asset path (e.g. "Assets/Materials/Foo.mat") and properties by their shader name
+/// (e.g. "_Color", "_MainTex"). Reach for this to recolor, retexture, or reshader materials on disk.
 #[derive(Subcommand)]
 pub enum MaterialAction {
     /// Create a new material asset
@@ -35,10 +38,10 @@ pub enum MaterialAction {
         /// Asset path to the material
         #[arg(long)]
         path: String,
-        /// Property name
+        /// Property name (e.g. "_Color", "_Metallic")
         #[arg(long)]
         property: String,
-        /// Value as JSON
+        /// New value as JSON (e.g. [1,0,0,1] for a color, 0.5 for a float)
         #[arg(long)]
         value: String,
     },

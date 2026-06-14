@@ -17,6 +17,20 @@ use tracing_subscriber::EnvFilter;
 #[command(
     name = "ucp",
     about = "Unity Control Protocol - programmatic Unity Editor control",
+    long_about = "Unity Control Protocol (ucp) drives the Unity Editor over a local WebSocket/JSON-RPC \
+bridge so scenes, GameObjects, assets, builds, and tests can be inspected and changed from scripts \
+or headless agents without touching the Editor UI.\n\
+\n\
+Orientation:\n\
+  - Object commands take an instance id from `ucp scene snapshot`. Ids are short-lived: they change \
+after domain reloads, recompiles, and scene reloads, so re-snapshot before reusing one. Where a \
+command also accepts `--path` or `--name`, those survive reloads.\n\
+  - Run `ucp <command> --help` for any surface to see its subcommands, args, and value hints.\n\
+  - Pass `--json` for machine-readable output suitable for parsing.\n\
+  - Pass `--timeout 0` to wait indefinitely instead of failing after the default deadline.\n\
+\n\
+Full docs (human + machine-readable): https://unityctl.dev - per-page Markdown mirrors and \
+https://unityctl.dev/llms.txt are available for AI agents.",
     version,
     propagate_version = true
 )]
@@ -44,7 +58,7 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
-    /// Command timeout in seconds
+    /// Per-request command timeout in seconds; 0 waits indefinitely
     #[arg(long, global = true, default_value = "30")]
     timeout: u64,
 
@@ -52,11 +66,14 @@ struct Cli {
     #[arg(long, short, global = true)]
     verbose: bool,
 
-    /// Policy for handling outdated bridge package references
+    /// Policy for an outdated bridge package reference: auto (update silently),
+    /// warn (report but proceed), off (ignore)
     #[arg(long, global = true, env = "UCP_BRIDGE_UPDATE_POLICY", value_enum)]
     bridge_update_policy: Option<config::BridgeUpdatePolicy>,
 
-    /// Policy for handling Unity startup dialogs such as Safe Mode or recovery prompts
+    /// Policy for Unity startup dialogs (Safe Mode, recovery): auto (resolve the
+    /// usual way), manual (leave for a human), ignore (dismiss), recover (accept
+    /// recovery), safe-mode (enter Safe Mode), cancel (decline)
     #[arg(long, global = true, env = "UCP_DIALOG_POLICY", value_enum)]
     dialog_policy: Option<config::StartupDialogPolicy>,
 }

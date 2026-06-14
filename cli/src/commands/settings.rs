@@ -6,49 +6,52 @@ use super::{Context, UnityLifecyclePolicy};
 const MAX_COLLECTION_ITEMS: usize = 20;
 const MAX_STRING_LEN: usize = 120;
 
+/// Read and write Unity project settings (player, quality, physics, lighting) plus tags and layers.
+/// Each `set-*` command writes one key; run the matching getter first (e.g. `settings player`) to
+/// list the valid keys and their current shapes. Keys are Unity setting names; values are JSON.
 #[derive(Subcommand)]
 pub enum SettingsAction {
-    /// Get player settings
+    /// Get player settings (also lists the keys accepted by `settings set-player`)
     Player,
-    /// Set a player setting
+    /// Set one player setting. Run `settings player` to see valid keys
     SetPlayer {
-        /// Setting key
+        /// Player setting key, as listed by `settings player` (e.g. companyName, productName)
         #[arg(long)]
         key: String,
-        /// Setting value (as JSON)
+        /// New value as JSON (e.g. "Acme" for a string, 1920 for a number, true for a bool)
         #[arg(long)]
         value: String,
     },
-    /// Get quality settings
+    /// Get quality settings (also lists the keys accepted by `settings set-quality`)
     Quality,
-    /// Set a quality setting
+    /// Set one quality setting. Run `settings quality` to see valid keys
     SetQuality {
-        /// Setting key
+        /// Quality setting key, as listed by `settings quality` (e.g. vSyncCount, antiAliasing)
         #[arg(long)]
         key: String,
-        /// Setting value (as JSON)
+        /// New value as JSON (e.g. 0 for vSyncCount, 2 for antiAliasing)
         #[arg(long)]
         value: String,
     },
-    /// Get physics settings
+    /// Get physics settings (also lists the keys accepted by `settings set-physics`)
     Physics,
-    /// Set a physics setting
+    /// Set one physics setting. Run `settings physics` to see valid keys
     SetPhysics {
-        /// Setting key
+        /// Physics setting key, as listed by `settings physics` (e.g. gravity, bounceThreshold)
         #[arg(long)]
         key: String,
-        /// Setting value (as JSON)
+        /// New value as JSON (e.g. [0,-9.81,0] for gravity, 2.0 for bounceThreshold)
         #[arg(long)]
         value: String,
     },
-    /// Get lighting/render settings
+    /// Get lighting/render settings (also lists the keys accepted by `settings set-lighting`)
     Lighting,
-    /// Set a lighting setting
+    /// Set one lighting/render setting. Run `settings lighting` to see valid keys
     SetLighting {
-        /// Setting key
+        /// Lighting setting key, as listed by `settings lighting` (e.g. ambientMode, fog)
         #[arg(long)]
         key: String,
-        /// Setting value (as JSON)
+        /// New value as JSON (e.g. true for fog, [0.2,0.2,0.2,1] for an ambient color)
         #[arg(long)]
         value: String,
         /// Save the active scene after applying the change
@@ -57,16 +60,16 @@ pub enum SettingsAction {
     },
     /// List tags and layers
     TagsLayers,
-    /// Add a tag
+    /// Add a tag. No-op if the tag already exists
     AddTag {
-        /// Tag name
+        /// Tag name to add (e.g. Enemy)
         tag: String,
     },
-    /// Add a layer
+    /// Add a layer at a free or specified index
     AddLayer {
-        /// Layer name
+        /// Layer name to add (e.g. Interactable)
         name: String,
-        /// Layer index (8-31, auto-assigned if omitted)
+        /// Layer index 8-31 (user range; auto-assigned to the first free slot if omitted)
         #[arg(long)]
         index: Option<i64>,
     },

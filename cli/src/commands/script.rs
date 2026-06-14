@@ -3,6 +3,9 @@ use clap::Subcommand;
 
 use super::Context;
 
+/// Diagnose C# script/project-file freshness in the project. Checks that generated .csproj/.sln
+/// files match the assemblies Unity sees, no id needed. Reach for this when IDE IntelliSense is
+/// stale or scripts compile in Unity but not in your editor; pass `--fix` to regenerate them.
 #[derive(Subcommand)]
 pub enum ScriptAction {
     /// Diagnose script project files and optionally regenerate stale .csproj files

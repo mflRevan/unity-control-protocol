@@ -6,6 +6,9 @@ use super::{Context, UnityLifecyclePolicy};
 const MAX_PREFAB_OVERRIDES: usize = 20;
 const MAX_PREFAB_COMPONENT_CHANGES: usize = 20;
 
+/// Work with prefab instances and assets: status, apply, revert, unpack, and create. Scene objects
+/// are addressed by the short-lived instance id from `ucp scene snapshot`; new assets by path. Reach
+/// for this to push instance edits to the asset, reset an instance, or turn a scene object into a prefab.
 #[derive(Subcommand)]
 pub enum PrefabAction {
     /// Get prefab status of a GameObject

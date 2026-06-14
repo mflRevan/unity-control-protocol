@@ -3,6 +3,9 @@ use clap::Subcommand;
 
 use super::Context;
 
+/// Surface shader diagnostics the editor already knows about. Reports compile errors and warnings
+/// across the project's shaders, no id needed, optionally narrowed by name/path substring. Reach for
+/// this after importing or editing shaders to confirm they compiled.
 #[derive(Subcommand)]
 pub enum ShaderAction {
     /// List shader compile errors and warnings known to the editor

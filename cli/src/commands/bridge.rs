@@ -4,6 +4,9 @@ use clap::Subcommand;
 
 use super::{Context, resolve_project_path};
 
+/// Inspect or update the UCP bridge package installed in the project. The bridge is the editor-side
+/// package every command talks to; this group reports its source/version and pins it to the version
+/// this CLI expects. Reach for this when commands fail because the bridge is missing or out of date.
 #[derive(Subcommand)]
 pub enum BridgeAction {
     /// Show the installed bridge package source and version state

@@ -4,6 +4,9 @@ use clap::Subcommand;
 use super::snapshot;
 use super::{Context, UnityLifecyclePolicy};
 
+/// Manage scenes and inspect the active hierarchy. `snapshot` and `query` are the entry points for
+/// discovering objects and their short-lived instance ids; other subcommands load, save, or focus
+/// scenes. Reach for this first to orient yourself before addressing objects elsewhere.
 #[derive(Subcommand)]
 pub enum SceneAction {
     /// List all scenes in build settings
@@ -36,10 +39,10 @@ pub enum SceneAction {
     },
     /// Capture a lean hierarchy snapshot of the active scene
     Snapshot {
-        /// Filter objects by name pattern
+        /// Filter objects by name substring (e.g. "Camera")
         #[arg(long)]
         filter: Option<String>,
-        /// Max hierarchy depth (default: 0, root objects only)
+        /// Max hierarchy depth to include (0 = root objects only)
         #[arg(long, default_value_t = 0)]
         depth: u32,
     },

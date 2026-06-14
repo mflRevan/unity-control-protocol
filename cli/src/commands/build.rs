@@ -3,6 +3,9 @@ use clap::Subcommand;
 
 use super::{Context, UnityLifecyclePolicy};
 
+/// Drive the build pipeline: pick a target and scenes, then produce a player. Targets are Unity
+/// `BuildTarget` names and scenes are project-relative paths. `start` blocks the editor and can run
+/// for minutes; reach for this to switch platforms, manage scenes/defines, or produce a build.
 #[derive(Subcommand)]
 pub enum BuildAction {
     /// List available build targets
@@ -21,12 +24,13 @@ pub enum BuildAction {
         /// Scene paths (comma-separated)
         scenes: String,
     },
-    /// Start a build
+    /// Start a build (blocks the editor; may run for minutes)
     Start {
-        /// Output path
+        /// Output path for the player, file or folder per platform
+        /// (e.g. "Builds/win/Game.exe", "Builds/Android/Game.apk"); a default is chosen if omitted
         #[arg(long)]
         output: Option<String>,
-        /// Development build
+        /// Produce a development build (debug symbols, profiler, script debugging)
         #[arg(long)]
         development: bool,
     },

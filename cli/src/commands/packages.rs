@@ -17,6 +17,9 @@ const PACKAGE_RPC_TIMEOUT_SECS: u64 = 130;
 
 const DEFAULT_SEARCH_RESULTS: usize = 50;
 
+/// Manage Unity Package Manager dependencies, scoped registries, and .unitypackage archives.
+/// Packages are addressed by id or reference (e.g. com.unity.textmeshpro, name@version, git url).
+/// Most mutations trigger a resolve/domain reload; reach for this to add, remove, or import packages.
 #[derive(Subcommand)]
 pub enum PackagesAction {
     /// List installed Unity packages
@@ -51,7 +54,7 @@ pub enum PackagesAction {
     Add {
         /// Package id or reference (e.g. com.unity.textmeshpro, name@version, git url, file path)
         package: String,
-        /// Return after the Package Manager request completes without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },
@@ -59,7 +62,7 @@ pub enum PackagesAction {
     Remove {
         /// Package name
         name: String,
-        /// Return after the Package Manager request completes without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },
@@ -90,7 +93,7 @@ pub enum PackageDependencyAction {
         name: String,
         /// Dependency reference
         reference: String,
-        /// Return after resolve without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },
@@ -98,7 +101,7 @@ pub enum PackageDependencyAction {
     Remove {
         /// Dependency name
         name: String,
-        /// Return after resolve without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },
@@ -119,7 +122,7 @@ pub enum PackageRegistryAction {
         /// One or more scopes handled by this registry
         #[arg(long = "scope", required = true)]
         scopes: Vec<String>,
-        /// Return after resolve without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },
@@ -128,7 +131,7 @@ pub enum PackageRegistryAction {
         /// Registry name
         #[arg(long)]
         name: String,
-        /// Return after resolve without waiting for bridge stabilization
+        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
         #[arg(long)]
         no_wait: bool,
     },

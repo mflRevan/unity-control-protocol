@@ -6,6 +6,9 @@ use tokio::time::{Duration, Instant, sleep};
 
 use super::Context;
 
+/// Drive the Unity profiler: configure it, run sessions, capture files, and inspect frames. Frames
+/// are addressed by index (latest by default) and threads by index (0 = main). Reach for this to
+/// measure CPU/GPU/memory cost; use the lighter top-level `profile` for a quick windowed summary.
 #[derive(Subcommand, Debug, Clone)]
 pub enum ProfilerAction {
     /// Show profiler status, capabilities, and frame-buffer summary

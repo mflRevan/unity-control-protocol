@@ -40,6 +40,9 @@ pub struct LogsArgs {
     pub follow: bool,
 }
 
+/// Read or stream the editor's console (Debug.Log) buffer. Entries are filtered by level, channel,
+/// or expression (e.g. level>=warning); with `--follow` it streams live instead of reading history.
+/// Reach for this to see what the editor printed during a command, build, or test run.
 #[derive(Subcommand, Clone, Debug)]
 pub enum LogsAction {
     /// Tail buffered logs or follow live logs when --follow is set

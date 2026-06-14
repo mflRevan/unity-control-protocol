@@ -6,6 +6,9 @@ use super::{Context, UnityLifecyclePolicy};
 
 const MAX_ASSET_FIELDS: usize = 40;
 
+/// Search, inspect, and manage project assets on disk. Assets are addressed by project-relative
+/// path (e.g. "Assets/Materials/Foo.mat") and routed through Unity so GUIDs and importers stay
+/// consistent. Reach for this to find assets, read/write their fields, or move/delete/reimport them.
 #[derive(Subcommand)]
 pub enum AssetAction {
     /// Search for assets by type and/or name
@@ -51,10 +54,10 @@ pub enum AssetAction {
     Write {
         /// Asset path
         path: String,
-        /// Field name
+        /// Field name (e.g. "maxHealth")
         #[arg(long)]
         field: String,
-        /// Value as JSON
+        /// New value as JSON (e.g. 100, "name", [1,2,3])
         #[arg(long)]
         value: String,
     },
@@ -62,13 +65,13 @@ pub enum AssetAction {
     WriteBatch {
         /// Asset path
         path: String,
-        /// JSON object of field/value pairs
+        /// JSON object of field/value pairs (e.g. '{"maxHealth":100,"name":"Boss"}')
         #[arg(long)]
         values: String,
     },
     /// Create a new ScriptableObject asset
     CreateSo {
-        /// ScriptableObject type name
+        /// ScriptableObject type name (e.g. "EnemyConfig")
         #[arg(long, short = 't')]
         r#type: String,
         /// Asset path to create at
@@ -88,7 +91,9 @@ pub enum AssetAction {
     },
     /// Move multiple assets or folders through Unity in one ordered batch
     BulkMove {
-        /// JSON array or object map describing moves
+        /// Moves as JSON, either an array of {"from","to"} objects
+        /// (e.g. '[{"from":"Assets/A.mat","to":"Assets/B.mat"}]') or a {from: to} object map
+        /// (e.g. '{"Assets/A.mat":"Assets/B.mat"}')
         #[arg(long)]
         moves: String,
         /// Continue processing later moves after an individual move fails
@@ -127,10 +132,10 @@ pub enum ImportSettingsAction {
     Write {
         /// Asset path or .meta path
         path: String,
-        /// Importer field/property path
+        /// Importer field/property path (e.g. "textureType", "isReadable")
         #[arg(long)]
         field: String,
-        /// Value as JSON
+        /// New value as JSON (e.g. true, "Sprite", 2048)
         #[arg(long)]
         value: String,
         /// Update settings without immediately reimporting the asset
@@ -141,7 +146,7 @@ pub enum ImportSettingsAction {
     WriteBatch {
         /// Asset path or .meta path
         path: String,
-        /// JSON object of field/value pairs
+        /// JSON object of field/value pairs (e.g. '{"isReadable":true,"maxTextureSize":2048}')
         #[arg(long)]
         values: String,
         /// Update settings without immediately reimporting the asset

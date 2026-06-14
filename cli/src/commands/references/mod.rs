@@ -41,29 +41,32 @@ pub enum IndexBuildApproachArg {
     Yaml,
 }
 
+/// Find and index where assets/objects are referenced across the project. Targets are addressed by
+/// asset path or 32-char GUID (or guid:fileId for a sub-object); searching reads serialized YAML on
+/// disk, so it works without a running editor when serialization is text-based. `check` verifies that.
 #[derive(Subcommand)]
 pub enum ReferencesAction {
     /// Find all references to an asset or object
     Find {
-        /// Asset path or GUID to search for
+        /// Asset path or 32-char GUID to search for (e.g. "Assets/Foo.mat")
         #[arg(long, short = 'a')]
         asset: Option<String>,
-        /// Specific object within an asset as guid:fileId
+        /// Specific object within an asset as guid:fileId (e.g. "3cb6...:11400000")
         #[arg(long, short = 'o')]
         object: Option<String>,
-        /// Maximum files to include in results (default: 50)
+        /// Maximum files to include in results
         #[arg(long, default_value = "50")]
         max_files: usize,
-        /// Maximum detail entries per file before pattern-collapsing (default: 5)
+        /// Maximum detail entries per file before pattern-collapsing
         #[arg(long, default_value = "5")]
         max_per_file: usize,
-        /// Repetition threshold: collapse groups of N+ identical type/property refs (default: 3)
+        /// Repetition threshold: collapse groups of N+ identical type/property refs
         #[arg(long, default_value = "3")]
         pattern_threshold: usize,
-        /// Detail level: summary, normal, verbose
+        /// Detail level: summary, normal, or verbose
         #[arg(long, value_enum, default_value_t = FindDetailArg::Normal)]
         detail: FindDetailArg,
-        /// Search approach: auto, rust-grep, rust-yaml, bridge
+        /// Search approach: auto, rust-grep, rust-yaml, or bridge
         #[arg(long, value_enum, default_value_t = FindApproachArg::Auto)]
         approach: FindApproachArg,
     },
@@ -79,7 +82,7 @@ pub enum ReferencesAction {
     },
     /// Find string-based references in serialized/text assets
     FindStrings {
-        /// Literal string or regex pattern to search for
+        /// Literal string, or regex with --regex, to search for (e.g. "SCN_")
         #[arg(long)]
         pattern: String,
         /// Optional asset or folder path scope (defaults to Assets/)
@@ -88,10 +91,10 @@ pub enum ReferencesAction {
         /// Interpret --pattern as a regex
         #[arg(long)]
         regex: bool,
-        /// Maximum files to include in results (default: 20)
+        /// Maximum files to include in results
         #[arg(long, default_value = "20")]
         max_files: usize,
-        /// Maximum matches to include per file (default: 5)
+        /// Maximum matches to include per file
         #[arg(long, default_value = "5")]
         max_per_file: usize,
     },
@@ -101,7 +104,7 @@ pub enum ReferencesAction {
 pub enum IndexAction {
     /// Build a full reference index from disk
     Build {
-        /// Approach: grep, yaml, or auto (defaults to auto which picks yaml if available)
+        /// Approach: grep, yaml, or auto (auto picks yaml when available)
         #[arg(long, value_enum, default_value_t = IndexBuildApproachArg::Auto)]
         approach: IndexBuildApproachArg,
     },
