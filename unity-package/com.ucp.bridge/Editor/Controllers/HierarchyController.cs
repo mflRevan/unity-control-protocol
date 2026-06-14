@@ -152,7 +152,12 @@ namespace UCP.Bridge
                 string prefabPath = prefabObj.ToString();
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
                 if (prefab == null)
-                    throw new ArgumentException($"Prefab not found: {prefabPath}");
+                {
+                    var hint = LooksLikePrimitive(prefabPath)
+                        ? " To create a built-in primitive, use object create with a primitive instead (e.g. `ucp object create MyCube --primitive Cube`); instantiate is only for prefab assets under Assets/."
+                        : string.Empty;
+                    throw new ArgumentException($"Prefab not found: {prefabPath}.{hint}");
+                }
                 source = prefab;
             }
             // Instantiate from existing scene object (clone)
@@ -277,6 +282,24 @@ namespace UCP.Bridge
                 ["instanceId"] = instanceId,
                 ["removed"] = typeName
             };
+        }
+
+        private static bool LooksLikePrimitive(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var token = path.Replace("PrimitiveType.", "").Trim();
+            switch (token.ToLowerInvariant())
+            {
+                case "cube":
+                case "sphere":
+                case "capsule":
+                case "cylinder":
+                case "plane":
+                case "quad":
+                    return true;
+                default:
+                    return path.IndexOf("PrimitiveType", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            }
         }
 
         private static PrimitiveType ParsePrimitive(string value)

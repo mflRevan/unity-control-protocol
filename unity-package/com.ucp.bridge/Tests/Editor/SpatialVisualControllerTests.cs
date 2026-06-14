@@ -81,6 +81,17 @@ namespace UCP.Bridge.Tests
             Assert.That(res.error, Is.Not.Null, "unknown primitive must be an InvalidParams error, not a crash");
         }
 
+        [Test]
+        public void Object_Instantiate_PrimitiveName_RedirectsToPrimitiveFlag()
+        {
+            // The exact wrong path a weak agent took: treating "PrimitiveType.Cube" as a prefab.
+            var res = _router.Dispatch("object/instantiate", 1,
+                "{\"prefab\":\"PrimitiveType.Cube\"}");
+            Assert.That(res.error, Is.Not.Null);
+            Assert.That(res.error.message, Does.Contain("--primitive"),
+                "the not-found error should redirect to object create --primitive");
+        }
+
         // --- Transform -----------------------------------------------------
 
         [Test]

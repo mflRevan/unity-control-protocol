@@ -101,6 +101,39 @@ Object reference writes accept `instanceId`, asset `path`, or asset `guid`, and 
 
 Use `ucp asset move` / `bulk-move` for Unity-aware renames and folder cleanup instead of raw filesystem moves. That keeps `.meta` files and GUIDs intact so scenes, prefabs, build settings, and serialized object references continue to resolve.
 
+## In-scene authoring & spatial workflows
+
+For building and arranging scene content, use the dedicated transform/spatial/view commands rather
+than raw serialized-property writes. See `ucp transform --help`, `ucp spatial --help`, `ucp view --help`.
+
+```bash
+# Create VISIBLE objects with --primitive. A plain `object create` makes an EMPTY object with no
+# mesh (it will not render). --primitive is the only way to add a built-in mesh from the CLI.
+ucp object create Floor --primitive Plane
+ucp object create Crate --primitive Cube
+
+# Author transforms directly (Euler degrees, world|local, --relative for offsets).
+ucp transform move --id 1234 --to 3 0 0
+ucp transform rotate --id 1234 --euler 0 45 0
+ucp transform scale --id 1234 --uniform 2
+ucp transform look-at --id 1234 --target 0 0 0       # or --target-id <id>
+
+# Place objects on surfaces and reason about geometry.
+ucp spatial ground --id 1234                          # drop onto the surface below
+ucp spatial raycast --origin 0 10 0 --direction 0 -1 0
+ucp spatial bounds --id 1234                          # world AABB (center/size/min/max)
+ucp spatial nearest --point 0 0 0 --max 5
+
+# See the scene. isolate/orbit render a single object so a vision model can read its 3D shape.
+ucp view capture --target-id 1234 --max-edge 768 --output framed.png
+ucp view isolate --id 1234 --output hero.png          # composite Front/Right/Back/Top grid
+ucp view orbit --id 1234 --count 6 --output orbit.png
+```
+
+Objects are addressed by `--id` (from `ucp scene snapshot`), `--path` "Root/Child", or `--name`.
+Prefer `--primitive` for cubes/spheres/etc.; `object instantiate` is only for prefab assets under
+`Assets/`, not for built-in primitives.
+
 ## Packages, settings, build, logs, tests, profiler, and exec
 
 Use `ucp packages --help`, `ucp settings --help`, `ucp build --help`, `ucp logs --help`, `ucp run-tests --help`, `ucp profiler --help`, and `ucp exec --help` when you need the full surface.

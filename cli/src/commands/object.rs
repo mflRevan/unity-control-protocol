@@ -79,12 +79,15 @@ pub enum ObjectAction {
         #[arg(long)]
         save: bool,
     },
-    /// Create a new GameObject (empty, or a built-in primitive)
+    /// Create a GameObject. For anything you want to SEE in the scene (a cube, sphere, plane,
+    /// etc.), pass `--primitive` — a plain create makes an EMPTY object with no mesh that does not
+    /// render. There is no other supported way to add a built-in mesh from the CLI.
     Create {
         /// Name for the new object
         name: String,
-        /// Create a primitive with mesh + collider: Cube, Sphere, Capsule, Cylinder, Plane, Quad
-        /// (omit for an empty GameObject)
+        /// Build a visible primitive (mesh + collider) in one step. One of: Cube, Sphere, Capsule,
+        /// Cylinder, Plane, Quad. This is THE way to make a renderable object; omit only when you
+        /// deliberately want an empty container GameObject.
         #[arg(long)]
         primitive: Option<String>,
         /// Parent instance ID
