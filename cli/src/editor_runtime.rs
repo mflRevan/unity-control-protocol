@@ -208,25 +208,30 @@ pub async fn close_editor(
         }
     }
 
-    if !graceful {
-        graceful = discovery::request_unity_editor_close(project).unwrap_or(false);
-    }
+    // Deliberately NO OS window-close (WM_CLOSE) fallback here. On a dirty scene a window-close
+    // makes Unity raise its native save-on-quit dialog, which blocks the editor's main thread —
+    // and the bridge — with no one present to dismiss it. That is the exact modal hang we must
+    // never cause, and it is what an agent hit when trying to recover a wedged editor. If the
+    // bridge could not perform a clean in-editor quit (editor/quit -> EditorApplication.Exit),
+    // we escalate straight to a force-kill below instead of risking that dialog.
 
-    let wait_deadline = Instant::now() + Duration::from_secs(ctx.timeout.max(10).min(30));
-    while Instant::now() < wait_deadline {
-        if !discovery::is_process_running(pid) {
-            clear_session(project)?;
-            return Ok(EditorCloseOutcome {
-                was_running: true,
-                pid: Some(pid),
-                graceful,
-                forced: false,
-                via_bridge,
-                exited: true,
-            });
+    if graceful {
+        let wait_deadline = Instant::now() + Duration::from_secs(ctx.timeout.max(10).min(30));
+        while Instant::now() < wait_deadline {
+            if !discovery::is_process_running(pid) {
+                clear_session(project)?;
+                return Ok(EditorCloseOutcome {
+                    was_running: true,
+                    pid: Some(pid),
+                    graceful,
+                    forced: false,
+                    via_bridge,
+                    exited: true,
+                });
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
-
-        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 
     let forced = if force || !graceful {

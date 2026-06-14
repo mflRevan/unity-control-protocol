@@ -114,14 +114,6 @@ pub fn focus_unity_editor(project: &Path) -> Result<bool, UcpError> {
     focus_process_window(pid)
 }
 
-pub fn request_unity_editor_close(project: &Path) -> Result<bool, UcpError> {
-    let Some(pid) = unity_editor_pid_for_project(project) else {
-        return Ok(false);
-    };
-
-    request_process_window_close(pid)
-}
-
 pub fn handle_unity_startup_dialogs(
     project: &Path,
     policy: config::StartupDialogPolicy,
@@ -584,62 +576,6 @@ fn handle_process_startup_dialogs(
     Ok(handled)
 }
 
-#[cfg(windows)]
-fn request_process_window_close(pid: u32) -> Result<bool, UcpError> {
-    use std::ffi::c_void;
-
-    type Bool = i32;
-    type Hwnd = *mut c_void;
-    type Lparam = isize;
-
-    #[repr(C)]
-    struct EnumState {
-        target_pid: u32,
-        hwnd: Hwnd,
-    }
-
-    unsafe extern "system" {
-        fn EnumWindows(
-            lp_enum_func: extern "system" fn(Hwnd, Lparam) -> Bool,
-            l_param: Lparam,
-        ) -> Bool;
-        fn GetWindowThreadProcessId(hwnd: Hwnd, process_id: *mut u32) -> u32;
-        fn IsWindowVisible(hwnd: Hwnd) -> Bool;
-        fn PostMessageW(hwnd: Hwnd, msg: u32, w_param: usize, l_param: isize) -> Bool;
-    }
-
-    extern "system" fn enum_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
-        let state = unsafe { &mut *(l_param as *mut EnumState) };
-        let mut process_id = 0;
-        unsafe {
-            GetWindowThreadProcessId(hwnd, &mut process_id);
-        }
-
-        if process_id == state.target_pid && unsafe { IsWindowVisible(hwnd) } != 0 {
-            state.hwnd = hwnd;
-            0
-        } else {
-            1
-        }
-    }
-
-    let mut state = EnumState {
-        target_pid: pid,
-        hwnd: std::ptr::null_mut(),
-    };
-
-    unsafe {
-        EnumWindows(enum_windows, &mut state as *mut EnumState as isize);
-    }
-
-    if state.hwnd.is_null() {
-        return Ok(false);
-    }
-
-    const WM_CLOSE: u32 = 0x0010;
-    Ok(unsafe { PostMessageW(state.hwnd, WM_CLOSE, 0, 0) } != 0)
-}
-
 #[cfg(not(windows))]
 fn handle_process_startup_dialogs(
     _pid: u32,
@@ -650,11 +586,6 @@ fn handle_process_startup_dialogs(
 
 #[cfg(not(windows))]
 fn focus_process_window(_pid: u32) -> Result<bool, UcpError> {
-    Ok(false)
-}
-
-#[cfg(not(windows))]
-fn request_process_window_close(_pid: u32) -> Result<bool, UcpError> {
     Ok(false)
 }
 
