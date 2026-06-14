@@ -22,6 +22,7 @@ namespace UCP.Bridge.Tests
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             _router = new CommandRouter();
+            HierarchyController.Register(_router);
             TransformController.Register(_router);
             SpatialController.Register(_router);
             ViewController.Register(_router);
@@ -53,6 +54,32 @@ namespace UCP.Bridge.Tests
 
         private static float F(object o) => Convert.ToSingle(o);
         private static List<object> Vec(Dictionary<string, object> d, string key) => (List<object>)d[key];
+
+        // --- Primitive builder ---------------------------------------------
+
+        [Test]
+        public void Object_CreatePrimitive_AddsMeshAndCollider()
+        {
+            var res = Result(_router.Dispatch("object/create", 1,
+                "{\"name\":\"Greybox\",\"primitive\":\"Cube\"}"));
+            var id = Convert.ToInt32(res["instanceId"]);
+            var go = ObjectLocator.FindByInstanceId(id);
+            _spawned.Add(go);
+
+            Assert.That(go, Is.Not.Null);
+            Assert.That(go.name, Is.EqualTo("Greybox"));
+            Assert.That(go.GetComponent<MeshFilter>(), Is.Not.Null, "primitive should have a mesh");
+            Assert.That(go.GetComponent<MeshFilter>().sharedMesh, Is.Not.Null);
+            Assert.That(go.GetComponent<Collider>(), Is.Not.Null, "primitive should have a collider");
+        }
+
+        [Test]
+        public void Object_CreatePrimitive_RejectsUnknownType()
+        {
+            var res = _router.Dispatch("object/create", 1,
+                "{\"name\":\"Bad\",\"primitive\":\"Dodecahedron\"}");
+            Assert.That(res.error, Is.Not.Null, "unknown primitive must be an InvalidParams error, not a crash");
+        }
 
         // --- Transform -----------------------------------------------------
 

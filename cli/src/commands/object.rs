@@ -79,10 +79,14 @@ pub enum ObjectAction {
         #[arg(long)]
         save: bool,
     },
-    /// Create a new empty GameObject
+    /// Create a new GameObject (empty, or a built-in primitive)
     Create {
         /// Name for the new object
         name: String,
+        /// Create a primitive with mesh + collider: Cube, Sphere, Capsule, Cylinder, Plane, Quad
+        /// (omit for an empty GameObject)
+        #[arg(long)]
+        primitive: Option<String>,
         /// Parent instance ID
         #[arg(long, allow_hyphen_values = true)]
         parent: Option<i64>,
@@ -229,8 +233,16 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 )
                 .await?
         }
-        ObjectAction::Create { name, parent, .. } => {
+        ObjectAction::Create {
+            name,
+            primitive,
+            parent,
+            ..
+        } => {
             let mut params = serde_json::json!({ "name": name });
+            if let Some(prim) = primitive {
+                params["primitive"] = serde_json::json!(prim);
+            }
             if let Some(p) = parent {
                 params["parent"] = serde_json::json!(p);
             }

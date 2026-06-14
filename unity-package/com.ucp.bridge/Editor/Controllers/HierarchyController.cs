@@ -26,7 +26,19 @@ namespace UCP.Bridge
             if (p != null && p.TryGetValue("name", out var nameObj) && nameObj != null)
                 name = nameObj.ToString();
 
-            var go = new GameObject(name);
+            // Optional primitive: build a Cube/Sphere/etc. with mesh + collider in one step.
+            // Without this an agent has to hand-assemble MeshFilter + MeshRenderer and somehow
+            // reference the built-in mesh, which is not practical over the CLI.
+            GameObject go;
+            if (p != null && p.TryGetValue("primitive", out var primObj) && primObj != null)
+            {
+                go = GameObject.CreatePrimitive(ParsePrimitive(primObj.ToString()));
+                go.name = name;
+            }
+            else
+            {
+                go = new GameObject(name);
+            }
             Undo.RegisterCreatedObjectUndo(go, "UCP Create GameObject");
 
             // Optional parent
@@ -265,6 +277,22 @@ namespace UCP.Bridge
                 ["instanceId"] = instanceId,
                 ["removed"] = typeName
             };
+        }
+
+        private static PrimitiveType ParsePrimitive(string value)
+        {
+            switch (value.Trim().ToLowerInvariant())
+            {
+                case "cube": return PrimitiveType.Cube;
+                case "sphere": return PrimitiveType.Sphere;
+                case "capsule": return PrimitiveType.Capsule;
+                case "cylinder": return PrimitiveType.Cylinder;
+                case "plane": return PrimitiveType.Plane;
+                case "quad": return PrimitiveType.Quad;
+                default:
+                    throw new ArgumentException(
+                        $"Unknown primitive '{value}'. Use one of: Cube, Sphere, Capsule, Cylinder, Plane, Quad.");
+            }
         }
 
         private static Type ResolveComponentType(string typeName)
