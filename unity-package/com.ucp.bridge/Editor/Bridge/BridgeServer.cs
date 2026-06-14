@@ -145,6 +145,15 @@ namespace UCP.Bridge
             // Hierarchy Operations
             HierarchyController.Register(s_router);
 
+            // Transform authoring (move/rotate/scale/look-at, bulk read)
+            TransformController.Register(s_router);
+
+            // Spatial queries (raycast/overlap/bounds/ground/nearest)
+            SpatialController.Register(s_router);
+
+            // Composed visual perception (capture/isolate/orbit)
+            ViewController.Register(s_router);
+
             // Asset Management
             AssetController.Register(s_router);
             ImporterController.Register(s_router);
