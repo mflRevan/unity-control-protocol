@@ -24,8 +24,11 @@ pub mod script;
 pub mod settings;
 pub mod shader;
 pub mod snapshot;
+pub mod spatial;
 pub mod tests;
+pub mod transform;
 pub mod vcs;
+pub mod view;
 
 use crate::bridge_lifecycle::{self, EditorSettleStatus, WaitMode, WaitStatus};
 use crate::bridge_package;
@@ -359,6 +362,21 @@ pub enum Command {
         #[command(subcommand)]
         action: references::ReferencesAction,
     },
+    /// Author transforms: move, rotate, scale, look-at (Euler, world|local)
+    Transform {
+        #[command(subcommand)]
+        action: transform::TransformAction,
+    },
+    /// Spatial queries: raycast, overlap, bounds, ground, nearest
+    Spatial {
+        #[command(subcommand)]
+        action: spatial::SpatialAction,
+    },
+    /// Composed visual capture: framed, isolated, and multi-angle renders
+    View {
+        #[command(subcommand)]
+        action: view::ViewAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -383,6 +401,46 @@ pub enum FrameAction {
         #[arg(long, short = 'o')]
         out: String,
     },
+}
+
+/// Shared target addressing for spatial/visual commands. A GameObject may be addressed by
+/// instance id (preferred), hierarchy path, or name — tried in that priority order.
+#[derive(clap::Args, Clone, Debug)]
+pub struct TargetArgs {
+    /// Target instance ID (preferred; get it from `ucp scene snapshot`)
+    #[arg(long, allow_hyphen_values = true)]
+    pub id: Option<i64>,
+    /// Target by hierarchy path "Root/Child/Leaf" (survives reloads, unlike an id)
+    #[arg(long)]
+    pub path: Option<String>,
+    /// Target by GameObject name (first match; ambiguous if names repeat)
+    #[arg(long)]
+    pub name: Option<String>,
+}
+
+impl TargetArgs {
+    /// Insert whichever target field is set into an existing JSON object.
+    pub fn apply(&self, obj: &mut serde_json::Map<String, serde_json::Value>) -> anyhow::Result<()> {
+        if let Some(id) = self.id {
+            obj.insert("instanceId".into(), serde_json::json!(id));
+        } else if let Some(p) = &self.path {
+            obj.insert("path".into(), serde_json::json!(p));
+        } else if let Some(n) = &self.name {
+            obj.insert("name".into(), serde_json::json!(n));
+        } else {
+            anyhow::bail!("specify a target with --id, --path, or --name");
+        }
+        Ok(())
+    }
+
+    pub fn is_set(&self) -> bool {
+        self.id.is_some() || self.path.is_some() || self.name.is_some()
+    }
+}
+
+/// Convert a fixed 3-element `--flag x y z` vector into a JSON array.
+pub fn vec3_json(v: &[f64]) -> serde_json::Value {
+    serde_json::json!([v[0], v[1], v[2]])
 }
 
 pub fn resolve_project_path(ctx: &Context) -> anyhow::Result<PathBuf> {
@@ -804,5 +862,8 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Profiler { action } => profiler::run(action, &ctx).await,
         Command::Profile { seconds, mode } => profile::run(seconds, mode, &ctx).await,
         Command::References { action } => references::run(action, &ctx).await,
+        Command::Transform { action } => transform::run(action, &ctx).await,
+        Command::Spatial { action } => spatial::run(action, &ctx).await,
+        Command::View { action } => view::run(action, &ctx).await,
     }
 }
