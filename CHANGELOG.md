@@ -2,8 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- In-scene authoring and spatial reasoning surface, the highest-leverage gap for agent-driven game-dev workflows:
+  - `ucp transform move|rotate|scale|look-at|get` — first-class transform authoring with Euler angles, world/local space, and absolute/relative semantics, replacing error-prone raw serialized `m_LocalPosition`/quaternion writes. Targets address objects by `--id`, `--path`, or `--name`.
+  - `ucp spatial raycast|overlap|bounds|ground|nearest` — geometric queries so an agent can perceive a scene instead of inferring it: ray/shape casts against colliders, world-space AABBs, drop-to-surface placement, and nearest-object search. Physics queries sync transforms first so they see the current edit-mode state.
+  - `ucp view capture|isolate|orbit` — composed visual perception: target-framed renders, single-object isolation auto-framed from bounds, and multi-angle composite grids (with longest-edge caps and transparent backgrounds) so a vision model can read 3D shape from one image. Works headless via temporary cameras.
+- `ucp object create --primitive Cube|Sphere|Capsule|Cylinder|Plane|Quad` builds a primitive with mesh + collider in one call. Surfaced by an agent eval: without it, "create a cube" is effectively impossible over the CLI (an agent has to hand-assemble MeshFilter/MeshRenderer and cannot reference the built-in mesh).
+- Shared `{instanceId | path | name}` object locator (`ObjectLocator`) backing the new commands, so scene work no longer depends solely on reload-fragile instance ids.
+- Agent-in-the-loop evaluation harness (`scripts/agent-eval/`) that drives the new CLI surface with a weak model to surface documentation/ergonomics defects; methodology documented in `AGENTS.md`.
+
 ### Fixed
 
+- `ucp editor close` can no longer hang the editor behind a native save-on-quit dialog. When the bridge was unreachable, close fell back to an OS window-close (WM_CLOSE) that makes Unity prompt to save a dirty scene — blocking the main thread with no one to dismiss it — and marked the close "graceful" so it never escalated to a force-kill. Close now uses only the in-editor quit (`EditorApplication.Exit(0)`, prompt-free) and force-kills if that is unavailable. Surfaced by an agent eval where the model triggered this while trying to recover a wedged editor.
 - Restored Unity 6000.0–6000.4 bridge compilation. The 6000.5 EntityId compatibility work introduced an ambiguous `SceneHandle`-to-`long` conversion (CS0457) in the pre-6000.5 code path, which broke the editor bridge across the entire 6.0–6.4 support matrix. Validated by running the editmode suite on 6000.4.0f1.
 - `ucp` commands no longer hang indefinitely when the Unity Editor is wedged behind a modal dialog (or stuck compiling/importing). RPC responses are now bounded by `--timeout` and surface a clear, actionable error instead of blocking forever. Operations that intentionally block the editor's main thread for a long time — `build start`, `compile`, and package add/remove — are exempt so they are never cut short.
 - Linux release binaries are now built on Ubuntu 22.04 (glibc 2.35) instead of `ubuntu-latest` (glibc 2.39), restoring support for older distributions such as Ubuntu 22.04. ([#1](https://github.com/mflRevan/unity-control-protocol/issues/1))
