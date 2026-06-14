@@ -69,6 +69,9 @@ First in-scene-authoring eval (`deepseek-v4-flash-free`, "arrange three pillars"
    a **documentation/ergonomics** fix (it ignored prominent `--primitive` help and a redirecting
    error across two runs). `mimo-v2.5-free` and `north-mini-code-free` barely engaged (~10 log lines,
    zero `ucp` calls — they don't reliably tool-call through opencode). Lesson: use the weak *engaging*
-   model to find capability gaps; use a *capable* model (mid-tier, likely paid) to confirm that a
-   doc/ergonomics fix actually changes behavior. A model that ignores instructions, or won't
-   tool-call, gives no signal about doc quality.
+   model to find capability gaps; use a *capable* model to confirm that a doc/ergonomics fix actually
+   changes behavior. A model that ignores instructions, or won't tool-call, gives no signal about doc
+   quality. Note on this opencode account: the capable models (e.g. `qwen3.6-plus`) require a payment
+   method — without one, `opencode run` exits 0 after bootstrap with no model turn (a silent no-op
+   that looks like "the agent did nothing"). Probe a model with a trivial prompt first to confirm it
+   actually responds before trusting an empty eval result.
