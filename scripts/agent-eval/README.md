@@ -55,3 +55,11 @@ First in-scene-authoring eval (`deepseek-v4-flash-free`, "arrange three pillars"
 5. **Do not mutate the bridge package while a live eval runs against it.** It is mounted by symlink;
    editing a controller — or `git commit` rewriting line endings via autocrlf — triggers a Unity
    domain reload mid-run, making the bridge unresponsive and corrupting the eval. Freeze it.
+6. **A new flag/command is not enough — it must be discoverable from `--help` alone.** The confirm
+   re-run added `object create --primitive` but the weak model *still* didn't use it: it read the
+   help, created empty objects out of habit, then hunted (`grep CreatePrimitive`, `instantiate
+   "PrimitiveType.Cube"`) and fell back to an exec script again. Weak agents follow habit and the
+   first line they read. Fixes that worked better than help-flag text: put the right path in the
+   command's one-line summary ("for anything visible, pass `--primitive`"), intercept the predictable
+   wrong path with a redirecting error (`instantiate "PrimitiveType.X"` → "use `--primitive`"), and
+   show it in the skill examples. Re-run after each to confirm the habit actually changes.

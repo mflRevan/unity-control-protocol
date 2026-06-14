@@ -3,6 +3,15 @@ param(
     [string[]]$RequestedSlots = @("6000.0", "6000.1", "6000.2", "6000.3", "6000.4"),
     [int]$TimeoutSeconds = 180,
     [switch]$Run,
+    # Validate each version by running the editmode test assembly in batchmode (compile + unit
+    # tests) instead of the qa-playground CLI smoke. Best for bridge-side (C#) changes.
+    [switch]$EditModeTests,
+    # Which test assemblies to run when -EditModeTests is set (semicolon-joined for Unity).
+    [string[]]$TestAssemblies = @("UCP.Bridge.Editor.Tests"),
+    # Optional NUnit test filter (regex over fully-qualified test names) to target a subset.
+    [string]$TestFilter,
+    # Per-version allowance for the editmode run (compile + domain reload + tests).
+    [int]$EditModeTimeoutSeconds = 1500,
     [string]$OutputJson,
     [string]$SummaryMarkdown
 )
@@ -338,6 +347,81 @@ function Close-UnityProjectEditor {
     & cargo run --quiet --manifest-path (Join-Path $repoRoot "cli/Cargo.toml") -- --project $ProjectPath --timeout 30 editor close --force | Out-Host
 }
 
+function Invoke-EditModeTests {
+    param(
+        [Parameter(Mandatory = $true)][string]$UnityExe,
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [string[]]$Assemblies,
+        [string]$Filter,
+        [Parameter(Mandatory = $true)][string]$ResultsPath,
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [int]$TimeoutSeconds = 1500
+    )
+
+    foreach ($stale in @($ResultsPath, $LogPath)) {
+        if (Test-Path $stale) { Remove-Item $stale -Force -ErrorAction SilentlyContinue }
+    }
+
+    $unityArgs = @(
+        "-batchmode",
+        "-projectPath", (Resolve-Path $ProjectPath).Path,
+        "-runTests",
+        "-testPlatform", "EditMode",
+        "-testResults", $ResultsPath,
+        "-logFile", $LogPath,
+        "-accept-apiupdate"
+    )
+    if ($Assemblies -and $Assemblies.Count -gt 0) {
+        $unityArgs += @("-assemblyNames", ($Assemblies -join ";"))
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Filter)) {
+        $unityArgs += @("-testFilter", $Filter)
+    }
+
+    $filterNote = if ([string]::IsNullOrWhiteSpace($Filter)) { "" } else { " filter=$Filter" }
+    Write-Host ("    Unity -runTests [{0}]{1}" -f ($Assemblies -join ";"), $filterNote) -ForegroundColor DarkGray
+
+    # Unity writes its real output to -logFile; redirect the process's own stdout/stderr to files
+    # so incidental batchmode noise (e.g. a benign path-validation line) does not pollute the matrix
+    # console output.
+    $process = Start-Process -FilePath $UnityExe -ArgumentList $unityArgs -NoNewWindow -PassThru `
+        -RedirectStandardOutput "$LogPath.stdout.txt" -RedirectStandardError "$LogPath.stderr.txt"
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        try { $process.Kill($true) } catch {}
+        return [pscustomobject]@{
+            Passed = $false; PassedCount = 0; FailedCount = 0; Total = 0
+            TimedOut = $true; FailedTests = @(); ExitCode = 124
+        }
+    }
+
+    $exitCode = $process.ExitCode
+    if (-not (Test-Path $ResultsPath)) {
+        return [pscustomobject]@{
+            Passed = $false; PassedCount = 0; FailedCount = 0; Total = 0
+            TimedOut = $false; FailedTests = @(); ExitCode = $exitCode
+        }
+    }
+
+    [xml]$doc = Get-Content $ResultsPath -Raw
+    $run = $doc.SelectSingleNode("/test-run")
+    $total = if ($run) { [int]$run.total } else { 0 }
+    $passed = if ($run) { [int]$run.passed } else { 0 }
+    $failed = if ($run) { [int]$run.failed } else { 0 }
+    $failedTests = @($doc.SelectNodes("//test-case[@result='Failed']") | ForEach-Object {
+        [pscustomobject]@{ Name = $_.fullname; Message = ($_.SelectSingleNode("failure/message").'#text') }
+    })
+
+    return [pscustomobject]@{
+        Passed = ($failed -eq 0 -and $exitCode -eq 0)
+        PassedCount = $passed
+        FailedCount = $failed
+        Total = $total
+        TimedOut = $false
+        FailedTests = $failedTests
+        ExitCode = $exitCode
+    }
+}
+
 if (-not (Test-Path (Join-Path $Project "ProjectSettings\ProjectVersion.txt"))) {
     throw "Not a Unity project: $Project"
 }
@@ -397,14 +481,43 @@ if ($Run) {
         Backup-ManifestJson -ProjectPath $Project
         Update-ManifestForUnityVersion -ProjectPath $Project -UnityVersionId $slot.ActualVersionId
 
-        Write-Host "==> Running QA against Unity $($slot.ActualVersionId) (requested $($slot.RequestedSlot))" -ForegroundColor Cyan
-        & $qaScript `
-            -Project $Project `
-            -TimeoutSeconds $TimeoutSeconds `
-            -ForceUnityVersion $slot.ActualVersionId `
-            -SummaryPath $summaryPath `
-            -SkipInstall
-        $exitCode = $LASTEXITCODE
+        if ($EditModeTests) {
+            $resultsXml = Join-Path $resultsRoot "$($slot.RequestedSlot.Replace('.', '_'))-editmode.xml"
+            $editLog = Join-Path $resultsRoot "$($slot.RequestedSlot.Replace('.', '_'))-editmode.log"
+            Write-Host "==> EditMode tests against Unity $($slot.ActualVersionId) (requested $($slot.RequestedSlot))" -ForegroundColor Cyan
+            $testResult = Invoke-EditModeTests `
+                -UnityExe $slot.UnityPath `
+                -ProjectPath $Project `
+                -Assemblies $TestAssemblies `
+                -Filter $TestFilter `
+                -ResultsPath $resultsXml `
+                -LogPath $editLog `
+                -TimeoutSeconds $EditModeTimeoutSeconds
+            $exitCode = if ($testResult.Passed) { 0 } else { 1 }
+
+            # Write the qa-playground-compatible summary shape so reporting below is uniform.
+            $resultsList = @($testResult.FailedTests | ForEach-Object {
+                [pscustomobject]@{ Name = $_.Name; Passed = $false; Detail = $_.Message }
+            })
+            [pscustomobject]@{
+                Passed = $testResult.Passed
+                PassedCount = $testResult.PassedCount
+                FailedCount = $testResult.FailedCount
+                TotalCount = $testResult.Total
+                TimedOut = $testResult.TimedOut
+                Results = $resultsList
+            } | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding utf8
+        }
+        else {
+            Write-Host "==> Running QA against Unity $($slot.ActualVersionId) (requested $($slot.RequestedSlot))" -ForegroundColor Cyan
+            & $qaScript `
+                -Project $Project `
+                -TimeoutSeconds $TimeoutSeconds `
+                -ForceUnityVersion $slot.ActualVersionId `
+                -SummaryPath $summaryPath `
+                -SkipInstall
+            $exitCode = $LASTEXITCODE
+        }
 
         # Restore manifest
         Restore-ManifestJson -ProjectPath $Project
