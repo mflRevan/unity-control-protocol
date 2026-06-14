@@ -1,0 +1,19 @@
+{
+  "name": "ucp-surfaces",
+  "version": "0.5.2",
+  "description": "Per-command-surface Unity Control Protocol micro-skills — install when you want focused, surface-specific skills instead of the single omni skill.",
+  "author": {
+    "name": "mflRevan",
+    "url": "https://github.com/mflRevan"
+  },
+  "homepage": "https://github.com/mflRevan/unity-control-protocol",
+  "repository": "https://github.com/mflRevan/unity-control-protocol",
+  "license": "MIT",
+  "keywords": [
+    "unity",
+    "automation",
+    "cli",
+    "agent",
+    "editor"
+  ]
+}

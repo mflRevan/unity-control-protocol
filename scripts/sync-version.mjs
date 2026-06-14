@@ -114,6 +114,10 @@ const replacements = [
     'skills/unity-control-protocol/SKILL.md',
     (content) => replaceOne(content, /  version: '.*'/, `  version: '${version}'`),
   ],
+  // Per-command-surface micro-skills (the ucp-surfaces plugin). Each generated
+  // SKILL.md carries the same uniform `  version: '...'` line under metadata,
+  // so the exactly-one-match invariant of replaceOne holds for every file.
+  ...microSkillReplacements(version),
   ['version.json', () => `${JSON.stringify(metadata, null, 2)}\n`],
 ];
 
@@ -145,6 +149,27 @@ if (isCheck) {
   console.log(`Version metadata is in sync for ${version} / protocol ${protocolVersion}.`);
 } else {
   console.log(`Synced repo metadata to ${version} / protocol ${protocolVersion}.`);
+}
+
+// Build a replacement entry for every plugins/ucp-surfaces/skills/<name>/SKILL.md
+// that exists on disk, stamping its `  version: '...'` metadata line. Returns an
+// empty list when the plugin folder is absent so the script still works in
+// checkouts that predate the ucp-surfaces plugin.
+function microSkillReplacements(version) {
+  const skillsDir = path.join(root, 'plugins', 'ucp-surfaces', 'skills');
+  if (!fs.existsSync(skillsDir)) {
+    return [];
+  }
+  return fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join('plugins', 'ucp-surfaces', 'skills', entry.name, 'SKILL.md'))
+    .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
+    .sort()
+    .map((relativePath) => [
+      relativePath,
+      (content) => replaceOne(content, /  version: '.*'/, `  version: '${version}'`),
+    ]);
 }
 
 function replaceOne(content, pattern, replacement) {

@@ -37,24 +37,64 @@ The agent will automatically discover and load the skill when it encounters Unit
 
 ### 2. Claude Code marketplace install
 
-Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. UCP now ships the base Unity automation skill through the repository's canonical root plugin.
+Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. The repository marketplace ships **two** plugins, and you choose based on how you want skills to surface to the agent.
 
-For local plugin testing:
+First, add the marketplace once:
+
+```text
+/plugin marketplace add mflRevan/unity-control-protocol
+```
+
+For local plugin testing of either plugin:
 
 ```bash
 claude --plugin-dir .
 ```
 
-For marketplace-style install from GitHub:
+#### Option A — the omni skill (`ucp`)
+
+Install the single, broad Unity automation skill that covers every command surface in one place:
 
 ```text
-/plugin marketplace add mflRevan/unity-control-protocol
 /plugin install ucp@unity-control-protocol
 ```
 
-That default Claude install exposes:
+That install exposes one skill:
 
 - `/ucp:unity-control-protocol`
+
+#### Option B — per-surface micro-skills (`ucp-surfaces`)
+
+Install focused, surface-specific skills — one per `ucp` command group — instead of the single omni skill:
+
+```text
+/plugin install ucp-surfaces@unity-control-protocol
+```
+
+That install exposes fifteen focused skills, each invoked as `/ucp-surfaces:ucp-<surface>`:
+
+- `/ucp-surfaces:ucp-objects` — `ucp object` (create incl. `--primitive`, components, properties, reparent, instantiate)
+- `/ucp-surfaces:ucp-scene` — `ucp scene` + `ucp editor` lifecycle + `ucp play|stop|pause|compile|screenshot`
+- `/ucp-surfaces:ucp-transform` — `ucp transform` (move/rotate/scale/look-at/get)
+- `/ucp-surfaces:ucp-spatial` — `ucp spatial` (raycast/overlap/bounds/ground/nearest)
+- `/ucp-surfaces:ucp-view` — `ucp view` (capture/isolate/orbit) + `ucp screenshot`
+- `/ucp-surfaces:ucp-assets` — `ucp asset` + `ucp files` + `ucp shader errors`
+- `/ucp-surfaces:ucp-materials` — `ucp material` (create/get/set properties, keywords, shader)
+- `/ucp-surfaces:ucp-prefabs` — `ucp prefab` (status/apply/revert/unpack/create/overrides)
+- `/ucp-surfaces:ucp-build` — `ucp build` (targets/scenes/defines/start)
+- `/ucp-surfaces:ucp-packages` — `ucp packages` (search/add/remove/registries/`.unitypackage`)
+- `/ucp-surfaces:ucp-settings` — `ucp settings` (player/quality/physics/lighting/tags-layers)
+- `/ucp-surfaces:ucp-profiler` — `ucp profiler` + `ucp profile` + `ucp frame capture`
+- `/ucp-surfaces:ucp-references` — `ucp references` (find/index/check/find-strings, read-only)
+- `/ucp-surfaces:ucp-tests` — `ucp run-tests` + `ucp exec` + `ucp script doctor`
+- `/ucp-surfaces:ucp-vcs` — `ucp vcs` (Plastic/Unity VCS fallback; prefer `cm`)
+
+#### Which one should I pick?
+
+- **Pick the omni skill (`ucp`)** for general use. One skill carries the full cross-surface workflow guidance, so a single activation covers multi-step tasks that span scenes, objects, assets, builds, and tests at once. This is the recommended default.
+- **Pick the micro-skills (`ucp-surfaces`)** when you want tighter routing and a smaller per-skill context. Each micro-skill names its concrete subcommands in its description, so the agent loads only the surface relevant to the task (e.g. just `ucp-transform` for a positioning task) instead of the whole omni skill. This is useful when you want predictable, narrow activations or are composing UCP with many other skills.
+
+The two plugins are independent — install either or both. The micro-skill descriptions explicitly defer to the omni skill for broad, multi-surface automation, so they coexist without fighting over routing.
 
 ## Primary skill preview
 

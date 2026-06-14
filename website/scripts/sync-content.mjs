@@ -17,6 +17,14 @@ const SITE_ORIGIN = 'https://unityctl.dev';
 syncDirectory(path.join(repoRoot, 'docs'), path.join(generatedRoot, 'docs'));
 syncDirectory(path.join(repoRoot, 'skills'), path.join(generatedRoot, 'skills'));
 
+// Mirror the per-command-surface micro-skills (the ucp-surfaces plugin) into a
+// sibling of .generated/skills so the website can later list them alongside the
+// omni skill. Optional: older checkouts may not have the plugin yet.
+const microSkillsSource = path.join(repoRoot, 'plugins', 'ucp-surfaces', 'skills');
+if (fs.existsSync(microSkillsSource)) {
+  syncDirectory(microSkillsSource, path.join(generatedRoot, 'skills-micro'));
+}
+
 // Note: the agent-surface generator is invoked at the bottom of this file,
 // after `docsNavigation` (a `const`, so not hoisted) is declared.
 
