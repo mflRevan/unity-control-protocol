@@ -39,6 +39,7 @@ const COMPAT =
  * @property {string[]} examples   Realistic example command lines.
  * @property {string} whenToUse   One-line "When to use".
  * @property {string} whenNot      One-line "When NOT to use".
+ * @property {string} [compatibility] Optional surface-specific compatibility note.
  */
 
 /** @type {Surface[]} */
@@ -175,6 +176,28 @@ const surfaces = [
       'Use to search assets, do Unity-aware moves/bulk-moves that preserve `.meta`/GUIDs, edit importer settings instead of raw `.meta`, reimport, or do sandboxed file read/write/patch.',
     whenNot:
       'Prefer direct workspace edits + `ucp compile` when you have filesystem access; use `ucp files` as a fallback. For material property edits use `ucp-materials`; for cross-project reference lookups use `ucp-references`.',
+  },
+  {
+    name: 'ucp-ui',
+    title: 'UCP UI Toolkit',
+    capability:
+      'Author and verify UI Toolkit with `ucp ui` ' +
+      '(list/lint/inspect/screenshot/check) using UXML, USS, and strict dynamic-data scenarios',
+    trigger:
+      'the user wants to lint, inspect, populate, screenshot, or verify UI Toolkit UXML and USS',
+    examples: [
+      'ucp ui list --root Assets/UI',
+      'ucp ui lint Assets/UI/Inventory.ucp-ui.json --fail-on-warnings',
+      "ucp ui inspect Assets/UI/Inventory.ucp-ui.json --state populated --query '#cards' --json",
+      'ucp ui screenshot Assets/UI/Inventory.ucp-ui.json --state populated -o artifacts/inventory.png --force',
+      'ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui --force --json',
+    ],
+    whenToUse:
+      'Use on Unity 6+ after editing UXML/USS: lint for importer/schema feedback, inspect for resolved geometry and bindings, screenshot for visual judgment, and check for the full multi-state pass.',
+    whenNot:
+      'Do not use UI capture commands in batchmode or with the Null graphics device; `ucp ui lint` remains available there. Omit width/height to preserve a scenario viewport.',
+    compatibility:
+      'Requires the `ucp` CLI, the UCP Bridge package, and Unity 6.0+ in the target project.',
   },
   {
     name: 'ucp-materials',
@@ -380,7 +403,7 @@ function buildSkill(surface) {
     'description: >-',
     ...wrap(description, 2),
     `homepage: ${HOMEPAGE}`,
-    `compatibility: ${COMPAT}`,
+    `compatibility: ${surface.compatibility ?? COMPAT}`,
     'metadata:',
     '  author: mflRevan',
     `  version: '${VERSION}'`,

@@ -145,6 +145,9 @@ namespace UCP.Bridge
             // Lightweight video recording
             RecordingController.Register(s_router);
 
+            // UI Toolkit authoring, inspection, linting, and capture
+            UiController.Register(s_router);
+
             // Logs
             LogsController.Register(s_router);
 

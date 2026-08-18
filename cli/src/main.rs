@@ -159,6 +159,12 @@ async fn main() -> anyhow::Result<()> {
                     "error": { "message": compile_failure.message },
                     "data": compile_failure.result
                 })
+            } else if let Some(ui_failure) = e.downcast_ref::<commands::ui::UiCommandFailure>() {
+                serde_json::json!({
+                    "success": false,
+                    "error": { "message": ui_failure.message },
+                    "data": ui_failure.result
+                })
             } else {
                 serde_json::json!({
                     "success": false,
@@ -909,5 +915,197 @@ mod tests {
             }
             _ => panic!("unexpected command variant"),
         }
+    }
+
+    #[test]
+    fn parses_ui_inspect_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "inspect",
+            "Assets/UI/Inventory.ucp-ui.json",
+            "--state",
+            "populated",
+            "--data-json",
+            r#"{"title":"Inventory"}"#,
+            "--width",
+            "1280",
+            "--height",
+            "720",
+            "--query",
+            "#cards",
+            "--depth",
+            "8",
+            "--max-elements",
+            "250",
+            "--detail",
+            "verbose",
+        ])
+        .expect("UI inspect command should parse");
+
+        match cli.command {
+            commands::Command::Ui {
+                action:
+                    commands::ui::UiAction::Inspect {
+                        target,
+                        query,
+                        depth,
+                        max_elements,
+                        detail,
+                    },
+            } => {
+                assert_eq!(target.target, "Assets/UI/Inventory.ucp-ui.json");
+                assert_eq!(target.state.as_deref(), Some("populated"));
+                assert!(target.data_json.is_some());
+                assert_eq!((target.width, target.height), (Some(1280), Some(720)));
+                assert_eq!(query.as_deref(), Some("#cards"));
+                assert_eq!(depth, 8);
+                assert_eq!(max_elements, 250);
+                assert_eq!(detail, commands::ui::UiDetailArg::Verbose);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_ui_check_all_states_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "check",
+            "Assets/UI/Inventory.ucp-ui.json",
+            "--all-states",
+            "--out-dir",
+            "artifacts/ui",
+            "--fail-on-warnings",
+            "--force",
+        ])
+        .expect("UI check command should parse");
+
+        match cli.command {
+            commands::Command::Ui {
+                action:
+                    commands::ui::UiAction::Check {
+                        all_states,
+                        out_dir,
+                        fail_on_warnings,
+                        force,
+                        ..
+                    },
+            } => {
+                assert!(all_states);
+                assert_eq!(
+                    out_dir.as_deref(),
+                    Some(std::path::Path::new("artifacts/ui"))
+                );
+                assert!(fail_on_warnings);
+                assert!(force);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_ui_list_lint_and_screenshot_commands() {
+        let list = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "list",
+            "--root",
+            "Assets/UI",
+            "--include-packages",
+            "--limit",
+            "25",
+        ])
+        .expect("UI list command should parse");
+        assert!(matches!(
+            list.command,
+            commands::Command::Ui {
+                action: commands::ui::UiAction::List {
+                    root,
+                    include_packages: true,
+                    limit: 25,
+                }
+            } if root == "Assets/UI"
+        ));
+
+        let lint = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "lint",
+            "Assets/UI/Panel.uxml",
+            "Assets/UI/Panel.uss",
+            "--fail-on-warnings",
+            "--max-diagnostics",
+            "20",
+        ])
+        .expect("UI lint command should parse");
+        assert!(matches!(
+            lint.command,
+            commands::Command::Ui {
+                action: commands::ui::UiAction::Lint {
+                    paths,
+                    fail_on_warnings: true,
+                    max_diagnostics: 20,
+                }
+            } if paths.len() == 2
+        ));
+
+        let screenshot = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "screenshot",
+            "Assets/UI/Panel.uxml",
+            "--out",
+            "panel.png",
+            "--force",
+        ])
+        .expect("UI screenshot command should parse");
+        assert!(matches!(
+            screenshot.command,
+            commands::Command::Ui {
+                action: commands::ui::UiAction::Screenshot {
+                    out: Some(_),
+                    force: true,
+                    ..
+                }
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_conflicting_ui_data_and_state_options() {
+        let conflicting_data = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "screenshot",
+            "Assets/UI/Panel.uxml",
+            "--data-json",
+            "{}",
+            "--data-file",
+            "data.json",
+        ]);
+        assert!(conflicting_data.is_err());
+
+        let conflicting_states = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "check",
+            "Assets/UI/Panel.ucp-ui.json",
+            "--state",
+            "empty",
+            "--all-states",
+        ]);
+        assert!(conflicting_states.is_err());
+
+        let incomplete_viewport = Cli::try_parse_from([
+            "ucp",
+            "ui",
+            "inspect",
+            "Assets/UI/Panel.uxml",
+            "--width",
+            "800",
+        ]);
+        assert!(incomplete_viewport.is_err());
     }
 }

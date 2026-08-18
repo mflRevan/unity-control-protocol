@@ -71,7 +71,7 @@ Install focused, surface-specific skills — one per `ucp` command group — ins
 /plugin install ucp-surfaces@unity-control-protocol
 ```
 
-That install exposes fifteen focused skills, each invoked as `/ucp-surfaces:ucp-<surface>`:
+That install exposes sixteen focused skills, each invoked as `/ucp-surfaces:ucp-<surface>`:
 
 - `/ucp-surfaces:ucp-objects` — `ucp object` (create incl. `--primitive`, components, properties, reparent, instantiate)
 - `/ucp-surfaces:ucp-scene` — `ucp scene` + `ucp editor` lifecycle + `ucp play|stop|pause|compile|screenshot`
@@ -79,6 +79,7 @@ That install exposes fifteen focused skills, each invoked as `/ucp-surfaces:ucp-
 - `/ucp-surfaces:ucp-spatial` — `ucp spatial` (raycast/overlap/bounds/ground/nearest)
 - `/ucp-surfaces:ucp-view` — `ucp view` (capture/isolate/orbit) + `ucp screenshot` + `ucp record`
 - `/ucp-surfaces:ucp-assets` — `ucp asset` + `ucp files` + `ucp shader errors`
+- `/ucp-surfaces:ucp-ui` — `ucp ui` (list/lint/inspect/screenshot/check) for UI Toolkit
 - `/ucp-surfaces:ucp-materials` — `ucp material` (create/get/set properties, keywords, shader)
 - `/ucp-surfaces:ucp-prefabs` — `ucp prefab` (status/apply/revert/unpack/create/overrides)
 - `/ucp-surfaces:ucp-build` — `ucp build` (targets/scenes/defines/start)

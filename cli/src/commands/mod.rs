@@ -28,6 +28,7 @@ pub mod snapshot;
 pub mod spatial;
 pub mod tests;
 pub mod transform;
+pub mod ui;
 pub mod vcs;
 pub mod view;
 
@@ -388,6 +389,11 @@ pub enum Command {
     View {
         #[command(subcommand)]
         action: view::ViewAction,
+    },
+    /// Inspect, lint, and render UI Toolkit UXML and USS
+    Ui {
+        #[command(subcommand)]
+        action: ui::UiAction,
     },
 }
 
@@ -971,5 +977,6 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Transform { action } => transform::run(action, &ctx).await,
         Command::Spatial { action } => spatial::run(action, &ctx).await,
         Command::View { action } => view::run(action, &ctx).await,
+        Command::Ui { action } => ui::run(action, &ctx).await,
     }
 }

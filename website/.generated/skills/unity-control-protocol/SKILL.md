@@ -3,7 +3,7 @@ name: unity-control-protocol
 description: >-
   Programmatic control of the Unity Editor from the terminal via the `ucp` CLI.
   Automate scenes, GameObjects, components, assets, materials, prefabs, build
-  pipelines, settings, tests, packages, selective `.unitypackage` import, debugging and profiling 
+  pipelines, UI Toolkit UXML/USS, settings, tests, packages, selective `.unitypackage` import, debugging and profiling
   over a WebSocket/JSON-RPC 2.0
   bridge. Use when the user asks to inspect, create, modify, or automate anything
   inside a Unity project without opening the Editor UI.
@@ -28,6 +28,7 @@ UCP and Unity expose a broad command surface. If you are unsure what is availabl
 - The user needs to browse/install Unity packages, manage scoped registries, or selectively import `.unitypackage` content
 - The user wants to automate entire Unity Editor workflows
 - The user wants to find all references to an asset, script, material, or prefab across the project
+- The user wants to lint, inspect, populate, screenshot, or verify UI Toolkit UXML and USS
 
 ## When NOT to use this skill
 
@@ -100,6 +101,20 @@ ucp prefab apply --id -136722
 Object reference writes accept `instanceId`, asset `path`, or asset `guid`, and unresolved references fail explicitly.
 
 Use `ucp asset move` / `bulk-move` for Unity-aware renames and folder cleanup instead of raw filesystem moves. That keeps `.meta` files and GUIDs intact so scenes, prefabs, build settings, and serialized object references continue to resolve.
+
+## UI Toolkit authoring and verification
+
+Use `ucp ui` on Unity 6+ to close the loop after editing UXML, USS, or a strict `.ucp-ui.json` scenario. Lint is the fast importer/schema pass; inspect reports bounded resolved layout and binding state; screenshot provides visual evidence; check runs all of them with cleanup.
+
+```bash
+ucp ui list --root Assets/UI
+ucp ui lint Assets/UI/Inventory.ucp-ui.json --fail-on-warnings
+ucp ui inspect Assets/UI/Inventory.ucp-ui.json --state populated --query '#cards' --json
+ucp ui screenshot Assets/UI/Inventory.ucp-ui.json --state populated -o artifacts/inventory.png --force
+ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui --force --json
+```
+
+Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check briefly focus a transient Editor window and require a graphics device; lint also works headless.
 
 ## In-scene authoring & spatial workflows
 

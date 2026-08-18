@@ -8,6 +8,7 @@ import scenesMd from '@docs/authoring/scenes.md?raw';
 import objectsMd from '@docs/authoring/objects.md?raw';
 import prefabsMd from '@docs/authoring/prefabs.md?raw';
 import assetsMd from '@docs/authoring/assets.md?raw';
+import uiToolkitMd from '@docs/authoring/ui-toolkit.md?raw';
 import materialsMd from '@docs/authoring/materials.md?raw';
 import referencesMd from '@docs/authoring/references.md?raw';
 import filesMd from '@docs/authoring/files.md?raw';
@@ -59,6 +60,7 @@ export const docsNavigation: DocsNavGroup[] = [
       { title: 'Objects & Components', href: '/docs/authoring/objects' },
       { title: 'Prefabs', href: '/docs/authoring/prefabs' },
       { title: 'Assets', href: '/docs/authoring/assets' },
+      { title: 'UI Toolkit', href: '/docs/authoring/ui-toolkit' },
       { title: 'Materials', href: '/docs/authoring/materials' },
       { title: 'Reference Search', href: '/docs/authoring/references' },
       { title: 'Files', href: '/docs/authoring/files' },
@@ -100,6 +102,7 @@ const canonicalDocsContent: Record<string, string> = {
   'authoring/objects': objectsMd,
   'authoring/prefabs': prefabsMd,
   'authoring/assets': assetsMd,
+  'authoring/ui-toolkit': uiToolkitMd,
   'authoring/materials': materialsMd,
   'authoring/references': referencesMd,
   'authoring/files': filesMd,
@@ -124,6 +127,7 @@ const legacyAliases: Record<string, string> = {
   'commands/objects': objectsMd,
   'commands/prefabs': prefabsMd,
   'commands/assets': assetsMd,
+  'commands/ui-toolkit': uiToolkitMd,
   'commands/materials': materialsMd,
   'commands/references': referencesMd,
   'commands/files': filesMd,

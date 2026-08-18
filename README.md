@@ -95,6 +95,10 @@ A few things that are awkward or impossible without it:
 - **Profile programmatically.** Run a session, then read the hierarchy sorted by self time, with
   `--fields` to keep the payload small and truncation reported as "showing 50 of 4,312".
 
+### UI Toolkit authoring loops
+
+Lint UXML and USS with Unity's own importers, populate repeaters and virtualized lists from strict JSON scenarios, inspect resolved layout and bindings, and capture deterministic panel screenshots. `ucp ui check` runs the complete lint-to-visual-verification pass without loading or dirtying a scene.
+
 <br>
 
 ## Install

@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added the Unity 6+ `ucp ui` family for agent-driven UI Toolkit work: target discovery, importer- and clone-backed UXML/USS linting, bounded resolved-tree and binding inspection, DPI-correct Editor-panel PNG capture, and an end-to-end multi-state `ui check` workflow.
+- Added strict `.ucp-ui.json` scenarios with JSON data overlays, allowlisted fixture mutations, eager `repeat` templates, and harness-owned virtualized `ListView` binding for reproducible dynamic layouts.
+- Added focused Rust, bridge, fixture, lint, inspector, and audit coverage plus agent-facing UI Toolkit workflow documentation.
+
 ## [0.6.2] - 2026-08-31
 
 ### Added

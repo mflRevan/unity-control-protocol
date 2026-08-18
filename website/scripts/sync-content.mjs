@@ -106,6 +106,7 @@ const docsNavigation = [
       { title: 'Objects & Components', route: 'authoring/objects', source: 'authoring/objects.md' },
       { title: 'Prefabs', route: 'authoring/prefabs', source: 'authoring/prefabs.md' },
       { title: 'Assets', route: 'authoring/assets', source: 'authoring/assets.md' },
+      { title: 'UI Toolkit', route: 'authoring/ui-toolkit', source: 'authoring/ui-toolkit.md' },
       { title: 'Materials', route: 'authoring/materials', source: 'authoring/materials.md' },
       { title: 'Reference Search', route: 'authoring/references', source: 'authoring/references.md' },
       { title: 'Files', route: 'authoring/files', source: 'authoring/files.md' },
