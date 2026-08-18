@@ -194,11 +194,19 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 20 still ships npm 10.x,
+      # which has no OIDC support and silently falls back to token auth.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
+      # No NODE_AUTH_TOKEN on purpose. npm only attempts the OIDC exchange when no auth
+      # token is configured -- with one present it authenticates as that token instead,
+      # and an automation token is rejected by the package's 2FA policy (E403, which is
+      # exactly how 0.6.1 first failed). Auth comes from `id-token: write` above plus the
+      # trusted publisher configured for this repo and workflow on npmjs.
       - name: Publish to npmjs
         if: steps.npm-version.outputs.published != 'true'
         run: cd npm && npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   notify-discord:
     needs: publish-npm
