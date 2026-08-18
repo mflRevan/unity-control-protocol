@@ -162,10 +162,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Deliberately no `registry-url`: setup-node then writes an .npmrc containing
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` and exports a placeholder
+      # NODE_AUTH_TOKEN. That counts as configured auth, so npm skips the OIDC exchange
+      # entirely. npmjs is the default registry anyway, so nothing is lost.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          node-version: 24
 
       - name: Validate synced metadata
         run: node scripts/sync-version.mjs --check "${GITHUB_REF_NAME#v}"
@@ -194,10 +197,11 @@ jobs:
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Trusted publishing (OIDC) needs npm >= 11.5.1; Node 20 still ships npm 10.x,
-      # which has no OIDC support and silently falls back to token auth.
+      # Trusted publishing (OIDC) needs npm >= 11.5.1. Pin the major rather than tracking
+      # `latest`: npm 12 already requires node ^22.22 || ^24.15 || >=26, so `npm@latest`
+      # silently couples this job to the runner's node version.
       - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
+        run: npm install -g "npm@^11.5.1"
 
       # No NODE_AUTH_TOKEN on purpose. npm only attempts the OIDC exchange when no auth
       # token is configured -- with one present it authenticates as that token instead,
