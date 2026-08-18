@@ -42,7 +42,7 @@ pub enum MaterialAction {
         #[arg(long)]
         property: String,
         /// New value as JSON (e.g. [1,0,0,1] for a color, 0.5 for a float)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
     },
     /// List enabled keywords on a material
@@ -153,9 +153,13 @@ pub async fn run(action: MaterialAction, ctx: &Context) -> anyhow::Result<()> {
 
     client.close().await;
 
-    let lifecycle =
-        super::await_unity_lifecycle(&project, Some(&lock), material_lifecycle_policy(&action), ctx)
-            .await?;
+    let lifecycle = super::await_unity_lifecycle(
+        &project,
+        Some(&lock),
+        material_lifecycle_policy(&action),
+        ctx,
+    )
+    .await?;
 
     result = super::attach_lifecycle_log_status(result, &lifecycle);
 

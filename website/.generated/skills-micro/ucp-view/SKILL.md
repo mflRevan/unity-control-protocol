@@ -10,7 +10,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI and the UCP Bridge package in the target Unity project. Unity 2021.3+.
 metadata:
   author: mflRevan
-  version: '0.6.0'
+  version: '0.6.1'
 ---
 
 # UCP View & Capture

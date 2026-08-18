@@ -58,7 +58,7 @@ pub enum AssetAction {
         #[arg(long)]
         field: String,
         /// New value as JSON (e.g. 100, "name", [1,2,3])
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
     },
     /// Write multiple fields on an asset from a JSON object
@@ -136,7 +136,7 @@ pub enum ImportSettingsAction {
         #[arg(long)]
         field: String,
         /// New value as JSON (e.g. true, "Sprite", 2048)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
         /// Update settings without immediately reimporting the asset
         #[arg(long)]

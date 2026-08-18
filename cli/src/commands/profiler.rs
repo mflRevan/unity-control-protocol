@@ -50,6 +50,10 @@ pub enum ProfilerAction {
         /// Maximum depth to include
         #[arg(long)]
         max_depth: Option<u32>,
+        /// Return only these columns, e.g. `--fields name,selfMs,calls`. Available: item, name,
+        /// path, depth, totalMs, selfMs, calls, gcMemory, childCount
+        #[arg(long, value_delimiter = ',')]
+        fields: Vec<String>,
     },
     /// Inspect timeline samples for a frame/thread
     Timeline {
@@ -68,6 +72,9 @@ pub enum ProfilerAction {
         /// Include sample metadata when available
         #[arg(long)]
         include_metadata: bool,
+        /// Return only these columns, e.g. `--fields name,durationMs`
+        #[arg(long, value_delimiter = ',')]
+        fields: Vec<String>,
     },
     /// Resolve raw or hierarchy sample callstacks
     Callstacks {
@@ -380,11 +387,15 @@ pub async fn run(action: ProfilerAction, ctx: &Context) -> anyhow::Result<()> {
             sort,
             limit,
             max_depth,
+            fields,
         } => {
             let mut payload = json!({
                 "sort": sort,
                 "limit": limit,
             });
+            if !fields.is_empty() {
+                payload["fields"] = json!(fields);
+            }
             if let Some(frame) = frame {
                 payload["frame"] = json!(frame);
             }
@@ -409,11 +420,15 @@ pub async fn run(action: ProfilerAction, ctx: &Context) -> anyhow::Result<()> {
             limit,
             max_depth,
             include_metadata,
+            fields,
         } => {
             let mut payload = json!({
                 "limit": limit,
                 "includeMetadata": include_metadata,
             });
+            if !fields.is_empty() {
+                payload["fields"] = json!(fields);
+            }
             if let Some(frame) = frame {
                 payload["frame"] = json!(frame);
             }
@@ -736,15 +751,81 @@ fn render_frame_detail(result: &Value) {
 }
 
 fn render_hierarchy(result: &Value) {
-    let hierarchy = result.get("items").unwrap_or(result);
-    output::print_json(hierarchy);
+    let Some(items) = result.get("items").and_then(Value::as_array) else {
+        output::print_json(result.get("items").unwrap_or(result));
+        render_warnings(result);
+        return;
+    };
+
+    for item in items {
+        let name = item.get("name").and_then(Value::as_str).unwrap_or("?");
+        let depth = item.get("depth").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let indent = "  ".repeat(depth.min(8));
+        let mut cells = Vec::new();
+        if let Some(v) = item.get("totalMs").and_then(Value::as_f64) {
+            cells.push(format!("total {v:.3}ms"));
+        }
+        if let Some(v) = item.get("selfMs").and_then(Value::as_f64) {
+            cells.push(format!("self {v:.3}ms"));
+        }
+        if let Some(v) = item.get("calls").and_then(Value::as_i64) {
+            cells.push(format!("calls {v}"));
+        }
+        if let Some(v) = item
+            .get("gcMemory")
+            .and_then(Value::as_f64)
+            .filter(|v| *v > 0.0)
+        {
+            cells.push(format!("gc {v:.0}B"));
+        }
+        if cells.is_empty() {
+            eprintln!("  {indent}{name}");
+        } else {
+            eprintln!("  {indent}{name}  [{}]", cells.join(", "));
+        }
+    }
+
+    render_truncation(result, "rows", "--limit / --max-depth");
     render_warnings(result);
 }
 
 fn render_timeline(result: &Value) {
-    let timeline = result.get("samples").unwrap_or(result);
-    output::print_json(timeline);
+    let Some(samples) = result.get("samples").and_then(Value::as_array) else {
+        output::print_json(result.get("samples").unwrap_or(result));
+        render_warnings(result);
+        return;
+    };
+
+    for sample in samples {
+        let name = sample.get("name").and_then(Value::as_str).unwrap_or("?");
+        let depth = sample.get("depth").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let indent = "  ".repeat(depth.min(8));
+        match sample.get("durationMs").and_then(Value::as_f64) {
+            Some(ms) => eprintln!("  {indent}{name}  {ms:.3}ms"),
+            None => eprintln!("  {indent}{name}"),
+        }
+    }
+
+    render_truncation(result, "samples", "--limit / --max-depth");
     render_warnings(result);
+}
+
+/// Report how much of the result was withheld. `truncated: true` on its own does not tell a caller
+/// whether it saw 50 of 52 rows or 50 of 50,000, so it cannot decide whether to look further.
+fn render_truncation(result: &Value, noun: &str, knobs: &str) {
+    let shown = result.get("count").and_then(Value::as_u64).unwrap_or(0);
+    let total = result
+        .get("totalCount")
+        .and_then(Value::as_u64)
+        .unwrap_or(shown);
+
+    if total > shown {
+        output::print_warn(&format!(
+            "Showing {shown} of {total} {noun}; narrow or widen with {knobs}."
+        ));
+    } else {
+        eprintln!("  ({shown} {noun})");
+    }
 }
 
 fn render_callstacks(result: &Value) {

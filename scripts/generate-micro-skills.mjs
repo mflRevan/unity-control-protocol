@@ -16,11 +16,14 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const skillsRoot = path.join(root, 'plugins', 'ucp-surfaces', 'skills');
 
-// The version stamped into metadata.version. scripts/sync-version.mjs is the
-// source of truth and rewrites this in place across all generated SKILL.md
-// files; keep it in sync with version.json so a fresh generate + sync is a
-// no-op.
-const VERSION = '0.5.2';
+// The version stamped into metadata.version, read straight from version.json --
+// the same source scripts/sync-version.mjs rewrites the generated SKILL.md files
+// from, so a fresh generate + sync is a no-op by construction. This used to be a
+// hardcoded literal that had to be bumped by hand every release; it was missed for
+// 0.6.0, which left the --check CI gate reporting drift on all 15 skills.
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(root, 'version.json'), 'utf8'),
+).version;
 
 const HOMEPAGE = 'https://github.com/mflRevan/unity-control-protocol';
 const DOCS = 'https://unityctl.dev';

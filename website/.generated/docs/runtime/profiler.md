@@ -25,7 +25,11 @@ Capture, inspect, and summarize Unity Profiler data through the bridge.
 
 ## Key workflow notes
 
-- `ucp profiler summary` defaults to the most recent 120 buffered frames so it stays practical in live editor sessions. Pass `--first-frame` and `--last-frame` when you need an explicit range.
+- `ucp profiler summary` defaults to the most recent 120 buffered frames so it stays practical in live editor sessions. Pass `--first-frame` and `--last-frame` when you need an explicit range. The span is hard-capped at 600 frames: aggregation walks every raw frame view on the editor's main thread, so a wider request would stall the editor. When the cap applies, the response says so in `warnings` and keeps the most recent frames.
+- **Keep responses small.** `timeline` and `hierarchy` are the two surfaces that can flood an agent's context:
+  - `--fields name,selfMs` returns only the columns you name. Hierarchy rows carry `item, name, path, depth, totalMs, selfMs, calls, gcMemory, childCount`; timeline samples carry `sample, name, category, startMs, durationMs, depth, childCount, metadataCount`. On a 20-row hierarchy, `--fields name,selfMs` cuts the JSON payload by about 70%.
+  - Both report `totalCount` next to `count`, so `truncated: true` is quantified — you can tell "50 of 52" from "50 of 50,000" and decide whether to look further. Human output prints it as `Showing 50 of 4,312 rows`.
+  - Reach for `--sort self-time --limit 20 --fields name,selfMs` to find hot paths, and `--max-depth` to keep the tree shallow, rather than raising `--limit` and reading everything.
 - New sessions automatically clear stale buffered frames when previous captures are still loaded, and the bridge clamps profiler buffer memory to safer live-editor budgets. Heavier modes such as allocation callstacks use a tighter cap.
 - In the Unity Editor, `Profiler.enableBinaryLog` stays disabled at runtime. `ucp profiler capture save --output <file>.json` exports a structured snapshot instead; use the Profiler window for manual raw/data export if you need Unity's native file formats.
 - Frame ids can churn quickly in a live buffer. For `timeline`, `hierarchy`, `callstacks`, and narrow `summary` queries, prefer grabbing a fresh frame id from `ucp profiler frames list` or `ucp profiler frames show` immediately before the follow-up command.
@@ -42,6 +46,7 @@ ucp scene snapshot --depth 1
 ucp profiler frames list --limit 5
 ucp profiler timeline --frame 61792 --thread 0 --limit 10
 ucp profiler hierarchy --frame 61792 --thread 0 --limit 10
+ucp profiler hierarchy --sort self-time --limit 20 --fields name,selfMs   # hot paths, minimal payload
 ucp profiler summary --limit 5
 ucp profiler capture save --output ProfilerCaptures/edit-loop.json
 ucp profiler session stop

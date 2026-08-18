@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -146,34 +145,17 @@ pub async fn wait_for_bridge(
 }
 
 fn maybe_report_editor_log_failure(project: &Path) {
-    let log_path = crate::config::editor_log_path(project);
-    let Ok(content) = fs::read_to_string(&log_path) else {
-        return;
-    };
-
-    let last_lines = content
-        .lines()
-        .rev()
-        .take(200)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>();
-
-    let has_blocker = last_lines.iter().any(|line| {
-        let lower = line.to_ascii_lowercase();
-        (lower.contains("project has invalid dependencies")
-            || lower.contains("an error occurred while resolving packages")
-            || lower.contains("error cs"))
-            && !lower.contains("[ucp] error handling")
-    });
-
-    if !has_blocker {
+    let diagnosis = crate::editor_diagnosis::diagnose(project);
+    if diagnosis.is_empty() {
         return;
     }
 
-    output::print_warn("Unity editor log shows startup-blocking errors:");
-    eprintln!("{}", last_lines.join("\n"));
+    for line in diagnosis.explain() {
+        output::print_warn(&line);
+    }
+    for detail in diagnosis.details() {
+        eprintln!("  {detail}");
+    }
 }
 
 /// Wait until Unity stops reporting editor-side background work such as

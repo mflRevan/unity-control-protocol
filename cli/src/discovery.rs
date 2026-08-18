@@ -51,9 +51,12 @@ pub fn read_lock_file(project: &Path) -> Result<LockFile, UcpError> {
     let lock: LockFile = serde_json::from_str(&contents)
         .map_err(|e| UcpError::Other(format!("Invalid lock file: {e}")))?;
 
-    // Verify PID is alive
-    let sys = System::new_all();
+    // Verify PID is alive. This runs on the hot path of every bridge command, so refresh only
+    // the one process we care about -- a full `System::new_all()` sweep here cost ~70 ms warm
+    // (~200 ms on the first call in a process) versus ~7 ms for a targeted refresh.
     let pid = sysinfo::Pid::from_u32(lock.pid);
+    let mut sys = System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
     if sys.process(pid).is_none() {
         // Stale lock file - clean it up
         let _ = std::fs::remove_file(&path);
@@ -76,7 +79,16 @@ pub fn unity_editor_pid_for_project(project: &Path) -> Option<u32> {
 }
 
 pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
-    let system = System::new_all();
+    // Only the command line and executable path are read below, so skip the disk/memory/user/
+    // environment probes `System::new_all()` performs for every process on the machine.
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::nothing()
+            .with_cmd(sysinfo::UpdateKind::Always)
+            .with_exe(sysinfo::UpdateKind::Always),
+    );
     let mut processes = Vec::new();
 
     for process in system.processes().values() {
@@ -130,8 +142,12 @@ pub fn handle_unity_startup_dialogs(
 }
 
 pub fn is_process_running(pid: u32) -> bool {
-    let system = System::new_all();
-    system.process(sysinfo::Pid::from_u32(pid)).is_some()
+    // Refresh only the pid we care about. `System::new_all()` also sweeps CPU, memory and disks,
+    // which made this far too expensive to call in a poll loop.
+    let target = sysinfo::Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[target]), true);
+    system.process(target).is_some()
 }
 
 pub fn terminate_process(pid: u32) -> Result<bool, UcpError> {

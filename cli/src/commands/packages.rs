@@ -50,11 +50,14 @@ pub enum PackagesAction {
         #[arg(long)]
         offline: bool,
     },
-    /// Add or install a package reference
+    /// Add or install one or more package references
     Add {
-        /// Package id or reference (e.g. com.unity.textmeshpro, name@version, git url, file path)
-        package: String,
-        /// Return once the Package Manager request completes, without waiting for the bridge to stabilize
+        /// One or more package ids or references (e.g. com.unity.textmeshpro name@version git-url file-path).
+        /// Multiple packages are added sequentially; the Package Manager serializes each resolve.
+        #[arg(required = true, num_args = 1..)]
+        packages: Vec<String>,
+        /// Return once the final Package Manager request completes, without waiting for the bridge to stabilize.
+        /// Intermediate packages always settle first, since the Package Manager cannot run two operations at once.
         #[arg(long)]
         no_wait: bool,
     },
@@ -246,26 +249,44 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
             )
             .await
         }
-        PackagesAction::Add { package, no_wait } => {
-            run_bridge_action(
-                "packages/add",
-                serde_json::json!({ "packageId": package }),
-                Some(no_wait),
-                ctx,
-                |result, json| {
-                    if json {
-                        output::print_json(&output::success_json(result));
-                    } else {
-                        let package_name = result
-                            .get("package")
-                            .and_then(|item| item.get("name"))
-                            .and_then(|value| value.as_str())
-                            .unwrap_or("package");
-                        output::print_success(&format!("Installed {package_name}"));
-                    }
-                },
-            )
-            .await
+        PackagesAction::Add { packages, no_wait } => {
+            let total = packages.len();
+            let mut results = Vec::with_capacity(total);
+            for (index, package) in packages.iter().enumerate() {
+                // The Unity Package Manager runs one operation at a time, so every package
+                // except the last must fully settle before the next add starts. Only the
+                // final add honours --no-wait.
+                let is_last = index + 1 == total;
+                let result = call_package_mutation(
+                    "packages/add",
+                    serde_json::json!({ "packageId": package }),
+                    Some(no_wait && is_last),
+                    ctx,
+                )
+                .await?;
+                if !ctx.json {
+                    let package_name = result
+                        .get("package")
+                        .and_then(|item| item.get("name"))
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(package.as_str());
+                    output::print_success(&format!("Installed {package_name}"));
+                }
+                results.push(result);
+            }
+            if ctx.json {
+                // Preserve the historical single-package shape; aggregate only when batching.
+                let payload = if total == 1 {
+                    results
+                        .into_iter()
+                        .next()
+                        .unwrap_or(serde_json::Value::Null)
+                } else {
+                    serde_json::json!({ "packages": results })
+                };
+                output::print_json(&output::success_json(payload));
+            }
+            Ok(())
         }
         PackagesAction::Remove { name, no_wait } => {
             run_bridge_action(
@@ -442,6 +463,21 @@ async fn run_bridge_action<F>(
 where
     F: FnOnce(serde_json::Value, bool),
 {
+    let result = call_package_mutation(method, params, wait_for_settle, ctx).await?;
+    render(result, ctx.json);
+    Ok(())
+}
+
+/// Run one packages/* RPC and return its result, applying the shared scene guard,
+/// RPC-timeout floor, and (when `wait_for_settle` is `Some(false)`) lifecycle settle.
+/// `run_bridge_action` renders the result; callers that batch (e.g. multi-package add)
+/// use this directly so they can aggregate output themselves.
+async fn call_package_mutation(
+    method: &str,
+    params: serde_json::Value,
+    wait_for_settle: Option<bool>,
+    ctx: &Context,
+) -> anyhow::Result<serde_json::Value> {
     let (project, lock, mut client) = super::connect_client(ctx).await?;
 
     if wait_for_settle.is_some() {
@@ -458,9 +494,13 @@ where
     // --timeout prematurely, while still capping a truly wedged/modal-blocked editor.
     let pkg_timeout = match ctx.timeout {
         0 => None,
-        secs => Some(std::time::Duration::from_secs(secs.max(PACKAGE_RPC_TIMEOUT_SECS))),
+        secs => Some(std::time::Duration::from_secs(
+            secs.max(PACKAGE_RPC_TIMEOUT_SECS),
+        )),
     };
-    let mut result = client.call_with_timeout(method, params, pkg_timeout).await?;
+    let mut result = client
+        .call_with_timeout(method, params, pkg_timeout)
+        .await?;
     client.close().await;
 
     if let Some(no_wait) = wait_for_settle {
@@ -480,10 +520,8 @@ where
         }
     }
 
-    render(result, ctx.json);
-    Ok(())
+    Ok(result)
 }
-
 
 async fn inspect_unitypackage_command(archive: &str, ctx: &Context) -> anyhow::Result<()> {
     let archive_path = PathBuf::from(archive);

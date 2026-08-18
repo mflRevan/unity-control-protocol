@@ -4,6 +4,7 @@ mod client;
 mod commands;
 mod config;
 mod discovery;
+mod editor_diagnosis;
 mod editor_runtime;
 mod error;
 mod output;
@@ -149,6 +150,14 @@ async fn main() -> anyhow::Result<()> {
                     "success": false,
                     "error": { "message": test_run_failure.message },
                     "data": test_run_failure.result
+                })
+            } else if let Some(compile_failure) =
+                e.downcast_ref::<commands::compile::CompileFailure>()
+            {
+                serde_json::json!({
+                    "success": false,
+                    "error": { "message": compile_failure.message },
+                    "data": compile_failure.result
                 })
             } else {
                 serde_json::json!({
@@ -345,10 +354,83 @@ mod tests {
 
         match cli.command {
             commands::Command::Packages {
-                action: commands::packages::PackagesAction::Add { package, no_wait },
+                action: commands::packages::PackagesAction::Add { packages, no_wait },
             } => {
-                assert_eq!(package, "com.unity.textmeshpro");
+                assert_eq!(packages, vec!["com.unity.textmeshpro"]);
                 assert!(!no_wait);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_packages_add_command_with_multiple_packages() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "packages",
+            "add",
+            "com.unity.a",
+            "com.unity.b@1.2.3",
+            "com.unity.c",
+            "--no-wait",
+        ])
+        .expect("packages add should accept multiple packages");
+
+        match cli.command {
+            commands::Command::Packages {
+                action: commands::packages::PackagesAction::Add { packages, no_wait },
+            } => {
+                assert_eq!(
+                    packages,
+                    vec!["com.unity.a", "com.unity.b@1.2.3", "com.unity.c"]
+                );
+                assert!(no_wait);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn packages_add_requires_at_least_one_package() {
+        let result = Cli::try_parse_from(["ucp", "packages", "add"]);
+        assert!(
+            result.is_err(),
+            "packages add with no packages should be rejected"
+        );
+    }
+
+    #[test]
+    fn parses_set_property_with_negative_value() {
+        // Regression: `--value -55730` (e.g. an object-reference instance id) used to be parsed
+        // as an unknown flag, forcing the `--value=-55730` workaround.
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "object",
+            "set-property",
+            "--id",
+            "-5",
+            "--component",
+            "Rigidbody",
+            "--property",
+            "m_Mass",
+            "--value",
+            "-55730",
+        ])
+        .expect("negative --value should parse without the = workaround");
+
+        match cli.command {
+            commands::Command::Object {
+                action:
+                    commands::object::ObjectAction::SetProperty {
+                        id,
+                        property,
+                        value,
+                        ..
+                    },
+            } => {
+                assert_eq!(id, -5);
+                assert_eq!(property, "m_Mass");
+                assert_eq!(value, "-55730");
             }
             _ => panic!("unexpected command variant"),
         }

@@ -307,10 +307,48 @@ namespace UCP.Bridge.Tests
             var status = _router.Dispatch("logs/status", 1, "{}");
             Assert.That(status.error, Is.Null);
 
-            var result = (Dictionary<string, object>)status.result;
-            var byLevel = (Dictionary<string, object>)result["byLevel"];
-            Assert.That(Convert.ToInt32(byLevel["error"]), Is.EqualTo(0));
-            Assert.That(Convert.ToInt32(byLevel["exception"]), Is.EqualTo(0));
+            Assert.That(status.result, Is.InstanceOf<Dictionary<string, object>>());
+
+            // Assert on the specific regression this test exists for -- `asset/search` loading
+            // `.unity` files through LoadAllAssetsAtPath, which makes Unity emit
+            // "Do not use ReadObjectThreaded on scene objects!" -- rather than on "zero errors of
+            // any kind". A blanket count also catches unrelated editor noise: on a cold Library the
+            // search pulls in lazy imports whose URP shader-fallback errors have nothing to do with
+            // this code path, which made the whole release matrix red on every Unity version.
+            var problems = BufferedProblems();
+            var threadedReadErrors = problems
+                .FindAll(entry => entry.Contains("ReadObjectThreaded"));
+
+            Assert.That(
+                threadedReadErrors,
+                Is.Empty,
+                () => "asset/search emitted threaded scene-read errors:" + NewLineIndent
+                    + string.Join(NewLineIndent, threadedReadErrors));
+        }
+
+        private const string NewLineIndent = "\n  ";
+
+        /// Buffered error/exception entries, as "[level] message" strings.
+        private List<string> BufferedProblems()
+        {
+            var lines = new List<string>();
+            var tail = _router.Dispatch("logs/tail", 1, "{\"count\":200}");
+            if (tail.error != null || tail.result is not Dictionary<string, object> payload)
+                return lines;
+
+            if (!payload.TryGetValue("logs", out var logsObj) || logsObj is not List<object> logs)
+                return lines;
+
+            foreach (var item in logs)
+            {
+                if (item is not Dictionary<string, object> entry) continue;
+                var level = entry.TryGetValue("level", out var l) ? l?.ToString() : null;
+                if (level != "error" && level != "exception") continue;
+                var message = entry.TryGetValue("messagePreview", out var m) ? m?.ToString() : "";
+                lines.Add($"[{level}] {message}");
+            }
+
+            return lines;
         }
 
         [Test]
@@ -1142,9 +1180,33 @@ namespace UCP.Bridge.Tests
                 System.Convert.ToSingle(axisData[0]),
                 System.Convert.ToSingle(axisData[1]),
                 System.Convert.ToSingle(axisData[2]));
-            var actualForward = sceneView.camera.transform.forward;
             Assert.That(Vector3.Dot(returnedAxis.normalized, expectedDirection), Is.GreaterThan(0.98f));
-            Assert.That(Mathf.Abs(Vector3.Dot(actualForward.normalized, expectedDirection)), Is.GreaterThan(0.98f));
+
+            // Assert against the Scene view's own state and the reported pose, not
+            // `sceneView.camera.transform`: that transform is only synced when the view repaints,
+            // so in batch mode it still holds the pre-focus pose and this check used to fail.
+            var viewForward = sceneView.rotation * Vector3.forward;
+            Assert.That(Mathf.Abs(Vector3.Dot(viewForward.normalized, expectedDirection)), Is.GreaterThan(0.98f));
+
+            var eulerData = (List<object>)result["cameraRotationEuler"];
+            var reportedForward = Quaternion.Euler(
+                System.Convert.ToSingle(eulerData[0]),
+                System.Convert.ToSingle(eulerData[1]),
+                System.Convert.ToSingle(eulerData[2])) * Vector3.forward;
+            Assert.That(
+                Mathf.Abs(Vector3.Dot(reportedForward.normalized, expectedDirection)),
+                Is.GreaterThan(0.98f),
+                "scene/focus must report the pose it just applied, not the last rendered one");
+
+            // The reported camera must sit behind the pivot along its own forward axis.
+            var positionData = (List<object>)result["cameraPosition"];
+            var reportedPosition = new Vector3(
+                System.Convert.ToSingle(positionData[0]),
+                System.Convert.ToSingle(positionData[1]),
+                System.Convert.ToSingle(positionData[2]));
+            Assert.That(Vector3.Dot((sceneView.pivot - reportedPosition).normalized, reportedForward.normalized),
+                Is.GreaterThan(0.98f));
+
             Assert.That(Vector3.Distance(sceneView.pivot, cube.transform.position), Is.LessThan(2f));
         }
 

@@ -49,19 +49,23 @@ ucp packages info com.unity.timeline
 ucp packages info com.company.tooling
 ```
 
-### `ucp packages add <package>`
+### `ucp packages add <package>...`
 
-Install a package through Unity Package Manager.
+Install one or more packages through Unity Package Manager.
 
 ```bash
 ucp packages add com.unity.cinemachine
 ucp packages add com.company.tooling@1.4.0
 ucp packages add https://github.com/org/repo.git?path=Packages/com.company.tooling#main
+# Multiple packages in one call:
+ucp packages add com.unity.cinemachine com.unity.inputsystem com.company.tooling@1.4.0
 ```
+
+Packages are added sequentially because the Unity Package Manager runs one operation at a time. Each package's resolve fully settles before the next add starts; `--no-wait` applies only to the final package.
 
 | Flag        | Description                                                        |
 | ----------- | ------------------------------------------------------------------ |
-| `--no-wait` | Return immediately after the add request instead of waiting for settle |
+| `--no-wait` | Return immediately after the final add request instead of waiting for settle |
 
 ### `ucp packages remove <name>`
 

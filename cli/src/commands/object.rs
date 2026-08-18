@@ -51,8 +51,9 @@ pub enum ObjectAction {
         /// Property name (e.g. "m_LocalPosition", "enabled")
         #[arg(long)]
         property: String,
-        /// New value as JSON (e.g. true, 5, [1,2,3], "text")
-        #[arg(long)]
+        /// New value as JSON (e.g. true, 5, [1,2,3], "text"). Negative numbers and object
+        /// reference instance ids like -55730 are accepted directly (no `--value=` needed).
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
         /// Save the active scene after applying the change
         #[arg(long)]
@@ -317,7 +318,20 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
         }
     };
 
-    if object_should_save(&action) {
+    // In Play Mode, scene/object edits apply only to the running instance and are discarded
+    // on exit, and Unity refuses to save scenes during play. Rather than letting the --save
+    // step fail opaquely, detect play mode, skip the save, and hand the agent a clear warning
+    // (in both JSON and human output) that the change will not persist.
+    let play_mode_warning =
+        if is_object_mutation(&action) && super::editor_is_playing(&mut client).await {
+            result["playMode"] = serde_json::json!(true);
+            result["warning"] = serde_json::json!(super::PLAY_MODE_NONPERSISTENT_WARNING);
+            Some(super::PLAY_MODE_NONPERSISTENT_WARNING)
+        } else {
+            None
+        };
+
+    if play_mode_warning.is_none() && object_should_save(&action) {
         super::save_active_scene(&mut client, ctx).await?;
     }
 
@@ -424,6 +438,10 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success(&format!("Removed component: {component}"));
             }
         }
+
+        if let Some(warning) = play_mode_warning {
+            output::print_warn(warning);
+        }
     }
 
     Ok(())
@@ -456,6 +474,17 @@ fn object_preflight_policy(action: &ObjectAction) -> super::ActiveSceneGuardPoli
         | ObjectAction::GetProperty { .. } => super::ActiveSceneGuardPolicy::None,
         _ => super::ActiveSceneGuardPolicy::None,
     }
+}
+
+/// Whether the action mutates the scene/object graph (as opposed to a read-only Get*).
+/// Used to decide whether the Play Mode non-persistence warning applies.
+fn is_object_mutation(action: &ObjectAction) -> bool {
+    !matches!(
+        action,
+        ObjectAction::GetChildren { .. }
+            | ObjectAction::GetFields { .. }
+            | ObjectAction::GetProperty { .. }
+    )
 }
 
 fn object_should_save(action: &ObjectAction) -> bool {

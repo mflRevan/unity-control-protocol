@@ -15,6 +15,11 @@ namespace UCP.Bridge
     {
         private const int DefaultFrameListLimit = 20;
         private const int DefaultSummaryFrameWindow = 120;
+
+        // Summary aggregation walks every raw frame view on the main thread, so an unbounded
+        // range (e.g. --first-frame 0 on a long session) freezes the editor for seconds. Clamp it
+        // and say so in `warnings` rather than stalling.
+        private const int MaxSummaryFrameSpan = 600;
         private const int DefaultJsonExportFrameWindow = 120;
         private const int MaxThreadProbeCount = 128;
         private const long MinimumProfilerMemoryBytes = 16L * 1024L * 1024L;
@@ -296,6 +301,7 @@ namespace UCP.Bridge
             var limit = Math.Max(1, GetInt(parameters, "limit", 50));
             var sort = GetString(parameters, "sort") ?? "total-time";
             var maxDepth = GetNullableInt(parameters, "maxDepth");
+            var fields = GetFieldSet(parameters);
 
             using (var view = GetHierarchyFrameDataView(frameIndex, threadIndex))
             {
@@ -305,7 +311,8 @@ namespace UCP.Bridge
                 var items = CollectHierarchyItems(view, maxDepth);
                 items = SortHierarchyItems(items, sort);
 
-                var truncated = items.Count > limit;
+                var totalCount = items.Count;
+                var truncated = totalCount > limit;
                 if (truncated)
                     items = items.Take(limit).ToList();
 
@@ -315,8 +322,11 @@ namespace UCP.Bridge
                     ["thread"] = threadIndex,
                     ["sort"] = sort,
                     ["count"] = items.Count,
+                    // How many rows existed before truncation. Without it a caller cannot tell
+                    // "50 of 52" from "50 of 50,000", so it cannot decide whether to look further.
+                    ["totalCount"] = totalCount,
                     ["truncated"] = truncated,
-                    ["items"] = items.Select(item => (object)item.ToDictionary()).ToList(),
+                    ["items"] = items.Select(item => (object)ProjectFields(item.ToDictionary(), fields)).ToList(),
                     ["warnings"] = new List<object>()
                 };
             }
@@ -330,6 +340,7 @@ namespace UCP.Bridge
             var limit = Math.Max(1, GetInt(parameters, "limit", 200));
             var maxDepth = GetNullableInt(parameters, "maxDepth");
             var includeMetadata = GetBool(parameters, "includeMetadata", false);
+            var fields = GetFieldSet(parameters);
 
             using (var view = GetRawFrameDataView(frameIndex, threadIndex))
             {
@@ -337,7 +348,8 @@ namespace UCP.Bridge
                     throw new ArgumentException($"Raw profiler data is unavailable for frame {frameIndex}, thread {threadIndex}");
 
                 var samples = CollectTimelineSamples(view, maxDepth, includeMetadata);
-                var truncated = samples.Count > limit;
+                var totalCount = samples.Count;
+                var truncated = totalCount > limit;
                 if (truncated)
                     samples = samples.Take(limit).ToList();
 
@@ -346,8 +358,9 @@ namespace UCP.Bridge
                     ["frame"] = frameIndex,
                     ["thread"] = threadIndex,
                     ["count"] = samples.Count,
+                    ["totalCount"] = totalCount,
                     ["truncated"] = truncated,
-                    ["samples"] = samples.Cast<object>().ToList(),
+                    ["samples"] = samples.Select(sample => (object)ProjectFields(sample, fields)).ToList(),
                     ["warnings"] = new List<object>()
                 };
             }
@@ -427,10 +440,23 @@ namespace UCP.Bridge
             if (firstFrame > lastFrame)
                 throw new ArgumentException("Requested frame range is empty");
 
+            var warnings = new List<object>();
+            var span = lastFrame - firstFrame + 1;
+            if (span > MaxSummaryFrameSpan)
+            {
+                // Aggregation runs on the editor's main thread; a huge span stalls the whole
+                // editor. Keep the most recent frames, which is what callers almost always want.
+                firstFrame = lastFrame - MaxSummaryFrameSpan + 1;
+                warnings.Add(
+                    $"Requested {span} frames; aggregated the most recent {MaxSummaryFrameSpan} " +
+                    $"(frames {firstFrame}-{lastFrame}) to avoid stalling the editor. " +
+                    "Narrow the range with --first-frame/--last-frame for older windows.");
+            }
+
             return new Dictionary<string, object>
             {
                 ["summary"] = BuildSummaryData(limit, threadIndex, firstFrame, lastFrame),
-                ["warnings"] = new List<object>()
+                ["warnings"] = warnings
             };
         }
 
@@ -1363,6 +1389,55 @@ namespace UCP.Bridge
                 NormalizePath(left),
                 NormalizePath(right),
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Optional caller-supplied field allow-list (`fields: ["name","selfMs"]`). Profiler rows
+        /// are wide and agents pay per token for columns they never read, so let them ask for the
+        /// two or three they actually want. Null means "every field".
+        /// </summary>
+        private static HashSet<string> GetFieldSet(Dictionary<string, object> parameters)
+        {
+            if (parameters == null || !parameters.TryGetValue("fields", out var raw) || raw == null)
+                return null;
+
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (raw is List<object> list)
+            {
+                foreach (var entry in list)
+                {
+                    var name = entry?.ToString();
+                    if (!string.IsNullOrWhiteSpace(name)) set.Add(name.Trim());
+                }
+            }
+            else
+            {
+                foreach (var name in raw.ToString().Split(','))
+                {
+                    if (!string.IsNullOrWhiteSpace(name)) set.Add(name.Trim());
+                }
+            }
+
+            return set.Count == 0 ? null : set;
+        }
+
+        /// Narrow one row to the requested fields. Unknown names are ignored rather than erroring,
+        /// so a caller can ask for a superset across profiler surfaces without branching.
+        private static Dictionary<string, object> ProjectFields(
+            Dictionary<string, object> row,
+            HashSet<string> fields)
+        {
+            if (fields == null || row == null) return row;
+
+            var projected = new Dictionary<string, object>();
+            foreach (var pair in row)
+            {
+                if (fields.Contains(pair.Key)) projected[pair.Key] = pair.Value;
+            }
+
+            // Never hand back an empty row: a caller that misspelled every field would otherwise
+            // get a silent wall of `{}` instead of a usable result.
+            return projected.Count == 0 ? row : projected;
         }
 
         private static Dictionary<string, object> BuildSummaryData(

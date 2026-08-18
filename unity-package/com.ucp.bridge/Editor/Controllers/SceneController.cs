@@ -168,17 +168,39 @@ namespace UCP.Bridge
             sceneView.Repaint();
             SceneView.RepaintAll();
 
+            ResolveSceneViewCamera(sceneView, out var cameraPosition, out var cameraRotation);
+
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
                 ["instanceId"] = instanceId,
                 ["name"] = target.name,
                 ["pivot"] = VectorToList(sceneView.pivot),
-                ["cameraPosition"] = VectorToList(sceneView.camera.transform.position),
-                ["cameraRotationEuler"] = VectorToList(sceneView.camera.transform.rotation.eulerAngles),
+                ["cameraPosition"] = VectorToList(cameraPosition),
+                ["cameraRotationEuler"] = VectorToList(cameraRotation.eulerAngles),
                 ["size"] = sceneView.size,
                 ["axis"] = axis.HasValue ? VectorToList(axis.Value.normalized) : null
             };
+        }
+
+        /// <summary>
+        /// Derive the Scene view camera pose from the authoritative view state
+        /// (<c>pivot</c>/<c>rotation</c>/<c>cameraDistance</c>) rather than reading
+        /// <c>sceneView.camera.transform</c>.
+        ///
+        /// <c>LookAtDirect</c> updates the view state immediately, but the camera transform is only
+        /// synced when the Scene view actually repaints. <c>Repaint()</c> merely queues that, so in
+        /// batch mode - and for any caller reading the response in the same frame as the focus -
+        /// the camera transform still holds the *previous* pose and the reported values were simply
+        /// wrong.
+        /// </summary>
+        private static void ResolveSceneViewCamera(
+            SceneView sceneView,
+            out Vector3 position,
+            out Quaternion rotation)
+        {
+            rotation = sceneView.rotation;
+            position = sceneView.pivot - (rotation * Vector3.forward) * sceneView.cameraDistance;
         }
 
         private static Vector3? TryReadAxis(Dictionary<string, object> parameters)

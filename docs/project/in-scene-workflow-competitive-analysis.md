@@ -1,5 +1,11 @@
 # In-Scene Workflow — Competitive Analysis & Hardening Roadmap
 
+> **Superseded in part (2026-08-18).** Unity shipped its own terminal CLI and the
+> `com.unity.pipeline` Editor-control package on 2026-07-20, which invalidates §2's conclusion that
+> "Unity official is not our competitor on this axis" and §5's positioning takeaway. The §1 audit,
+> §3 primitives, and the P1/P2 roadmap items remain accurate and partly unshipped. See
+> [unity-cli-competitive-analysis.md](unity-cli-competitive-analysis.md) for the current position.
+
 *Audit date: 2026-06-14. Scope: harden UCP's in-scene / GameObject / 3D-spatial / visual-iteration
 surface for the next release, informed by a deep sweep of the three leading Unity-AI tools.*
 

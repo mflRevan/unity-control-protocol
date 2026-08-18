@@ -14,6 +14,9 @@ pub struct BridgeClient {
     write: futures_util::stream::SplitSink<WebSocketStream<tokio::net::TcpStream>, Message>,
     read: futures_util::stream::SplitStream<WebSocketStream<tokio::net::TcpStream>>,
     pub token: String,
+    /// PID of the Unity editor that owns this bridge, used to tell a crashed editor apart
+    /// from an ordinary disconnect (e.g. a domain reload) when the socket drops mid-request.
+    pid: u32,
     /// Per-request response deadline. `None` means wait indefinitely (used for
     /// operations that legitimately block the editor's main thread for a long time,
     /// such as builds). Set from the `--timeout` flag for everything else so a
@@ -121,6 +124,7 @@ impl BridgeClient {
             write,
             read,
             token: lock.token.clone(),
+            pid: lock.pid,
             request_timeout: None,
         })
     }
@@ -161,6 +165,36 @@ impl BridgeClient {
         }
     }
 
+    /// Classify a mid-request disconnect. A stack overflow inside the bridge (or any other
+    /// native fault) kills the editor outright, and the bare "connection closed" this used to
+    /// report gave no hint that the process was gone -- the next command then silently relaunched
+    /// the editor, which read as "Unity keeps restarting" instead of "Unity crashed".
+    async fn connection_lost(&self, method: &str) -> UcpError {
+        // The socket dies the instant the editor faults, but Unity's crash handler then takes a
+        // second or two to actually tear the process down -- so an immediate liveness check still
+        // sees the corpse and would misreport a crash as a benign domain reload. Poll instead,
+        // returning as soon as the process is gone.
+        const GRACE: Duration = Duration::from_secs(4);
+        const POLL: Duration = Duration::from_millis(250);
+
+        let deadline = tokio::time::Instant::now() + GRACE;
+        loop {
+            if !crate::discovery::is_process_running(self.pid) {
+                return UcpError::EditorProcessDied {
+                    method: method.to_string(),
+                    pid: self.pid,
+                };
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return UcpError::BridgeConnectionLost {
+                    method: method.to_string(),
+                    pid: self.pid,
+                };
+            }
+            tokio::time::sleep(POLL).await;
+        }
+    }
+
     async fn call_inner(
         &mut self,
         method: &str,
@@ -173,24 +207,28 @@ impl BridgeClient {
 
         tracing::debug!("→ {payload}");
 
-        self.write
-            .send(Message::Text(payload.into()))
-            .await
-            .map_err(|e| UcpError::ConnectionFailed(e.to_string()))?;
+        if let Err(e) = self.write.send(Message::Text(payload.into())).await {
+            tracing::debug!("bridge write failed: {e}");
+            return Err(self.connection_lost(method).await);
+        }
 
         // Read messages until we get the matching response
         loop {
-            let msg = self
-                .read
-                .next()
-                .await
-                .ok_or_else(|| UcpError::ConnectionFailed("Connection closed".into()))?
-                .map_err(|e| UcpError::ConnectionFailed(e.to_string()))?;
+            // A crashed editor severs the socket abruptly (a TCP reset, not a Close frame), so
+            // both the transport error and the clean-EOF cases route through the same classifier.
+            let msg = match self.read.next().await {
+                Some(Ok(msg)) => msg,
+                Some(Err(e)) => {
+                    tracing::debug!("bridge read failed: {e}");
+                    return Err(self.connection_lost(method).await);
+                }
+                None => return Err(self.connection_lost(method).await),
+            };
 
             let text = match msg {
                 Message::Text(t) => t.to_string(),
                 Message::Close(_) => {
-                    return Err(UcpError::ConnectionFailed("Connection closed".into()));
+                    return Err(self.connection_lost(method).await);
                 }
                 _ => continue,
             };

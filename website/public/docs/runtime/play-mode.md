@@ -40,21 +40,33 @@ ucp pause
 
 ### `ucp compile`
 
-Trigger script recompilation. By default, blocks until compilation finishes.
+Trigger script recompilation. By default, blocks until compilation finishes and then reports the
+result: per-assembly compiler errors and warnings are surfaced, and the command **exits non-zero
+when compilation fails** instead of always reporting success. In `--json` mode the breakdown is
+under `data.diagnostics` (with `errorCount`/`warningCount`). This needs a bridge that supports
+`compile/diagnostics`; older bridges fall back to a plain completion report.
 
 ```bash
-# Wait for compilation
+# Wait for compilation; non-zero exit + error list if a build breaks
 ucp compile
 
-# Fire and forget
+# Fire and forget (skips error reporting)
 ucp compile --no-wait
 ```
 
-| Flag        | Description                                        |
-| ----------- | -------------------------------------------------- |
-| `--no-wait` | Return immediately without waiting for compilation |
+| Flag        | Description                                                          |
+| ----------- | ------------------------------------------------------------------- |
+| `--no-wait` | Return immediately without waiting for compilation (no diagnostics) |
 
 Like `ucp play`, `ucp compile` now blocks on unsaved active-scene changes before triggering the reload path.
+
+## Editing during play mode
+
+`ucp object …` edits still apply while the editor is in Play Mode, but they affect only the running
+instance — Unity discards runtime changes when you exit play, and it refuses to save scenes during
+play. Rather than failing the `--save` opaquely, these commands detect Play Mode, skip the doomed
+save, and return a clear warning (in human output and as `playMode: true` / `warning` in `--json`)
+that the change will not persist. Stop play with `ucp stop` first if you need an edit to stick.
 
 ## Example Workflow
 

@@ -5,8 +5,8 @@
 <h1 align="center">Unity Control Protocol</h1>
 
 <p align="center">
-  <strong>Give your AI agent full control of the Unity Editor.</strong><br>
-  Scenes, objects, assets, builds, tests, profiling - everything, from the terminal.
+  <strong>Drive the Unity Editor from the terminal.</strong><br>
+  Scenes, objects, assets, materials, prefabs, builds, tests, profiling - as structured commands.
 </p>
 
 <p align="center">
@@ -24,11 +24,19 @@
 
 ## What is UCP
 
-Unity has no CLI. If an agent wants to move assets, run tests, tweak a material, or trigger a build - it can't. The editor is a GUI-only black box.
+`ucp` is a Rust CLI that talks to a bridge package running inside the Unity Editor over a localhost
+WebSocket. Editor operations that otherwise require clicking through the GUI become commands with
+structured `--json` output, so a script - or an agent - can drive them.
 
-UCP opens that box. It's a Rust CLI that connects to a bridge package running inside the Unity Editor over localhost WebSocket. Every editor operation becomes a structured command with `--json` output. The agent talks to the CLI, the CLI talks to Unity, and Unity does the work.
+```console
+$ ucp scene query 'component=Camera'
+$ ucp transform move --name "Main Camera" --to 0 3 -8 --space world
+$ ucp view isolate --name Player --views front,right
+$ ucp run-tests --mode EditMode --json
+```
 
-No cloud. No accounts. No plugins to configure. Install the bridge, connect, and the agent has the editor.
+It runs entirely on your machine: no cloud service, no Unity account, no license activation, and
+nothing to sign in to. It attaches to an editor you already have open, or launches one itself.
 
 <p align="center">
   <img src="assets/readme/architecture.png" alt="UCP architecture: AI Agent → ucp CLI → Unity Editor" width="820" />
@@ -36,37 +44,54 @@ No cloud. No accounts. No plugins to configure. Install the bridge, connect, and
 
 <br>
 
-## What the agent gets
+## Why not Unity's own CLI
 
-The entire Unity Editor lifecycle - from bootstrapping a project to shipping a build - exposed as structured, automatable operations.
+Unity shipped [its own CLI and `com.unity.pipeline` package](https://docs.unity.com/en-us/unity-cli)
+in July 2026, and it is a good foundation - editor installs, licensing, project scaffolding, CI
+plumbing, an MCP server, and a generic command catalog. UCP is not a replacement for that. It is the
+deep layer, covering surfaces Unity's built-in catalog does not reach:
+
+| | Unity CLI + Pipeline | UCP |
+| --- | --- | --- |
+| Profiler sessions, frames, hierarchy, timeline, callstacks | planned | yes |
+| Frame debugger export | planned | yes |
+| Reference graph (`references find` / `index`) | - | yes |
+| Asset importer settings | - | yes |
+| Materials, shader properties and keywords | - | yes |
+| Prefab status / apply / revert / overrides | - | yes |
+| Spatial queries (raycast, overlap, bounds, ground) | - | yes |
+| Composed capture (isolate, orbit, multi-angle grids) | screenshot | yes |
+| Package management, selective `.unitypackage` import | - | yes |
+| Unity VCS / Plastic | - | yes |
+| Per-operation `Undo` registration | - | yes |
+| Reachable while the project has compile errors | no (Safe Mode blocks packages) | yes (`--dialog-policy auto`) |
+| Minimum Unity version | 6.0 | 2021.3 |
+| Requires a Unity account | yes | no |
+
+The two compose: use Unity's CLI for the editor lifecycle, `ucp` for the work inside it. See
+[docs/project/unity-cli-competitive-analysis.md](docs/project/unity-cli-competitive-analysis.md) for
+the full comparison.
+
+<br>
+
+## What the agent gets
 
 <p align="center">
   <img src="assets/readme/capabilities.png" alt="UCP capabilities across Setup, Author, Runtime, and Ship phases" width="820" />
 </p>
 
-<br>
+A few things that are awkward or impossible without it:
 
-## What this enables
-
-### Autonomous refactoring
-
-An agent can search every reference to a material, rename and relocate hundreds of assets in a single batch, verify nothing broke, recompile, and run the full test suite - without a human touching the editor. Moves go through Unity's `AssetDatabase`, so GUIDs, `.meta` files, and serialized references stay intact.
-
-### End-to-end feature implementation
-
-Write scripts in the workspace, recompile through the bridge, assemble GameObjects and components in the live scene, persist them as prefabs, capture screenshots for visual verification, and run tests - all in one continuous agent loop. The agent never leaves the terminal.
-
-### Automated testing and CI/CD
-
-Connect to the editor, trigger compilation, run edit-mode or play-mode test suites with structured JSON results, configure scripting defines, build the player, and shut down cleanly. Every step is gated and machine-readable.
-
-### Live profiling and debugging
-
-Start a profiler session, enter play mode, capture frame data, analyze hot paths and hierarchy timings, export structured snapshots - all programmatically. The agent can diagnose performance issues without a human opening the profiler window.
-
-### Visual iteration loops
-
-Snapshot the scene hierarchy to discover objects, focus the scene camera, capture screenshots, modify properties, capture again. The agent gets spatial awareness of the Unity scene and can iterate visually.
+- **Refactor safely at scale.** `asset bulk-move` routes through Unity's `AssetDatabase`, so GUIDs,
+  `.meta` files, and serialized references survive; `references find` proves nothing broke.
+- **See the scene.** `view isolate` renders one object auto-framed from its bounds as a multi-angle
+  composite, so a vision model can read 3D shape from a single image. `spatial raycast` / `bounds` /
+  `ground` answer geometric questions that a hierarchy dump cannot.
+- **Close the loop.** Edit scripts, `compile` (which exits non-zero and reports the actual `CS####`
+  errors), assemble objects in the live scene, save a prefab, capture, run tests - without leaving
+  the terminal.
+- **Profile programmatically.** Run a session, then read the hierarchy sorted by self time, with
+  `--fields` to keep the payload small and truncation reported as "showing 50 of 4,312".
 
 <br>
 
@@ -92,31 +117,36 @@ Or download a binary from [GitHub Releases](https://github.com/mflRevan/unity-co
 
 </details>
 
-Then in any Unity project:
+Then, in any Unity project:
 
 ```bash
-ucp install    # add the bridge package
-ucp open       # launch Unity and connect
+ucp install    # add the bridge package to Packages/manifest.json
+ucp open       # launch Unity and wait for the bridge
+ucp doctor     # verify Unity resolution, bridge health, serialization settings
 ```
-
-> `ucp doctor` validates your setup - Unity resolution, bridge health, and project serialization settings.
 
 <br>
 
 ## Agent integration
 
-UCP ships as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin. The skill file (not limited to Claude Code, can be used in other harnesses too) teaches the agent the full control surface, common workflows, and edge-case handling.
+UCP ships as two [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugins. The skill
+files are plain Markdown and work in other harnesses too.
 
 ```bash
-# Local, only for the duration of the session (https://code.claude.com/docs/en/plugins-reference#plugin-caching-and-file-resolution)
-claude --plugin-dir /path/to/unity-control-protocol
-
-# Marketplace, installed for future sessions
 /plugin marketplace add mflRevan/unity-control-protocol
-/plugin install ucp@unity-control-protocol
+
+/plugin install ucp@unity-control-protocol            # one skill covering the whole surface
+/plugin install ucp-surfaces@unity-control-protocol   # 15 focused per-surface skills instead
 ```
 
-Every command supports `--json` - agents can always get structured, parseable output.
+To try it without installing, point Claude Code at a checkout for the session:
+
+```bash
+claude --plugin-dir /path/to/unity-control-protocol
+```
+
+Every command accepts `--json`. The docs site publishes per-page Markdown mirrors and an
+[llms.txt](https://unityctl.dev/llms.txt) for agents that read documentation directly.
 
 <br>
 
@@ -140,7 +170,8 @@ unity-package/com.ucp.bridge/     Unity Editor bridge package
 npm/                              npm distribution wrapper
 docs/                             Markdown documentation source
 website/                          Docs site (unityctl.dev)
-skills/                           AI agent skill files
+skills/                           Omni agent skill
+plugins/ucp-surfaces/             Generated per-surface micro-skills
 scripts/                          Build, validation, and release helpers
 ```
 

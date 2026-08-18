@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.6.0";
+        private const string ProtocolVersion = "0.6.1";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -35,6 +35,13 @@ namespace UCP.Bridge
         private static int s_port;
         private static string s_token;
         private static bool s_running;
+
+        // Handshake payload, captured once on the main thread at startup. `Application.dataPath`
+        // and friends are main-thread-only, which is the sole reason the handshake used to be
+        // queued behind `EditorApplication.update` -- see the socket-thread fast path in Dispatch.
+        private static string s_unityVersion = string.Empty;
+        private static string s_projectName = string.Empty;
+        private static string s_projectPath = string.Empty;
 
         // Main-thread action queue
         private static readonly ConcurrentQueue<Action> s_mainThreadQueue = new();
@@ -71,6 +78,7 @@ namespace UCP.Bridge
 
             try
             {
+                CaptureEditorIdentity();
                 RegisterHandlers();
                 LogsController.SeedHistoryFromConsole();
 
@@ -88,18 +96,31 @@ namespace UCP.Bridge
             }
         }
 
+        /// <summary>
+        /// Read the editor/project identity once, on the main thread, so the handshake handler is
+        /// pure and can run anywhere.
+        /// </summary>
+        private static void CaptureEditorIdentity()
+        {
+            s_unityVersion = Application.unityVersion;
+            s_projectName = Application.productName;
+            s_projectPath = Path.GetDirectoryName(Application.dataPath);
+        }
+
         private static void RegisterHandlers()
         {
             // Handshake
             s_router.Register("handshake", (paramsJson) =>
             {
+                // Touches no Unity API -- see CaptureEditorIdentity. Keep it that way: the
+                // socket-thread fast path in Dispatch depends on it.
                 return new
                 {
                     serverVersion = ProtocolVersion,
                     protocolVersion = ProtocolVersion,
-                    unityVersion = Application.unityVersion,
-                    projectName = Application.productName,
-                    projectPath = Path.GetDirectoryName(Application.dataPath)
+                    unityVersion = s_unityVersion,
+                    projectName = s_projectName,
+                    projectPath = s_projectPath
                 };
             });
 
@@ -393,12 +414,22 @@ namespace UCP.Bridge
                 lock (s_clientLock) { s_logSubscribers.Remove(ws); }
             }
 
-            // Dispatch on main thread
             var capturedId = id;
             var capturedMethod = method;
             var capturedParams = paramsJson;
             var capturedWs = ws;
 
+            // Answer the handshake straight off the socket thread. Everything it returns is
+            // cached, so queueing it only bought a wait for the next `EditorApplication.update`
+            // tick -- roughly 90 ms on an idle editor, paid by *every* CLI command before its
+            // real request could even be dispatched.
+            if (capturedMethod == "handshake")
+            {
+                SendResponse(capturedWs, s_router.Dispatch(capturedMethod, capturedId, capturedParams));
+                return;
+            }
+
+            // Dispatch on main thread
             s_mainThreadQueue.Enqueue(() =>
             {
                 var response = s_router.Dispatch(capturedMethod, capturedId, capturedParams);

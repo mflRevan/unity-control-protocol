@@ -19,7 +19,7 @@ pub enum SettingsAction {
         #[arg(long)]
         key: String,
         /// New value as JSON (e.g. "Acme" for a string, 1920 for a number, true for a bool)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
     },
     /// Get quality settings (also lists the keys accepted by `settings set-quality`)
@@ -30,7 +30,7 @@ pub enum SettingsAction {
         #[arg(long)]
         key: String,
         /// New value as JSON (e.g. 0 for vSyncCount, 2 for antiAliasing)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
     },
     /// Get physics settings (also lists the keys accepted by `settings set-physics`)
@@ -41,7 +41,7 @@ pub enum SettingsAction {
         #[arg(long)]
         key: String,
         /// New value as JSON (e.g. [0,-9.81,0] for gravity, 2.0 for bounceThreshold)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
     },
     /// Get lighting/render settings (also lists the keys accepted by `settings set-lighting`)
@@ -52,7 +52,7 @@ pub enum SettingsAction {
         #[arg(long)]
         key: String,
         /// New value as JSON (e.g. true for fog, [0.2,0.2,0.2,1] for an ambient color)
-        #[arg(long)]
+        #[arg(long, allow_hyphen_values = true)]
         value: String,
         /// Save the active scene after applying the change
         #[arg(long)]
@@ -166,9 +166,13 @@ pub async fn run(action: SettingsAction, ctx: &Context) -> anyhow::Result<()> {
 
     client.close().await;
 
-    let lifecycle =
-        super::await_unity_lifecycle(&project, Some(&lock), settings_lifecycle_policy(&action), ctx)
-            .await?;
+    let lifecycle = super::await_unity_lifecycle(
+        &project,
+        Some(&lock),
+        settings_lifecycle_policy(&action),
+        ctx,
+    )
+    .await?;
 
     result = super::attach_lifecycle_log_status(result, &lifecycle);
 

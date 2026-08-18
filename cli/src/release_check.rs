@@ -138,8 +138,20 @@ struct LatestReleaseResponse {
     html_url: Option<String>,
 }
 
+/// Print the "update available" notice from cache only, and refresh the cache in the background.
+///
+/// This runs before every non-JSON command. Fetching synchronously meant a cold or expired cache
+/// added a full network round trip to the command the user actually asked for -- for a courtesy
+/// notice. Now a stale cache costs nothing: the command proceeds immediately and the refreshed
+/// result is picked up by the next invocation.
 pub async fn maybe_print_update_notice() {
-    let Ok(Some(status)) = check_for_update().await else {
+    let cached = cached_status();
+
+    if cached.is_none() {
+        spawn_background_refresh();
+    }
+
+    let Some(status) = cached else {
         return;
     };
 
@@ -154,6 +166,26 @@ pub async fn maybe_print_update_notice() {
             output::print_info(&line);
         }
     }
+}
+
+/// Read the update status from a fresh cache entry, never touching the network.
+fn cached_status() -> Option<ReleaseStatus> {
+    let cache_path = cache_path().ok()?;
+    let cache = read_fresh_cache(&cache_path, cache_ttl()).ok()??;
+    build_status(cache).ok()?
+}
+
+/// Refresh the release cache without blocking the current command. The task is detached: if the
+/// command finishes first the fetch is simply dropped, and the next invocation tries again.
+fn spawn_background_refresh() {
+    tokio::spawn(async {
+        let Ok(cache_path) = cache_path() else {
+            return;
+        };
+        if let Ok(fetched) = fetch_latest_release().await {
+            let _ = write_cache(&cache_path, &fetched);
+        }
+    });
 }
 
 pub async fn check_for_update() -> anyhow::Result<Option<ReleaseStatus>> {

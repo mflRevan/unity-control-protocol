@@ -84,6 +84,32 @@ pub async fn ensure_editor_running(
             }
 
             if Instant::now() >= wait_deadline {
+                // Before blaming a slow shutdown, check the far more common cause: the editor is
+                // in Safe Mode (or otherwise failed to load packages), so the bridge assembly
+                // never loaded and never will for this session.
+                let diagnosis = crate::editor_diagnosis::diagnose(project);
+                if !diagnosis.is_empty() {
+                    let mut message = format!(
+                        "Unity editor process {pid} for {} is running but its bridge is not loaded.",
+                        project.display()
+                    );
+                    for line in diagnosis.explain() {
+                        message.push_str(
+                            "
+  ",
+                        );
+                        message.push_str(&line);
+                    }
+                    for detail in diagnosis.details() {
+                        message.push_str(
+                            "
+    ",
+                        );
+                        message.push_str(&detail);
+                    }
+                    anyhow::bail!(message);
+                }
+
                 anyhow::bail!(
                     "Unity editor process {pid} for {} is still running without a live bridge. It is likely still closing or stuck. Wait a moment and retry, or run `ucp editor close --force`.",
                     project.display()
@@ -117,6 +143,23 @@ pub async fn start_editor(
         if !ctx.json {
             output::print_warn(warning);
         }
+    }
+
+    // Final guard against launching a second editor on a project that already has one.
+    // `ensure_editor_running` checks earlier, but a close/open race (or two concurrent
+    // `ucp open` calls) can leave a window where the existing process reappears between
+    // that check and this spawn. A second Unity instance on the same project locks
+    // Library/ScriptAssemblies and silently blocks recompilation, so re-scan here and
+    // adopt the existing instance instead of starting a rival one.
+    if let Some(existing_pid) = discovery::unity_editor_pid_for_project(project) {
+        if !ctx.json {
+            output::print_warn(&format!(
+                "Unity editor (PID {existing_pid}) is already running for this project; adopting it instead of launching a second instance."
+            ));
+        }
+        let outcome = already_running_outcome(project, existing_pid);
+        persist_session(project, &outcome)?;
+        return Ok(outcome);
     }
 
     if !ctx.json {
@@ -480,7 +523,13 @@ fn unity_install_roots() -> Vec<PathBuf> {
         if let Some(home) = std::env::var_os("HOME") {
             let home = PathBuf::from(home);
             roots.push(home.join("Unity").join("Hub").join("Editor"));
-            roots.push(home.join(".local").join("share").join("Unity").join("Hub").join("Editor"));
+            roots.push(
+                home.join(".local")
+                    .join("share")
+                    .join("Unity")
+                    .join("Hub")
+                    .join("Editor"),
+            );
             roots.push(home.join(".unityhub").join("Editor"));
         }
         roots.push(PathBuf::from("/opt/Unity").join("Hub").join("Editor"));
@@ -517,7 +566,11 @@ fn hub_projects_path() -> Option<PathBuf> {
     #[cfg(windows)]
     {
         let app_data = std::env::var_os("APPDATA")?;
-        Some(PathBuf::from(app_data).join("UnityHub").join("projects-v1.json"))
+        Some(
+            PathBuf::from(app_data)
+                .join("UnityHub")
+                .join("projects-v1.json"),
+        )
     }
 
     #[cfg(unix)]

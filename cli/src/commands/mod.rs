@@ -229,9 +229,11 @@ pub enum Command {
     Stop,
     /// Toggle pause
     Pause,
-    /// Trigger recompilation (blocks until done by default)
+    /// Trigger recompilation (blocks until done by default). Reports per-assembly compiler
+    /// errors/warnings and exits non-zero on a failed compile (needs a bridge that supports
+    /// `compile/diagnostics`; older bridges still report plain completion).
     Compile {
-        /// Return immediately without waiting for compilation to finish
+        /// Return immediately without waiting for compilation to finish (skips error reporting)
         #[arg(long)]
         no_wait: bool,
     },
@@ -427,7 +429,10 @@ pub struct TargetArgs {
 
 impl TargetArgs {
     /// Insert whichever target field is set into an existing JSON object.
-    pub fn apply(&self, obj: &mut serde_json::Map<String, serde_json::Value>) -> anyhow::Result<()> {
+    pub fn apply(
+        &self,
+        obj: &mut serde_json::Map<String, serde_json::Value>,
+    ) -> anyhow::Result<()> {
         if let Some(id) = self.id {
             obj.insert("instanceId".into(), serde_json::json!(id));
         } else if let Some(p) = &self.path {
@@ -506,6 +511,26 @@ pub fn request_timeout(ctx: &Context) -> Option<Duration> {
 }
 
 pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile, BridgeClient)> {
+    let project = resolve_project_path(ctx)?;
+    let _ = bridge_package::apply_update_policy(&project, ctx, true).await?;
+
+    // Fast path: the overwhelmingly common case is "an editor is already up and its bridge
+    // answers". Going through `ensure_bridge_ready` for that case costs a full machine-wide
+    // process scan plus a throwaway connect/handshake that is immediately closed and redone --
+    // together the larger half of a simple command's wall-clock. If the lock file names a live
+    // pid and the handshake succeeds, that *is* the readiness check, so keep the connection.
+    if let Ok(lock) = discovery::read_lock_file(&project) {
+        if let Ok(mut client) = BridgeClient::connect(&lock).await {
+            client.set_request_timeout(request_timeout(ctx));
+            if client.handshake().await.is_ok() {
+                return Ok((project, lock, client));
+            }
+            client.close().await;
+        }
+    }
+
+    // Slow path: no lock file, a stale one, or a bridge that would not handshake. Fall back to
+    // the full lifecycle (launch/adopt the editor, dismiss startup dialogs, wait for the bridge).
     let (project, lock) = ensure_bridge_ready(ctx).await?;
 
     if let Ok(mut client) = BridgeClient::connect(&lock).await {
@@ -738,6 +763,23 @@ pub async fn save_active_scene(
         )),
     }
 }
+
+/// Whether the editor is currently in Play Mode. Returns `false` on any error (older
+/// bridges, transient failures) so callers degrade to normal edit-mode behavior.
+pub async fn editor_is_playing(client: &mut BridgeClient) -> bool {
+    match client.call("play/status", serde_json::json!({})).await {
+        Ok(value) => value
+            .get("playing")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+/// Warning surfaced when a scene/object edit is applied while the editor is in Play Mode.
+/// Unity discards runtime edits on exit and refuses to save the scene during play, so the
+/// change is non-persistent — callers also skip the `--save` step when this applies.
+pub const PLAY_MODE_NONPERSISTENT_WARNING: &str = "Editor is in Play Mode: this change applies to the running instance only and will NOT persist after you exit Play Mode. The scene was not saved (Unity does not allow saving scenes during play).";
 
 pub fn map_bridge_method_error(err: UcpError, method: &str, capability: &str) -> anyhow::Error {
     match err {

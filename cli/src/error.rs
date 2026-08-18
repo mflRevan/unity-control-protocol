@@ -25,6 +25,21 @@ pub enum UcpError {
     )]
     RequestTimeout { method: String, secs: u64 },
 
+    #[error(
+        "The Unity editor (pid {pid}) exited while '{method}' was running -- the bridge \
+         connection dropped mid-command. This almost always means the editor crashed. Check \
+         Unity's Editor.log and its crash dumps before re-running; the next ucp command will \
+         relaunch the editor."
+    )]
+    EditorProcessDied { method: String, pid: u32 },
+
+    #[error(
+        "The bridge closed the connection during '{method}' but the Unity editor (pid {pid}) is \
+         still running -- the bridge was most likely restarted by a domain reload. Retry the \
+         command."
+    )]
+    BridgeConnectionLost { method: String, pid: u32 },
+
     #[error("Protocol version mismatch -- CLI: {cli}, Bridge: {bridge}")]
     VersionMismatch { cli: String, bridge: String },
 

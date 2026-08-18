@@ -12,29 +12,35 @@ namespace UCP.Bridge
             router.Register("exec/run", HandleRun);
         }
 
-        private static List<IUCPScript> DiscoverScripts()
+        /// <summary>
+        /// Implementing types, cached for the lifetime of the app domain. The scan itself is the
+        /// expensive part -- `GetTypes()` over every loaded assembly -- and its result cannot go
+        /// stale without a domain reload, which resets this static anyway.
+        /// </summary>
+        private static Type[] s_scriptTypes;
+
+        private static Type[] DiscoverScriptTypes()
         {
-            var scripts = new List<IUCPScript>();
+            if (s_scriptTypes != null) return s_scriptTypes;
+
             var interfaceType = typeof(IUCPScript);
+            var bridgeAssemblyName = interfaceType.Assembly.GetName().Name;
+            var types = new List<Type>();
 
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
+                // A type can only implement IUCPScript if its assembly references the one that
+                // declares it. Checking cheap reference metadata first avoids materialising the
+                // full type list of every framework and Unity assembly in the domain.
+                if (assembly != interfaceType.Assembly && !ReferencesAssembly(assembly, bridgeAssemblyName))
+                    continue;
+
                 try
                 {
                     foreach (var type in assembly.GetTypes())
                     {
                         if (interfaceType.IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface)
-                        {
-                            try
-                            {
-                                var instance = (IUCPScript)Activator.CreateInstance(type);
-                                scripts.Add(instance);
-                            }
-                            catch (Exception ex)
-                            {
-                                Debug.LogWarning($"[UCP] Failed to instantiate script {type.Name}: {ex.Message}");
-                            }
-                        }
+                            types.Add(type);
                     }
                 }
                 catch (System.Reflection.ReflectionTypeLoadException)
@@ -43,7 +49,69 @@ namespace UCP.Bridge
                 }
             }
 
+            s_scriptTypes = types.ToArray();
+            return s_scriptTypes;
+        }
+
+        private static bool ReferencesAssembly(System.Reflection.Assembly assembly, string name)
+        {
+            try
+            {
+                foreach (var reference in assembly.GetReferencedAssemblies())
+                {
+                    if (string.Equals(reference.Name, name, StringComparison.Ordinal)) return true;
+                }
+            }
+            catch
+            {
+                // Dynamic assemblies can refuse to report references; treat them as non-matching.
+            }
+
+            return false;
+        }
+
+        private static IUCPScript Instantiate(Type type)
+        {
+            try
+            {
+                return (IUCPScript)Activator.CreateInstance(type);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[UCP] Failed to instantiate script {type.Name}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static List<IUCPScript> DiscoverScripts()
+        {
+            var scripts = new List<IUCPScript>();
+            foreach (var type in DiscoverScriptTypes())
+            {
+                var instance = Instantiate(type);
+                if (instance != null) scripts.Add(instance);
+            }
+
             return scripts;
+        }
+
+        /// <summary>
+        /// Resolve one script by name, stopping at the first match.
+        /// `Name` is an instance member, so candidates must be constructed to be identified --
+        /// but running *every* script's constructor to invoke one of them is a side effect nobody
+        /// asked for, so stop as soon as the target is found.
+        /// </summary>
+        private static IUCPScript FindScript(string name)
+        {
+            foreach (var type in DiscoverScriptTypes())
+            {
+                var instance = Instantiate(type);
+                if (instance == null) continue;
+                if (string.Equals(instance.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return instance;
+            }
+
+            return null;
         }
 
         private static object HandleList(string paramsJson)
@@ -78,16 +146,7 @@ namespace UCP.Bridge
             if (p.TryGetValue("params", out var paramsObj) && paramsObj != null)
                 scriptParams = MiniJson.Serialize(paramsObj);
 
-            var scripts = DiscoverScripts();
-            IUCPScript target = null;
-            foreach (var s in scripts)
-            {
-                if (string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    target = s;
-                    break;
-                }
-            }
+            var target = FindScript(name);
 
             if (target == null)
                 throw new ArgumentException($"Script not found: {name}. Use exec/list to see available scripts.");
