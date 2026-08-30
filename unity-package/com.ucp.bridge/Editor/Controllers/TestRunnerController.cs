@@ -54,7 +54,10 @@ namespace UCP.Bridge
 
             if (!string.IsNullOrEmpty(filter))
             {
-                executionSettings.filters[0].testNames = new[] { filter };
+                // groupNames is regex-matched against each test's full name, so a bare class or
+                // method name selects what a caller expects. testNames requires an exact
+                // fully-qualified match, which silently selected nothing for "ControllerSmokeTests".
+                executionSettings.filters[0].groupNames = new[] { filter };
             }
 
             var shouldWaitForPlayModeExit =
@@ -207,6 +210,12 @@ namespace UCP.Bridge
                         CollectLeafResults(child);
                     return;
                 }
+
+                // A filter that matches nothing still yields a root suite -- childless, and named
+                // after the project. Counting it as a leaf reported "1 passed" for a run that
+                // executed no tests, so a typo'd filter looked like a green suite.
+                if (result.Test != null && result.Test.IsSuite)
+                    return;
 
                 string status;
                 switch (result.TestStatus)

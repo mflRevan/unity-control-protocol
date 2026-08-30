@@ -199,6 +199,19 @@ The Unity package should continue to emphasize:
 
 The bridge should stay pragmatic and reliable. It should not become harder to evolve than the editor workflows it is meant to automate.
 
+### Screen Recording
+
+Screen recording is a first-class visual-observation surface beside screenshots and composed views.
+The Rust `record` command owns capture/start/stop/status/arm/signal orchestration, while
+`RecordingController` owns camera rendering, scheduling, and Unity's native media encoder. Capture
+must remain editor-only and must not inject GameObjects, components, or user scripts into a scene.
+
+Agent-facing defaults prioritize small, rapidly decoded clips: 960px longest edge, preserved source
+aspect ratio, 15fps, 2Mbps, silent video, and a bounded duration. Final files are published by an
+atomic partial-file move. Detached recordings have a safety timeout; event arms survive domain
+reloads through `SessionState`; active encoders finalize before reload; Game and Scene views share
+the same protocol and result shape.
+
 ### Packaging And Metadata
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.

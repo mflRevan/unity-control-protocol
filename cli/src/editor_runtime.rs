@@ -311,6 +311,22 @@ pub async fn close_editor(
     })
 }
 
+/// Wait for `pid` to leave the process table, polling until `timeout` elapses.
+///
+/// `close_editor` returns as soon as its own budget is spent, which on a large project can be
+/// before Unity has finished writing its caches. Callers that immediately re-open the editor need
+/// to know the old process is really gone, otherwise they observe it and skip their own work.
+pub async fn wait_for_process_exit(pid: u32, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if !discovery::is_process_running(pid) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    !discovery::is_process_running(pid)
+}
+
 pub fn status(project: &Path, ctx: &commands::Context) -> EditorStatus {
     let process = discovery::unity_editor_pid_for_project(project).and_then(|pid| {
         discovery::list_running_unity_editors()

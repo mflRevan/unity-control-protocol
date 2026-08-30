@@ -1,5 +1,125 @@
 # Changelog
 
+## [0.6.2] - 2026-08-31
+
+### Added
+
+- Added first-class, CLI-friendly screen recording through
+  `ucp record capture|start|stop|status|arm|signal`. It records either the Game or Scene view
+  without injecting GameObjects, components, or scripts into the scene. `capture` blocks until the
+  finalized artifact is ready, while `start`/`stop` supports longer same-domain command sequences.
+- Added event-driven recording with `play-enter`, `play-exit`, `log:<regex>`, and
+  `signal:<name>` triggers. Armed play triggers persist through Unity domain reloads via
+  `SessionState`; named signals make workflows such as "when X happens, record five seconds"
+  directly scriptable.
+- Added `ucp exec run --record <path>` with Game/Scene selection, longest-edge resolution, FPS,
+  bitrate, overwrite, and lead/tail context controls so an `IUCPScript` invocation and its visible
+  result can be captured as one artifact.
+- Added native H.264/MP4 output on Windows and macOS and VP8/WebM output on Linux, with explicit
+  format selection, configurable width/height, FPS, bitrate, duration, overwrite behavior, and a
+  platform-aware `auto` format.
+- Added `ucp record --slowdown <factor>`, which stretches playback without dropping or duplicating a
+  single captured frame. Video-understanding models do not watch a file, they sample it, typically at
+  about one frame per second regardless of the file's own frame rate. A six-second clip therefore
+  reaches the model as roughly six frames, and anything between those samples is invisible to it:
+  foot sliding, a camera settling, a one-frame animation pop. Raising `--fps` does not help, because
+  the sampler ignores it. `--slowdown` divides only the container's declared playback rate, so the
+  same real-time frames are spaced further apart and a one-frame-per-second sampler receives roughly
+  `factor` samples per second of gameplay instead of one. Nothing is re-encoded and no frames are
+  interpolated. Measured directly: a clip captured at 30fps with `--slowdown 6` reports `5/1` as its
+  frame rate and a six-times longer duration for the same frames. This was found by testing a real
+  clip against a multimodal model, which reported "no defects observed" on footage containing an
+  obvious locomotion bug until the clip was stretched.
+
+
+### Changed
+
+- Documented that `ucp record --view game` records `Camera.main` -- the camera tagged `MainCamera` --
+  and not the Game view's composited output. A project that renders through more than one enabled
+  camera (an overlay UI camera, a split-screen rig, a temporary framing camera) will therefore record
+  only one of them, and a higher-depth camera that visibly wins in the Game view is ignored. Adding a
+  camera and raising its depth is not sufficient to change what gets recorded; the recording follows
+  the `MainCamera` tag. `--view scene` records the Scene view camera instead, which is independent of
+  gameplay and is the supported way to capture a fixed vantage point while the game camera keeps
+  following the player.
+
+- Added `record` to the generated CLI command palette and documented the canonical blocking agent
+  workflow directly in `ucp record --help`. The parent help distinguishes `capture`, detached
+  `start`/`stop`, and event-driven `arm` after an agent eval showed that models otherwise guessed
+  Playwright-style flags such as `start --length --game-view`.
+- Updated the omni skill, `ucp-view` micro-skill, runtime media documentation, README, project
+  architecture reference, website mirrors, and machine-readable agent docs for recording workflows.
+- Documented the encoder lifecycle boundary: an active native encoder finalizes before an assembly
+  or domain reload; `arm --on play-enter|play-exit` is the supported way to capture across those
+  transitions.
+
+### Fixed
+
+- Fixed `ucp object get-property` returning a .NET type name instead of the value for every
+  serialized composite field. `Damping` on a Cinemachine component reported
+  ``"type": "List`1", "value": "System.Collections.Generic.List`1[System.Object]"`` rather than
+  `"type": "Vector3", "value": [0.1, 0.25, 0.3]`. The read path resolves a property through
+  `SerializedObject.FindProperty` first, which already returns JSON-shaped values, and the result
+  was then converted a second time; the second pass matched no case and fell through to
+  `value.ToString()`. This affected Vector2/3/4, Quaternion, Color, Rect, Bounds and object
+  references on any component, and reported the wrong `type` for floats. `Transform.position` was
+  unaffected only because its serialized name is `m_LocalPosition`, so it took the reflection path
+  instead. Agents reading a component property back -- to check a value before changing it, or to
+  verify a change landed -- received an unusable string.
+- Fixed `ucp run-tests --filter` reporting a pass for a run that executed nothing. Unity's
+  `Filter.testNames` matches only exact fully-qualified names, so a class or method name such as
+  `ControllerSmokeTests` selected no tests; the resulting childless root suite was then counted as
+  one passed test, and the run reported `All 1 tests passed` with the "test" named after the
+  project. A mistyped filter therefore looked green, and the release flow's own targeted gate
+  (`run-tests --mode edit --filter ControllerSmokeTests`) had been validating nothing. Filters are
+  now matched as a regular expression against each test's full name, so partial and fully-qualified
+  names both work; empty suites are no longer counted as tests; and a filter that matches nothing is
+  an explicit error with a non-zero exit instead of a pass. The same filter now runs 48 tests.
+- Fixed `ucp editor restart` silently doing nothing when the editor took longer to close than the
+  close step's own budget. `close_editor` returned `exited: false` with the process still winding
+  down, and the reopen then observed the old process and reported "Unity editor already running",
+  so the editor was never actually restarted. Restart now waits for the previous process to leave
+  the process table before reopening, and fails with an explicit message naming the pid if it does
+  not exit, instead of reporting success.
+- Fixed `ucp play` reporting `The bridge closed the connection during 'play/status'` and advising a
+  retry even though play mode had been entered successfully. Entering play mode triggers a domain
+  reload that tears the bridge down mid-poll, which is the expected path rather than a failure. The
+  confirmation loop now tolerates transient connection loss until its timeout and still exits early
+  if the editor process itself has died.
+
+### Performance
+
+- Recording renders directly from the selected editor camera into a hidden reusable
+  `RenderTexture`, reads into one reusable `Texture2D`, and feeds Unity's native `MediaEncoder`.
+  There are no per-frame scene allocations or injected scene objects, and the scheduler reports
+  captured and dropped frame counts.
+- Agent-oriented defaults use a silent, aspect-preserving 960px longest edge, 15fps, and 2Mbps to
+  keep capture and multimodal decoding costs bounded while remaining configurable up to 4096px and
+  60fps.
+
+### Reliability
+
+- Recordings are written to a sibling `.partial` file and only published at the requested path
+  after encoder disposal. Extensionless paths receive the selected container suffix, mismatched
+  extensions are rejected, overwrite is explicit, and failed startup/encoding cleans temporary
+  files and native resources.
+- Added detached-recording safety limits, armed-trigger wait timeouts, bounded regular-expression
+  evaluation for log triggers, stop-based arm cancellation, domain-reload shutdown handling, and
+  structured status for state, path, dimensions, codec, duration, frames, dropped frames, size, and
+  errors.
+
+### Validation
+
+- Added Rust parser coverage and Unity edit-mode smoke coverage for RPC registration, status,
+  aspect-preserving even dimensions, signal matching, and armed-trigger cancellation. Live stress
+  validation covered Game and Scene views, exec wrapping, signal/log triggers, play enter/exit,
+  extensionless output, atomic cleanup, and zero-drop H.264/YUV420p files inspected with FFprobe.
+- Validated agent-driven recording with a local Qwen3.6-35B-A3B llama.cpp/OpenCode workflow. The
+  eval confirmed that an agent can discover, capture, fetch, and submit finalized videos for native
+  multimodal inspection; it also recorded the prompt-quality pitfall that motion graders should
+  assess translation, rotation, and bobbing separately rather than ask only whether an object is
+  "moving or stationary".
+
 ## [0.6.1] - 2026-08-18
 
 ### Performance

@@ -1,4 +1,4 @@
-# Screenshots & Logs
+# Screenshots, Recordings & Logs
 
 Capture visual output and inspect Unity console logs.
 
@@ -38,6 +38,81 @@ ucp screenshot
 | `--width <px>`         | Width in pixels (default: 1920)  |
 | `--height <px>`        | Height in pixels (default: 1080) |
 | `-o, --output <path>`  | Output file path                 |
+
+### `ucp record`
+
+Record a lightweight, silent Game or Scene view video without adding objects or scripts to the
+scene. The defaults are tuned for agent vision: 960px on the longest edge, source aspect ratio
+preserved, 15fps, 2Mbps, and H.264/MP4 on Windows and macOS or VP8/WebM on Linux.
+
+```bash
+# One bounded clip; waits for the finalized file
+ucp record capture --duration 5 --view game -o playtest.mp4
+
+# Surround any CLI/scripted sequence
+ucp record start --view scene -o sequence.mp4
+ucp transform move --name Player --to 0 1 4
+ucp scene focus --name Player
+ucp record stop
+
+# Record an IUCPScript call with lead/tail context
+ucp exec run SetupScene --record setup.mp4 --record-view scene
+
+# Arm an event-triggered five-second clip
+ucp record arm --on play-enter --duration 5 -o play.mp4
+ucp record arm --on 'log:Boss spawned' --duration 5 -o boss.mp4
+ucp record arm --on signal:impact --duration 5 -o impact.mp4
+ucp record signal impact
+```
+
+`record capture` is the simplest choice for agents because it does not return until the atomic
+`.partial` file has been finalized. `start` is detached and has a 60-second safety limit by default;
+use `--max-duration 0` only when the caller guarantees `record stop`. `arm` also defaults to a
+60-second trigger wait; use `--wait-timeout 0` to wait indefinitely. `status` reports the active,
+armed, completed, or failed state plus path, dimensions, frames, dropped frames, duration, codec,
+and file size. Use `ucp record <command> --help` for resolution, FPS, bitrate, format, overwrite,
+and trigger options.
+
+An active encoder is finalized before an assembly/domain reload because Unity cannot preserve its
+native encoder across that boundary. Use `arm --on play-enter` or `arm --on play-exit` when the
+event itself causes a reload; use detached `start`/`stop` for sequences that stay in the same domain.
+
+Both dimensions may be supplied for a fixed canvas; UCP letterboxes as needed instead of stretching
+the source. Supplying one dimension derives the other from the live view. Relative output paths are
+resolved from the Unity project root, and extensionless paths receive the selected container suffix.
+
+#### Recording for a model to watch: `--slowdown`
+
+Video-understanding models do not watch a file, they sample it, typically at about one frame per
+second regardless of the file's own frame rate. A six-second clip therefore reaches the model as
+roughly six frames, and whatever happens between those samples is invisible: foot sliding, a camera
+settling, a one-frame animation pop, a physics jitter. Raising `--fps` does not help, because the
+sampler ignores it.
+
+`--slowdown <factor>` raises effective temporal resolution instead. Frames are still captured at
+`--fps` in real time; only the container's declared playback rate is divided by the factor, so the
+same frames are spaced further apart. Nothing is re-encoded and no frames are interpolated, so the
+model sees exactly what was rendered.
+
+```bash
+# One second of gameplay becomes six seconds of file: ~6 samples per gameplay second, not ~1
+ucp record capture --duration 3 --fps 30 --slowdown 6 -o analysis.mp4
+```
+
+Use it whenever an agent has to judge motion -- contact, timing, smoothness, settling. Leave it at
+the default of `1` for clips a human will watch, which are wrong at any other value. `record status`
+reports the applied `slowdown` and the resulting `playbackFps`.
+
+#### Which camera gets recorded
+
+`--view game` records `Camera.main`, the camera tagged `MainCamera` -- not the Game view's composited
+output. A project that renders through more than one enabled camera records only the tagged one, and
+raising another camera's depth does not change the selection even though that camera visibly wins in
+the Game view.
+
+`--view scene` records the Scene view camera, which is independent of gameplay. That is the supported
+way to hold a fixed vantage point while the game camera keeps following the player -- useful for
+before/after comparisons, where a following camera hides exactly the difference being measured.
 
 ### `ucp logs`
 

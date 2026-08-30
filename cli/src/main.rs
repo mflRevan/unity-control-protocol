@@ -543,6 +543,116 @@ mod tests {
     }
 
     #[test]
+    fn parses_record_capture_command() {
+        let cli = Cli::try_parse_from([
+            "ucp",
+            "record",
+            "capture",
+            "--view",
+            "scene",
+            "--duration",
+            "3.5",
+            "--max-edge",
+            "720",
+            "--fps",
+            "12",
+            "--output",
+            "clip.webm",
+            "--format",
+            "webm",
+        ])
+        .expect("record capture command should parse");
+
+        match cli.command {
+            commands::Command::Record {
+                action:
+                    commands::record::RecordAction::Capture {
+                        settings,
+                        duration,
+                        output,
+                    },
+            } => {
+                assert_eq!(settings.view, "scene");
+                assert_eq!(settings.max_edge, 720);
+                assert_eq!(settings.fps, 12);
+                assert_eq!(settings.format, "webm");
+                assert_eq!(duration, 3.5);
+                assert_eq!(output.as_deref(), Some("clip.webm"));
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn parses_record_arm_and_exec_recording_commands() {
+        let armed = Cli::try_parse_from([
+            "ucp",
+            "record",
+            "arm",
+            "--on",
+            "signal:boss-spawned",
+            "--duration",
+            "5",
+        ])
+        .expect("record arm command should parse");
+        assert!(matches!(
+            armed.command,
+            commands::Command::Record {
+                action: commands::record::RecordAction::Arm { .. }
+            }
+        ));
+
+        let exec = Cli::try_parse_from([
+            "ucp",
+            "exec",
+            "run",
+            "RunDemo",
+            "--record",
+            "demo.mp4",
+            "--record-view",
+            "game",
+            "--record-bitrate-kbps",
+            "1500",
+            "--record-overwrite",
+        ])
+        .expect("exec recording flags should parse");
+        match exec.command {
+            commands::Command::Exec {
+                action:
+                    commands::ExecAction::Run {
+                        record,
+                        record_view,
+                        record_bitrate_kbps,
+                        record_overwrite,
+                        ..
+                    },
+            } => {
+                assert_eq!(record.as_deref(), Some("demo.mp4"));
+                assert_eq!(record_view, "game");
+                assert_eq!(record_bitrate_kbps, 1500);
+                assert!(record_overwrite);
+            }
+            _ => panic!("unexpected command variant"),
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_record_trigger() {
+        assert!(
+            Cli::try_parse_from([
+                "ucp",
+                "record",
+                "arm",
+                "--on",
+                "anything",
+                "--duration",
+                "5",
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
     fn parses_query_inspect_and_script_doctor_commands() {
         let scene = Cli::try_parse_from([
             "ucp",

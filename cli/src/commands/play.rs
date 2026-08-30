@@ -1,3 +1,4 @@
+use crate::error::UcpError;
 use crate::output;
 use serde_json::Value;
 use tokio::time::{Duration, Instant, sleep};
@@ -75,9 +76,26 @@ async fn confirm_play_mode_entry(ctx: &Context, request_result: Value) -> anyhow
     let mut observed_transition = false;
 
     loop {
-        let (_, _, mut client) = super::connect_client(ctx).await?;
-        let status = client.call("play/status", serde_json::json!({})).await?;
-        client.close().await;
+        // Entering play mode triggers a domain reload, which tears the bridge down in the middle
+        // of this poll. A dropped connection here is the expected path, not a failure -- surfacing
+        // it told the user to retry a command that had already taken effect. Keep polling until
+        // the timeout, and only give up early if the editor process itself is gone.
+        let status = match poll_play_status(ctx).await {
+            Ok(status) => status,
+            Err(err) => {
+                if matches!(
+                    err.downcast_ref::<UcpError>(),
+                    Some(UcpError::EditorProcessDied { .. })
+                ) {
+                    return Err(err);
+                }
+                if started.elapsed() >= timeout {
+                    anyhow::bail!("Timed out waiting for Unity to enter play mode");
+                }
+                sleep(Duration::from_millis(200)).await;
+                continue;
+            }
+        };
 
         if status
             .get("playing")
@@ -105,4 +123,11 @@ async fn confirm_play_mode_entry(ctx: &Context, request_result: Value) -> anyhow
 
         sleep(Duration::from_millis(200)).await;
     }
+}
+
+async fn poll_play_status(ctx: &Context) -> anyhow::Result<Value> {
+    let (_, _, mut client) = super::connect_client(ctx).await?;
+    let status = client.call("play/status", serde_json::json!({})).await;
+    client.close().await;
+    Ok(status?)
 }

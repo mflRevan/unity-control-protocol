@@ -86,6 +86,21 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
+    // A run that executed nothing must never read as a pass. This is the failure mode a typo'd
+    // filter produces, and it silently green-lights whatever the filter was meant to verify.
+    if total == 0 {
+        if let Some(f) = &filter {
+            return Err(TestRunFailure {
+                message: format!(
+                    "No tests matched filter '{f}' -- nothing ran. The filter is a regular expression matched against each test's full name; run with no filter to see what is available."
+                ),
+                result,
+            }
+            .into());
+        }
+        output::print_warn(&format!("No {mode}-mode tests were found to run"));
+    }
+
     if ctx.json {
         if failed == 0 {
             output::print_json(&output::success_json(result));
@@ -124,7 +139,11 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
             if st == "failed" {
                 let name = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                 let msg = t.get("message").and_then(|v| v.as_str()).unwrap_or("");
-                let icon = if output::supports_unicode() { "✖" } else { "x" };
+                let icon = if output::supports_unicode() {
+                    "✖"
+                } else {
+                    "x"
+                };
                 eprintln!("  {icon} {name}");
                 if !msg.is_empty() {
                     eprintln!("    {msg}");

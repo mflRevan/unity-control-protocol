@@ -77,14 +77,14 @@ namespace UCP.Bridge
             var comp = FindComponent(go, cObj.ToString());
             string propName = propObj.ToString();
 
-            var value = GetPropertyValue(comp, propName);
+            var value = GetPropertyValue(comp, propName, out var typeName);
             return new Dictionary<string, object>
             {
                 ["instanceId"] = instanceId,
                 ["component"] = cObj.ToString(),
                 ["property"] = propName,
-                ["value"] = ConvertToJson(value),
-                ["type"] = value != null ? value.GetType().Name : "null"
+                ["value"] = value,
+                ["type"] = typeName
             };
         }
 
@@ -277,7 +277,7 @@ namespace UCP.Bridge
             }
         }
 
-        private static object GetPropertyValue(Component comp, string propertyName)
+        private static object GetPropertyValue(Component comp, string propertyName, out string typeName)
         {
             var so = new SerializedObject(comp);
             try
@@ -285,22 +285,35 @@ namespace UCP.Bridge
                 so.Update();
                 var prop = so.FindProperty(propertyName);
                 if (prop != null)
+                {
+                    // Already JSON-shaped -- reporting its type from the SerializedProperty keeps
+                    // `get-property` and `get-fields` describing the same field the same way.
+                    typeName = prop.propertyType.ToString();
                     return SerializedPropertyToValue(prop);
+                }
             }
             finally
             {
                 so.Dispose();
             }
 
-            // Fallback to reflection
+            // Fallback to reflection for names Unity does not serialize (e.g. Transform.position).
             var type = comp.GetType();
             var fi = type.GetField(propertyName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (fi != null)
-                return fi.GetValue(comp);
+            {
+                var raw = fi.GetValue(comp);
+                typeName = raw != null ? raw.GetType().Name : fi.FieldType.Name;
+                return ConvertToJson(raw);
+            }
 
             var pi = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
             if (pi != null && pi.CanRead)
-                return pi.GetValue(comp);
+            {
+                var raw = pi.GetValue(comp);
+                typeName = raw != null ? raw.GetType().Name : pi.PropertyType.Name;
+                return ConvertToJson(raw);
+            }
 
             throw new ArgumentException($"Property '{propertyName}' not found on {type.Name}");
         }
@@ -488,6 +501,9 @@ namespace UCP.Bridge
                 return new List<object> { (double)c.r, (double)c.g, (double)c.b, (double)c.a };
             if (value is UnityEngine.Object uObj)
                 return ObjectReferenceResolver.Serialize(uObj);
+            // Values that are already JSON-shaped pass through untouched.
+            if (value is IList || value is IDictionary)
+                return value;
             return value.ToString();
         }
 

@@ -46,6 +46,7 @@ namespace UCP.Bridge.Tests
             PlayModeController.Register(_router);
             ReferenceController.Register(_router);
             LogsController.Register(_router);
+            RecordingController.Register(_router);
             HierarchyController.Register(_router);
             ProfilerController.Register(_router);
             PropertyController.Register(_router);
@@ -72,6 +73,7 @@ namespace UCP.Bridge.Tests
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
             LogsController.ClearHistoryForTests();
+            RecordingController.ResetForTests();
             AssetImportSupport.ClearTestState();
             Profiler.enabled = false;
             Profiler.enableBinaryLog = false;
@@ -97,6 +99,7 @@ namespace UCP.Bridge.Tests
             DeleteTempLocalPackage();
             RemoveTempLocalPackageDependencyIfPresent();
             LogsController.ClearHistoryForTests();
+            RecordingController.ResetForTests();
             AssetImportSupport.ClearTestState();
             Profiler.enabled = false;
             Profiler.enableBinaryLog = false;
@@ -121,6 +124,115 @@ namespace UCP.Bridge.Tests
             var capabilities = (Dictionary<string, object>)result["capabilities"];
             Assert.That(Convert.ToBoolean(capabilities["status"]), Is.True);
             Assert.That(Convert.ToBoolean(capabilities["sessionControl"]), Is.True);
+        }
+
+        [Test]
+        public void RecordingController_RegistersLifecycleMethodsAndReportsIdle()
+        {
+            Assert.That(_router.HasMethod("record/start"), Is.True);
+            Assert.That(_router.HasMethod("record/stop"), Is.True);
+            Assert.That(_router.HasMethod("record/status"), Is.True);
+            Assert.That(_router.HasMethod("record/arm"), Is.True);
+            Assert.That(_router.HasMethod("record/signal"), Is.True);
+
+            var response = _router.Dispatch("record/status", 1, "{}");
+            Assert.That(response.error, Is.Null);
+            var result = (Dictionary<string, object>)response.result;
+            Assert.That(result["state"], Is.EqualTo("idle"));
+        }
+
+        [Test]
+        public void RecordingController_ResolvesEvenAspectPreservingDimensions()
+        {
+            Assert.That(RecordingController.ResolveDimensionsForTests(16f / 9f, 960, null, null),
+                Is.EqualTo((960, 540)));
+            Assert.That(RecordingController.ResolveDimensionsForTests(9f / 16f, 960, null, null),
+                Is.EqualTo((540, 960)));
+            Assert.That(RecordingController.ResolveDimensionsForTests(4f / 3f, 960, 640, null),
+                Is.EqualTo((640, 480)));
+            Assert.That(RecordingController.ResolveDimensionsForTests(4f / 3f, 960, null, 600),
+                Is.EqualTo((800, 600)));
+        }
+
+        [Test]
+        public void RecordingController_ArmsAndMatchesNamedSignal()
+        {
+            var response = _router.Dispatch(
+                "record/arm",
+                1,
+                "{\"trigger\":\"signal:not-this-one\",\"duration\":1,\"timeout\":5}");
+            Assert.That(response.error, Is.Null);
+
+            var signal = _router.Dispatch("record/signal", 2, "{\"name\":\"different\"}");
+            Assert.That(signal.error, Is.Null);
+            var result = (Dictionary<string, object>)signal.result;
+            Assert.That(Convert.ToBoolean(result["matched"]), Is.False);
+            Assert.That(result["state"], Is.EqualTo("armed"));
+
+            var stop = _router.Dispatch("record/stop", 3, "{}");
+            Assert.That(stop.error, Is.Null);
+            var stopped = (Dictionary<string, object>)stop.result;
+            Assert.That(stopped["state"], Is.EqualTo("idle"));
+        }
+
+        [Test]
+        public void GetProperty_ReturnsCompositeValuesRatherThanTypeNames()
+        {
+            // Regression: when SerializedObject.FindProperty resolves a name, the value it returns
+            // is already JSON-shaped. That result used to be converted a second time, match no
+            // case, and fall through to value.ToString() -- so a Vector3 arrived as
+            // "System.Collections.Generic.List`1[System.Object]". Querying the serialized name
+            // (m_LocalPosition) is what forces the FindProperty path; the public alias (position)
+            // has no serialized entry and takes the reflection fallback instead, which is why that
+            // one never looked broken.
+            var go = new GameObject("UcpPropertyProbe");
+            try
+            {
+                go.transform.localPosition = new Vector3(1.5f, 2.5f, 3.5f);
+                var id = go.GetInstanceID();
+
+                var serialized = _router.Dispatch("object/get-property", 1, "{\"instanceId\":ID,\"component\":\"Transform\",\"property\":\"m_LocalPosition\"}".Replace("ID", id.ToString()));
+                Assert.That(serialized.error, Is.Null);
+                var serializedResult = (Dictionary<string, object>)serialized.result;
+                var localPosition = serializedResult["value"] as IList;
+                Assert.That(localPosition, Is.Not.Null,
+                    "a serialized Vector3 must come back as an array, not a stringified type name");
+                Assert.That(localPosition.Count, Is.EqualTo(3));
+                Assert.That(Convert.ToDouble(localPosition[0]), Is.EqualTo(1.5d).Within(1e-4));
+                Assert.That(Convert.ToDouble(localPosition[2]), Is.EqualTo(3.5d).Within(1e-4));
+                Assert.That(serializedResult["type"], Is.EqualTo("Vector3"),
+                    "type must describe the field, not the container it was shaped into");
+
+                // Reflection fallback: no serialized entry named "position".
+                var reflected = _router.Dispatch("object/get-property", 2, "{\"instanceId\":ID,\"component\":\"Transform\",\"property\":\"position\"}".Replace("ID", id.ToString()));
+                Assert.That(reflected.error, Is.Null);
+                var reflectedResult = (Dictionary<string, object>)reflected.result;
+                Assert.That(reflectedResult["value"] as IList, Is.Not.Null);
+                Assert.That(reflectedResult["type"], Is.EqualTo("Vector3"));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void RecordingController_ValidatesSlowdownRange()
+        {
+            // --slowdown exists to raise effective temporal resolution for models that sample a
+            // clip at a fixed low rate, so an out-of-range factor must fail loudly rather than
+            // silently producing a file whose playback rate is meaningless.
+            var tooLarge = _router.Dispatch("record/arm", 1, "{\"trigger\":\"signal:sd\",\"duration\":1,\"timeout\":5,\"slowdown\":40}");
+            Assert.That(tooLarge.error, Is.Not.Null, "a slowdown above the supported range must be rejected");
+
+            var accepted = _router.Dispatch("record/arm", 2, "{\"trigger\":\"signal:sd\",\"duration\":1,\"timeout\":5,\"slowdown\":6}");
+            Assert.That(accepted.error, Is.Null);
+            var armed = (Dictionary<string, object>)accepted.result;
+            Assert.That(armed["state"], Is.EqualTo("armed"));
+
+            var stop = _router.Dispatch("record/stop", 3, "{}");
+            Assert.That(stop.error, Is.Null);
+            Assert.That(((Dictionary<string, object>)stop.result)["state"], Is.EqualTo("idle"));
         }
 
         [Test]
@@ -1647,4 +1759,5 @@ namespace UCP.Bridge.Tests
             public SearchRootAsset referenceAsset;
         }
     }
+
 }

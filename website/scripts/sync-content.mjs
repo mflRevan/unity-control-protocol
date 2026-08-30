@@ -116,7 +116,7 @@ const docsNavigation = [
     title: 'Runtime & Diagnostics',
     items: [
       { title: 'Play Mode & Compilation', route: 'runtime/play-mode', source: 'runtime/play-mode.md' },
-      { title: 'Screenshots & Logs', route: 'runtime/logs-and-media', source: 'runtime/logs-and-media.md' },
+      { title: 'Screenshots, Recordings & Logs', route: 'runtime/logs-and-media', source: 'runtime/logs-and-media.md' },
       { title: 'Testing', route: 'runtime/testing', source: 'runtime/testing.md' },
       { title: 'Profiler', route: 'runtime/profiler', source: 'runtime/profiler.md' },
     ],

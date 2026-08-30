@@ -77,7 +77,7 @@ That install exposes fifteen focused skills, each invoked as `/ucp-surfaces:ucp-
 - `/ucp-surfaces:ucp-scene` — `ucp scene` + `ucp editor` lifecycle + `ucp play|stop|pause|compile|screenshot`
 - `/ucp-surfaces:ucp-transform` — `ucp transform` (move/rotate/scale/look-at/get)
 - `/ucp-surfaces:ucp-spatial` — `ucp spatial` (raycast/overlap/bounds/ground/nearest)
-- `/ucp-surfaces:ucp-view` — `ucp view` (capture/isolate/orbit) + `ucp screenshot`
+- `/ucp-surfaces:ucp-view` — `ucp view` (capture/isolate/orbit) + `ucp screenshot` + `ucp record`
 - `/ucp-surfaces:ucp-assets` — `ucp asset` + `ucp files` + `ucp shader errors`
 - `/ucp-surfaces:ucp-materials` — `ucp material` (create/get/set properties, keywords, shader)
 - `/ucp-surfaces:ucp-prefabs` — `ucp prefab` (status/apply/revert/unpack/create/overrides)

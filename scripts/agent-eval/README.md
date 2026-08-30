@@ -75,3 +75,11 @@ First in-scene-authoring eval (`deepseek-v4-flash-free`, "arrange three pillars"
    method — without one, `opencode run` exits 0 after bootstrap with no model turn (a silent no-op
    that looks like "the agent did nothing"). Probe a model with a trivial prompt first to confirm it
    actually responds before trusting an empty eval result.
+8. **Put the canonical blocking recording command in `ucp record --help`.** A local Qwen3.6 video
+   eval found the command but first guessed Playwright-shaped flags (`start --length --game-view`).
+   Parent help now leads with `record capture --duration ...` and names when to use detached
+   `start`/`stop` or event-driven `arm`; new media surfaces cannot assume an established agent habit.
+9. **Ask video graders about translation, rotation, and bobbing separately.** Qwen initially called
+   visibly rotating collectibles "stationary" because their centers stayed fixed. It identified
+   the rotation when asked to compare face orientation and shadows across frames. Avoid a single
+   binary "moving or stationary" prompt when validating animation.

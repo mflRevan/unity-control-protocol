@@ -28,7 +28,7 @@
 ## Runtime & Diagnostics
 
 - [Play Mode & Compilation](https://unityctl.dev/docs/runtime/play-mode.md): Control Unity's play mode state from the command line.
-- [Screenshots & Logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
+- [Screenshots, Recordings & Logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
 - [Testing](https://unityctl.dev/docs/runtime/testing.md): Run Unity Test Framework tests from the command line.
 - [Profiler](https://unityctl.dev/docs/runtime/profiler.md): Capture, inspect, and summarize Unity Profiler data through the bridge.
 

@@ -5,6 +5,7 @@ use crate::output;
 use clap::Subcommand;
 use std::fs;
 use std::io::{self, Write};
+use std::time::Duration;
 
 use super::{Context, resolve_project_path};
 
@@ -133,7 +134,23 @@ async fn restart(ctx: &Context, force: bool) -> anyhow::Result<()> {
         super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
     )
     .await?;
-    let _ = editor_runtime::close_editor(&project, ctx, force).await?;
+    let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
+
+    // close_editor gives up once its own budget is spent, so a slow shutdown comes back as
+    // `exited: false` with the process still alive. Opening at that point finds the old editor
+    // and reports "already running" -- the restart silently becomes a no-op. Wait it out first.
+    if !outcome.exited {
+        if let Some(pid) = outcome.pid {
+            let grace = Duration::from_secs(ctx.timeout.max(30).min(120));
+            if !editor_runtime::wait_for_process_exit(pid, grace).await {
+                anyhow::bail!(
+                    "Unity editor (pid {pid}) did not exit within {}s, so it was not restarted.                      It may be blocked by a modal dialog. Re-run with --force to terminate it.",
+                    grace.as_secs()
+                );
+            }
+        }
+    }
+
     open(ctx).await
 }
 

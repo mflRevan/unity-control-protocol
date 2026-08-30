@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.6.2] - 2026-08-31
+
+### Added
+
+- Added native, scene-object-free `record/start`, `record/stop`, `record/status`, `record/arm`, and
+  `record/signal` RPCs for Game and Scene view video capture.
+- Added aspect-preserving longest-edge sizing and explicit width/height canvases with letterboxing,
+  even-dimension normalization, configurable FPS/bitrate/duration, H.264/MP4 and VP8/WebM encoding,
+  and platform-aware format selection.
+- Added play-enter, play-exit, bounded log-regex, and named-signal triggers. Armed play triggers use
+  `SessionState` to survive domain reloads, and `record/stop` also cancels a pending trigger.
+- Added a `slowdown` parameter to `record/start` and `record/arm`. Frames are still captured at the
+  requested cadence in real time; only the encoder's declared frame rate is divided by the factor, so
+  playback is stretched without duplicating frames or re-encoding. `record/status` reports both
+  `slowdown` and the resulting `playbackFps`. Values outside 1-20 are rejected. This raises effective
+  temporal resolution for consumers that sample a clip at a fixed low rate rather than playing it.
+- Documented that `record/start --view game` resolves `Camera.main`, not the Game view's composited
+  camera stack. Projects rendering through several enabled cameras record only the `MainCamera`-tagged
+  one, and camera depth does not change the selection; `--view scene` captures the Scene view camera,
+  which is unaffected by gameplay.
+
+### Fixed
+
+- Fixed `tests/run` counting an empty root suite as a passed test. When a filter matched nothing,
+  the run finished with a childless root whose result was collected as a leaf, so the summary
+  reported one passed test named after the project. Suite results are now skipped, so a run that
+  executed nothing reports a total of zero.
+- Changed `tests/run` filtering from `Filter.testNames` to `Filter.groupNames`. `testNames` requires
+  an exact fully-qualified match, which silently selected nothing for a class or method name;
+  `groupNames` is matched as a regular expression against each test's full name, so partial names
+  select what a caller expects and fully-qualified names still match.
+- Fixed `object/get-property` double-converting values that `SerializedPropertyToValue` had already
+  shaped for JSON. `GetPropertyValue` resolves a name through `SerializedObject.FindProperty` first
+  and returns a ready `List`/`Dictionary`; `ConvertToJson` then ran over that result, matched none
+  of its cases, and fell through to `value.ToString()`. A `Vector3` field came back as
+  ``"System.Collections.Generic.List`1[System.Object]"`` with
+  ``"type": "List`1"``. Every serialized Vector2/3/4, Quaternion, Color, Rect, Bounds and
+  object-reference field was affected, and float fields reported a `Double` type name.
+  `get-property` now takes its type name from the `SerializedProperty` so it agrees with
+  `get-fields`, converts only values read through the reflection fallback, and `ConvertToJson` is
+  idempotent for already-shaped `IList`/`IDictionary` values.
+
+### Performance
+
+- Frames render through a hidden reusable `RenderTexture` and reusable CPU readback texture into
+  Unity's native `MediaEncoder`; recording creates no scene objects or scripts and avoids per-frame
+  managed texture allocation.
+
+### Reliability
+
+- Added sibling `.partial` output and final rename, explicit overwrite handling, extension/format
+  validation, encoder and temporary-file cleanup on failure, detached safety deadlines, trigger wait
+  deadlines, dropped-frame accounting, and structured completed/failed status metadata.
+- Active encoders finalize during assembly reload or editor shutdown. Play-boundary capture is
+  handled by the persisted `play-enter`/`play-exit` arm flow rather than attempting to retain a
+  native encoder across a domain reload.
+
+### Tests
+
+- Added editor smoke tests for recording RPC registration and idle status, aspect-preserving even
+  dimensions, signal matching, and cancellation of armed recordings.
+
 ## [0.4.1] - 2026-03-21
 
 ### Added

@@ -61,6 +61,7 @@ deep layer, covering surfaces Unity's built-in catalog does not reach:
 | Prefab status / apply / revert / overrides | - | yes |
 | Spatial queries (raycast, overlap, bounds, ground) | - | yes |
 | Composed capture (isolate, orbit, multi-angle grids) | screenshot | yes |
+| CLI video capture (game/scene, scripts, event triggers) | - | yes |
 | Package management, selective `.unitypackage` import | - | yes |
 | Unity VCS / Plastic | - | yes |
 | Per-operation `Undo` registration | - | yes |
@@ -86,7 +87,8 @@ A few things that are awkward or impossible without it:
   `.meta` files, and serialized references survive; `references find` proves nothing broke.
 - **See the scene.** `view isolate` renders one object auto-framed from its bounds as a multi-angle
   composite, so a vision model can read 3D shape from a single image. `spatial raycast` / `bounds` /
-  `ground` answer geometric questions that a hierarchy dump cannot.
+  `ground` answer geometric questions that a hierarchy dump cannot. `record capture` adds short,
+  aspect-preserving clips when motion or transient state matters.
 - **Close the loop.** Edit scripts, `compile` (which exits non-zero and reports the actual `CS####`
   errors), assemble objects in the live scene, save a prefab, capture, run tests - without leaving
   the terminal.

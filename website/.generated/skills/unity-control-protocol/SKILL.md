@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.6.1'
+  version: '0.6.2'
 ---
 
 # Unity Control Protocol (UCP)
@@ -23,7 +23,7 @@ UCP and Unity expose a broad command surface. If you are unsure what is availabl
 ## When to use this skill
 
 - The user wants to inspect or modify GameObjects, components, materials, prefabs, or assets
-- The user asks to enter/exit play mode, run tests, capture screenshots, or read logs
+- The user asks to enter/exit play mode, run tests, capture screenshots or recordings, or read logs
 - The user needs to manage scenes, project settings, build pipelines, or scripting defines
 - The user needs to browse/install Unity packages, manage scoped registries, or selectively import `.unitypackage` content
 - The user wants to automate entire Unity Editor workflows
@@ -136,7 +136,7 @@ Prefer `--primitive` for cubes/spheres/etc.; `object instantiate` is only for pr
 
 ## Packages, settings, build, logs, tests, profiler, and exec
 
-Use `ucp packages --help`, `ucp settings --help`, `ucp build --help`, `ucp logs --help`, `ucp run-tests --help`, `ucp profiler --help`, and `ucp exec --help` when you need the full surface.
+Use `ucp packages --help`, `ucp settings --help`, `ucp build --help`, `ucp logs --help`, `ucp record --help`, `ucp run-tests --help`, `ucp profiler --help`, and `ucp exec --help` when you need the full surface.
 
 ```bash
 ucp packages add com.unity.cinemachine
@@ -154,9 +154,23 @@ ucp logs --pattern "NullReference|Exception" --count 100
 ucp run-tests --mode edit --filter "UCP.Bridge.Tests.ControllerSmokeTests.LogsTail_ReturnsRequestedBufferedCount"
 ucp profiler summary --limit 5
 ucp exec run SetupScene
+ucp record capture --duration 5 --view game --output playtest.mp4
 ```
 
 Prefer fully qualified test names when filtering, and use `--json` for structured log or test consumption.
+
+For motion, timing, or transient-state inspection, prefer a short recording over many screenshots.
+`ucp record capture` waits for a finalized file; `record start`/`stop` surrounds command sequences
+that do not reload the domain; `exec run --record <path>` captures a script with lead/tail context.
+Use `record arm --on
+play-enter|play-exit|log:<regex>|signal:<name>` for event-driven clips, then inspect `record status`.
+Defaults are a silent 960px-long-edge, aspect-preserving 15fps clip with no injected scene objects.
+When the clip is for a model rather than a person, add `--slowdown <factor>`: multimodal models
+sample a video at roughly one frame per second, so a short clip arrives as a handful of frames and
+sub-second motion is invisible. `--slowdown` stretches playback only -- same captured frames, no
+re-encode -- so a fixed-rate sampler gets several samples per gameplay second. `--view game` records
+`Camera.main`, not the Game view's camera stack; use `--view scene` for a fixed vantage point that
+does not follow the player.
 
 ## Reference search
 

@@ -17,6 +17,7 @@ pub mod play;
 pub mod prefab;
 pub mod profile;
 pub mod profiler;
+pub mod record;
 pub mod references;
 pub mod scene;
 pub mod screenshot;
@@ -262,6 +263,14 @@ pub enum Command {
         #[arg(short, long)]
         output: Option<String>,
     },
+    /// Record lightweight Game or Scene view video for agents and scripted workflows
+    #[command(
+        after_help = "Quick start:\n  ucp record capture --duration 5 --output clip.mp4\n\nUse `capture` for one blocking clip (the usual agent workflow), `start`/`stop` around a longer sequence, or `arm` for event-triggered capture."
+    )]
+    Record {
+        #[command(subcommand)]
+        action: record::RecordAction,
+    },
     /// Stream console logs
     Logs {
         #[command(subcommand)]
@@ -397,6 +406,30 @@ pub enum ExecAction {
         /// schema is script-defined
         #[arg(long)]
         params: Option<String>,
+        /// Record the surrounding exec workflow to this video file
+        #[arg(long, value_name = "PATH")]
+        record: Option<String>,
+        /// View to record when --record is used
+        #[arg(long, default_value = "game", value_parser = ["game", "scene"], requires = "record")]
+        record_view: String,
+        /// Longest video edge in pixels when --record is used
+        #[arg(long, default_value_t = 960, value_parser = clap::value_parser!(u32).range(64..=4096), requires = "record")]
+        record_max_edge: u32,
+        /// Video frames per second when --record is used
+        #[arg(long, default_value_t = 15, value_parser = clap::value_parser!(u32).range(1..=60), requires = "record")]
+        record_fps: u32,
+        /// Target recording bitrate in kilobits per second
+        #[arg(long, default_value_t = 2_000, value_parser = clap::value_parser!(u32).range(128..=50_000), requires = "record")]
+        record_bitrate_kbps: u32,
+        /// Replace an existing --record output file
+        #[arg(long, requires = "record")]
+        record_overwrite: bool,
+        /// Seconds to record before invoking the script
+        #[arg(long, default_value_t = 0.25, value_parser = record::non_negative_seconds, requires = "record")]
+        record_lead: f64,
+        /// Seconds to keep recording after the script returns
+        #[arg(long, default_value_t = 0.75, value_parser = record::non_negative_seconds, requires = "record")]
+        record_tail: f64,
     },
 }
 
@@ -888,12 +921,36 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             height,
             output,
         } => screenshot::run(&view, width, height, output, &ctx).await,
+        Command::Record { action } => record::run(action, &ctx).await,
         Command::Logs { action, args } => logs::run(action, args, &ctx).await,
         Command::Log { action, args } => logs::run(action, args, &ctx).await,
         Command::RunTests { mode, filter } => tests::run(&mode, filter, &ctx).await,
         Command::Exec { action } => match action {
             ExecAction::List => exec::list(&ctx).await,
-            ExecAction::Run { name, params } => exec::run(&name, params, &ctx).await,
+            ExecAction::Run {
+                name,
+                params,
+                record,
+                record_view,
+                record_max_edge,
+                record_fps,
+                record_bitrate_kbps,
+                record_overwrite,
+                record_lead,
+                record_tail,
+            } => {
+                let recording = record.map(|path| exec::RecordingOptions {
+                    path,
+                    view: record_view,
+                    max_edge: record_max_edge,
+                    fps: record_fps,
+                    bitrate_kbps: record_bitrate_kbps,
+                    overwrite: record_overwrite,
+                    lead: record_lead,
+                    tail: record_tail,
+                });
+                exec::run(&name, params, recording, &ctx).await
+            }
         },
         Command::Script { action } => script::run(action, &ctx).await,
         Command::Vcs { action } => vcs::run(action, &ctx).await,

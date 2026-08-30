@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.6.1";
+        private const string ProtocolVersion = "0.6.2";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -141,6 +141,9 @@ namespace UCP.Bridge
 
             // Screenshots
             ScreenshotController.Register(s_router);
+
+            // Lightweight video recording
+            RecordingController.Register(s_router);
 
             // Logs
             LogsController.Register(s_router);
@@ -509,6 +512,7 @@ namespace UCP.Bridge
 
         private static void OnLogMessage(string message, string stackTrace, LogType type)
         {
+            RecordingController.NotifyLog(message);
             // Don't forward our own log messages to avoid infinite recursion
             if (message.StartsWith("[UCP]")) return;
 
@@ -574,6 +578,8 @@ namespace UCP.Bridge
             s_running = false;
 
             Debug.Log("[UCP] Bridge server shutting down");
+
+            RecordingController.Shutdown();
 
             s_cts?.Cancel();
 

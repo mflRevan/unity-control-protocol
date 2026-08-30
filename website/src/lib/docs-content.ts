@@ -69,7 +69,7 @@ export const docsNavigation: DocsNavGroup[] = [
     title: 'Runtime & Diagnostics',
     items: [
       { title: 'Play Mode & Compilation', href: '/docs/runtime/play-mode' },
-      { title: 'Screenshots & Logs', href: '/docs/runtime/logs-and-media' },
+      { title: 'Screenshots, Recordings & Logs', href: '/docs/runtime/logs-and-media' },
       { title: 'Testing', href: '/docs/runtime/testing' },
       { title: 'Profiler', href: '/docs/runtime/profiler' },
     ],
