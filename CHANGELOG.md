@@ -1,14 +1,46 @@
 # Changelog
 
-## [Unreleased]
+## [0.6.3] - Unreleased
 
 ### Added
 
-- Added the Unity 6+ `ucp ui` family for agent-driven UI Toolkit work: target discovery, importer- and clone-backed UXML/USS/TSS linting, bounded resolved-tree and binding inspection including physical control children and realized ListView rows, DPI-correct Editor-panel PNG capture, and an end-to-end multi-state `ui check` workflow.
-- Added strict `.ucp-ui.json` scenarios with JSON data overlays, allowlisted fixture mutations, eager `repeat` templates, and harness-owned virtualized `ListView` binding for reproducible dynamic layouts.
-- Added conservative UI audits with complete diagnostic totals, error-prioritized bounded details, and exemptions for Unity internal focus targets; lint inspects immutable package artifacts without forced reimport.
-- Added UI operation interruption reporting, status recovery on CLI timeouts, and a render timeout default that accommodates the bridge's overall duration limit.
-- Added focused Rust, bridge, fixture, lint, inspector, and audit coverage plus agent-facing UI Toolkit workflow documentation.
+- Added a UI Toolkit authoring loop through `ucp ui list|lint|inspect|screenshot|check` for
+  Unity 6 and newer. `list` discovers UXML documents and `.ucp-ui.json` scenarios; `lint` runs
+  Unity's own UXML, USS, and TSS importers and then clones each document, so an unknown element
+  or a broken stylesheet is reported against the asset with a line number instead of surfacing
+  later as a console error; `inspect` instantiates a document in a transient editor panel and
+  returns a bounded resolved tree with layout, world bounds, a fixed resolved-style allowlist,
+  and per-binding results; `screenshot` captures that panel to a PNG once geometry and pixels
+  have stopped changing; `check` chains lint, inspect, an audit, and capture across every
+  requested state and exits non-zero on failure. Nothing loads or dirties a scene, and `lint`
+  also works in batch mode. Contributed by @quentinleon (#3).
+- Added strict `.ucp-ui.json` scenarios: named states with deep data overlays, an allowlisted
+  `set` block (`text`, `value`, `enabled`, `display`, `visibility`, `tooltip`, `class:<name>`),
+  and `collections` that populate either an eager `repeat` grid or a harness-owned virtualized
+  `ListView` from a JSON pointer such as `/items`. UXML `DataBinding` paths are written as
+  usual and adapted to the JSON data source on the fly. `--data-json` and `--data-file` overlay
+  data for one run without editing the fixture; `--width`/`--height` override the viewport as a
+  pair. Unknown fields, ambiguous selectors, and out-of-range values are rejected with a
+  location such as `Assets/UI/Inventory.ucp-ui.json#states.populated.set[1].value`.
+- Added an audit to `ui check`: binding failures, focusable elements with zero size or outside
+  the viewport, and duplicated static names, with complete counts even when the returned detail
+  list is capped at 200. `--fail-on-warnings` turns warnings into a failed exit for both `lint`
+  and `check`.
+- UI render commands run asynchronously in the bridge under a 300-second ceiling, report a
+  domain reload or editor shutdown mid-operation as a structured `editor_shutdown` result, and
+  recover a finished result through `ui/status` if the completion notification was lost. Their
+  CLI timeout therefore defaults to 310 seconds; every other command keeps the 30-second
+  default, and an explicit `--timeout` still wins.
+- Added a `ucp-ui` micro-skill, a UI Toolkit section in the omni skill, and a
+  `docs/authoring/ui-toolkit.md` reference page with the scenario schema.
+
+### Fixed
+
+- Removed the empty `UCP.Bridge.Runtime` assembly definition. Every install logged `Assembly
+  for Assembly Definition File 'Packages/com.ucp.bridge/Runtime/UCP.Bridge.Runtime.asmdef' will
+  not be compiled, because it has no scripts associated with it` on import, which also meant
+  every "clean console" check started at one warning. Nothing referenced the assembly.
+  Reported by @quentinleon (#4).
 
 ## [0.6.2] - 2026-08-31
 

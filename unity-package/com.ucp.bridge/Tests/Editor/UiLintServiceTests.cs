@@ -6,6 +6,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace UCP.Bridge.Tests
 {
@@ -154,6 +155,88 @@ namespace UCP.Bridge.Tests
             Assert.That(asset["assetType"], Is.Not.Null);
             Assert.That(((List<object>)result["diagnostics"]).Cast<Dictionary<string, object>>()
                 .Any(item => Equals(item["code"], "UI_IMPORT_FAILED")), Is.False);
+        }
+
+        [Test]
+        public void BrokenStyleSheet_FailsLintThroughTheRouterWithAssetScopedDiagnostics()
+        {
+            var ussPath = Root + "/Broken.uss";
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                WriteAsset(ussPath, ".probe { widht: 100px; colr: red }\n");
+                var router = new CommandRouter();
+                UiController.Register(router);
+
+                var response = router.Dispatch(
+                    "ui/lint",
+                    1,
+                    "{\"paths\":[\"" + ussPath + "\"],\"failOnWarnings\":true}");
+
+                Assert.That(response.error, Is.Null);
+                var result = (Dictionary<string, object>)response.result;
+                Assert.That(result["passed"], Is.False, MiniJson.Serialize(result));
+                Assert.That(
+                    Convert.ToInt32(result["errorCount"]) + Convert.ToInt32(result["warningCount"]),
+                    Is.GreaterThanOrEqualTo(1));
+                var diagnostics = ((List<object>)result["diagnostics"]).Cast<Dictionary<string, object>>().ToList();
+                Assert.That(
+                    diagnostics.Any(item => Equals(item["assetPath"], ussPath) && Equals(item["source"], "import")),
+                    Is.True,
+                    MiniJson.Serialize(result));
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+            }
+        }
+
+        [Test]
+        public void UnknownUxmlElement_IsReportedAgainstTheDocument()
+        {
+            var uxmlPath = Root + "/Unknown.uxml";
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                WriteAsset(
+                    uxmlPath,
+                    "<ui:UXML xmlns:ui=\"UnityEngine.UIElements\">\n" +
+                    "  <ui:NoSuchElement name=\"probe\" />\n" +
+                    "</ui:UXML>\n");
+
+                var result = UiLintService.Run(new Dictionary<string, object>
+                {
+                    ["paths"] = new List<object> { uxmlPath },
+                    ["failOnWarnings"] = true
+                });
+
+                Assert.That(result["passed"], Is.False, MiniJson.Serialize(result));
+                var diagnostics = ((List<object>)result["diagnostics"]).Cast<Dictionary<string, object>>().ToList();
+                Assert.That(diagnostics.Any(item => Equals(item["assetPath"], uxmlPath)), Is.True, MiniJson.Serialize(result));
+                var asset = ((List<object>)result["assets"]).Cast<Dictionary<string, object>>()
+                    .Single(item => Equals(item["path"], uxmlPath));
+                Assert.That(asset["cloneAttempted"], Is.True);
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+            }
+        }
+
+        [Test]
+        public void MissingAndUnsupportedPaths_BecomeDiagnosticsInsteadOfExceptions()
+        {
+            var result = UiLintService.Run(new Dictionary<string, object>
+            {
+                ["paths"] = new List<object> { Root + "/Missing.uxml", Root + "/Notes.txt" }
+            });
+
+            Assert.That(result["passed"], Is.False);
+            Assert.That(Convert.ToInt32(result["assetCount"]), Is.EqualTo(0));
+            var codes = ((List<object>)result["diagnostics"]).Cast<Dictionary<string, object>>()
+                .Select(item => item["code"]).ToList();
+            Assert.That(codes, Does.Contain("UI_ASSET_NOT_FOUND"));
+            Assert.That(codes, Does.Contain("UI_PATH_UNSUPPORTED"));
         }
 
         private static void WriteAsset(string assetPath, string contents)

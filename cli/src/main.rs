@@ -1160,4 +1160,27 @@ mod tests {
         ]);
         assert!(incomplete_viewport.is_err());
     }
+
+    #[test]
+    fn ui_force_requires_an_output_target() {
+        assert!(
+            Cli::try_parse_from(["ucp", "ui", "screenshot", "Assets/UI/Panel.uxml", "--force"])
+                .is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["ucp", "ui", "check", "Assets/UI/Panel.uxml", "--force"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "ucp",
+                "ui",
+                "check",
+                "Assets/UI/Panel.uxml",
+                "--out-dir",
+                "artifacts",
+                "--force"
+            ])
+            .is_ok()
+        );
+    }
 }

@@ -93,9 +93,7 @@ namespace UCP.Bridge.Tests
                 var active = UiOperationManager.Start("inspect", new Dictionary<string, object>());
                 var queued = UiOperationManager.Start("inspect", new Dictionary<string, object>());
                 // Activate without advancing initialization (which would resolve a target).
-                typeof(UiOperationManager).GetMethod("ActivateNext",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-                    .Invoke(null, null);
+                UiOperationManager.ActivateNextForTests();
                 Assert.That(UiOperationManager.Status(active["operationId"].ToString())["status"], Is.EqualTo("running"));
                 UiOperationManager.Shutdown();
                 foreach (var start in new[] { active, queued })
@@ -196,6 +194,18 @@ namespace UCP.Bridge.Tests
             Assert.That(
                 UiRenderOperation.CaptureArtifactFileName("Assets/Panel.uxml", "a/b", 0, "ui-test"),
                 Is.EqualTo(first));
+        }
+
+        [Test]
+        public void CaptureArtifactFileName_DropsTheScenarioSuffix()
+        {
+            Assert.That(
+                UiRenderOperation.CaptureArtifactFileName(
+                    "Assets/UI/Inventory.ucp-ui.json",
+                    "populated",
+                    1,
+                    "ui-test"),
+                Is.EqualTo("Inventory-populated-s0001-ui-test.png"));
         }
 
         [Test]
@@ -450,6 +460,87 @@ namespace UCP.Bridge.Tests
             var serialized = MiniJson.Serialize(result);
             Assert.That(serialized, Does.Not.Contain("{}"));
             Assert.That(MiniJson.Deserialize(serialized), Is.TypeOf<Dictionary<string, object>>());
+        }
+
+        [TestCase("#row-label")]
+        [TestCase(".card_item-2")]
+        [TestCase("Label")]
+        [TestCase("UnityEngine.UIElements.Label")]
+        public void SimpleQuery_AcceptsOneNameClassOrTypeSelector(string query)
+        {
+            Assert.DoesNotThrow(() => UiSimpleQuery.Validate(query));
+        }
+
+        [TestCase("#toolbar Button")]
+        [TestCase("#a > .b")]
+        [TestCase(".a.b")]
+        [TestCase("#a#b")]
+        [TestCase("Label:hover")]
+        [TestCase("#")]
+        public void SimpleQuery_RejectsCompoundSelectorsInsteadOfMatchingNothing(string query)
+        {
+            Assert.Throws<ArgumentException>(() => UiSimpleQuery.Validate(query));
+        }
+
+        [Test]
+        public void SimpleQuery_MatchesByNameClassShortTypeAndFullType()
+        {
+            var label = new Label { name = "title" };
+            label.AddToClassList("heading");
+
+            Assert.That(UiSimpleQuery.Matches(label, "#title"), Is.True);
+            Assert.That(UiSimpleQuery.Matches(label, ".heading"), Is.True);
+            Assert.That(UiSimpleQuery.Matches(label, "label"), Is.True);
+            Assert.That(UiSimpleQuery.Matches(label, "UnityEngine.UIElements.Label"), Is.True);
+            Assert.That(UiSimpleQuery.Matches(label, "#heading"), Is.False);
+            Assert.That(UiSimpleQuery.Matches(label, "Button"), Is.False);
+        }
+
+        [Test]
+        public void Status_ReportsUnknownOperationsAndRejectsMissingIds()
+        {
+            var router = new CommandRouter();
+            UiController.Register(router);
+
+            var unknown = router.Dispatch("ui/status", 1, "{\"operationId\":\"ui-does-not-exist\"}");
+            Assert.That(unknown.error, Is.Null);
+            var result = (Dictionary<string, object>)unknown.result;
+            Assert.That(result["found"], Is.False);
+            Assert.That(result["operationId"], Is.EqualTo("ui-does-not-exist"));
+
+            var missing = router.Dispatch("ui/status", 2, "{}");
+            Assert.That(missing.error, Is.Not.Null);
+            Assert.That(missing.result, Is.Null);
+        }
+
+        [Test]
+        public void ResultEnvelope_IsSanitizedBeforeItReachesMiniJson()
+        {
+            var record = new UiOperationRecord("ui-json", "check", new Dictionary<string, object>());
+            record.MarkRunning();
+            record.Complete(
+                new Dictionary<string, object>
+                {
+                    ["passed"] = false,
+                    ["errorCount"] = 1,
+                    ["states"] = new List<object>
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["ratio"] = float.NaN,
+                            ["mode"] = UiCollectionMode.ListView
+                        }
+                    }
+                },
+                null);
+
+            var parsed = (Dictionary<string, object>)MiniJson.Deserialize(MiniJson.Serialize(record.Envelope()));
+            Assert.That(parsed["status"], Is.EqualTo("completed"));
+            var result = (Dictionary<string, object>)parsed["result"];
+            Assert.That(result["passed"], Is.False);
+            var state = (Dictionary<string, object>)((List<object>)result["states"])[0];
+            Assert.That(state["ratio"], Is.Null);
+            Assert.That(state["mode"], Is.EqualTo("ListView"));
         }
     }
 }

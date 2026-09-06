@@ -383,6 +383,21 @@ namespace UCP.Bridge
                 throw new ArgumentException(
                     "'query' supports one simple selector only: #name, .class, or element type");
             }
+
+            if (query[0] != '#' && query[0] != '.')
+                return;
+
+            // A second '#' or '.' would be read as part of the name and match nothing.
+            for (var i = 1; i < query.Length; i++)
+            {
+                var c = query[i];
+                if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+                {
+                    throw new ArgumentException(
+                        "'query' #name and .class selectors may contain only letters, digits, '_' and '-'; " +
+                        "compound selectors such as '.a.b' are not supported");
+                }
+            }
         }
 
         internal static bool Matches(VisualElement element, string query)

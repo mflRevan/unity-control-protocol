@@ -1278,4 +1278,75 @@ mod tests {
         assert_eq!(paths.len(), 3);
         assert_eq!(first_artifact_path(&value), Some("Library/UI/a.png"));
     }
+
+    #[test]
+    fn failed_result_message_aggregates_lint_and_audit_counts() {
+        let nested = serde_json::json!({
+            "passed": false,
+            "lint": { "errorCount": 1, "warningCount": 2 },
+            "states": [
+                { "audit": { "errorCount": 3, "warningCount": 0 } },
+                { "audit": { "errorCount": 0, "warningCount": 4 } }
+            ]
+        });
+        assert_eq!(
+            failed_result_message(&nested, "UI check").as_deref(),
+            Some("UI check failed (4 error(s), 6 warning(s))")
+        );
+
+        // Top-level totals from the bridge win over re-counting nested sections.
+        let flat = serde_json::json!({
+            "passed": false,
+            "errorCount": 7,
+            "warningCount": 0,
+            "lint": { "errorCount": 1 }
+        });
+        assert_eq!(
+            failed_result_message(&flat, "UI lint").as_deref(),
+            Some("UI lint failed (7 error(s), 0 warning(s))")
+        );
+
+        let explicit = serde_json::json!({ "success": false, "message": "bridge said no" });
+        assert_eq!(
+            failed_result_message(&explicit, "UI lint").as_deref(),
+            Some("bridge said no")
+        );
+
+        assert!(failed_result_message(&serde_json::json!({ "passed": true }), "UI check").is_none());
+        assert!(failed_result_message(&serde_json::json!({}), "UI check").is_none());
+    }
+
+    #[test]
+    fn operation_outcomes_extract_results_and_fall_back_to_generic_failures() {
+        let completed = ui_operation_outcome(
+            serde_json::json!({ "status": "completed", "result": { "stateCount": 2 } }),
+            "inspect",
+        );
+        assert!(completed.failure.is_none());
+        assert_eq!(completed.result["stateCount"], 2);
+
+        let bare = ui_operation_outcome(serde_json::json!({ "status": "completed" }), "inspect");
+        assert!(bare.failure.is_none());
+        assert_eq!(bare.result, Value::Null);
+
+        let coded_only = ui_operation_outcome(
+            serde_json::json!({ "status": "failed", "error": { "code": "timeout" } }),
+            "inspect",
+        );
+        assert_eq!(coded_only.failure.as_deref(), Some("UI inspect failed"));
+        assert_eq!(coded_only.result["error"]["code"], "timeout");
+
+        let string_error =
+            ui_operation_outcome(serde_json::json!({ "status": "failed", "error": "boom" }), "check");
+        assert_eq!(string_error.failure.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn range_validation_names_the_flag_and_bounds() {
+        assert!(validate_range("--depth", 0, 0, 64).is_ok());
+        assert!(validate_range("--depth", 64, 0, 64).is_ok());
+        let error = validate_range("--depth", 65, 0, 64).unwrap_err().to_string();
+        assert_eq!(error, "--depth must be between 0 and 64");
+        assert!(validate_range("--max-elements", 0, 1, 5000).is_err());
+    }
 }

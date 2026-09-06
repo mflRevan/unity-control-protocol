@@ -441,6 +441,120 @@ namespace UCP.Bridge.Tests
             }
         }
 
+        [TestCase(":root")]
+        [TestCase("#row-label")]
+        [TestCase(".card_item-2")]
+        public void ValidateSelector_AcceptsRootNameAndClassSelectors(string selector)
+        {
+            Assert.DoesNotThrow(() => UiScenarioLoader.ValidateSelector(selector, "$test"));
+        }
+
+        [TestCase("row-label")]
+        [TestCase("#")]
+        [TestCase("#a b")]
+        [TestCase(".a>b")]
+        [TestCase("#a.b")]
+        public void ValidateSelector_RejectsAnythingButOneSimpleSelector(string selector)
+        {
+            var exception = Assert.Throws<UiScenarioException>(
+                () => UiScenarioLoader.ValidateSelector(selector, "$test"));
+            Assert.That(exception.Code, Is.EqualTo("ui.selector-syntax"));
+        }
+
+        [Test]
+        public void Apply_SetOperations_CoverEveryAllowlistedProperty()
+        {
+            var root = new VisualElement();
+            var label = new Label("before") { name = "label" };
+            var field = new TextField { name = "field" };
+            var toggle = new Toggle { name = "toggle" };
+            var panel = new VisualElement { name = "panel" };
+            root.Add(label);
+            root.Add(field);
+            root.Add(toggle);
+            root.Add(panel);
+
+            var report = UiScenarioApplier.Apply(root, ScenarioWithSets(
+                new UiSetOperation("#label", "text", "after", "$test.set[0]"),
+                new UiSetOperation("#field", "value", "typed", "$test.set[1]"),
+                new UiSetOperation("#toggle", "value", true, "$test.set[2]"),
+                new UiSetOperation("#panel", "display", "none", "$test.set[3]"),
+                new UiSetOperation("#panel", "class:highlight", true, "$test.set[4]"),
+                new UiSetOperation("#label", "enabled", false, "$test.set[5]"),
+                new UiSetOperation("#field", "tooltip", "hint", "$test.set[6]"),
+                new UiSetOperation("#toggle", "visibility", "hidden", "$test.set[7]")));
+
+            Assert.That(report.SetCount, Is.EqualTo(8));
+            Assert.That(label.text, Is.EqualTo("after"));
+            Assert.That(field.value, Is.EqualTo("typed"));
+            Assert.That(toggle.value, Is.True);
+            Assert.That(panel.style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(panel.ClassListContains("highlight"), Is.True);
+            Assert.That(label.enabledSelf, Is.False);
+            Assert.That(field.tooltip, Is.EqualTo("hint"));
+            Assert.That(toggle.style.visibility.value, Is.EqualTo(Visibility.Hidden));
+        }
+
+        [Test]
+        public void Apply_SetValueTypeMismatch_ReportsCodeAndExactLocation()
+        {
+            var root = new VisualElement();
+            root.Add(new Toggle { name = "toggle" });
+
+            var exception = Assert.Throws<UiScenarioException>(() => UiScenarioApplier.Apply(
+                root,
+                ScenarioWithSets(new UiSetOperation("#toggle", "value", "yes", "$test.set[0]"))));
+
+            Assert.That(exception.Code, Is.EqualTo("ui.set-value-type"));
+            Assert.That(exception.Location, Is.EqualTo("$test.set[0].value"));
+        }
+
+        [Test]
+        public void List_ReportsDocumentsAndFixturesIncludingInvalidOnes()
+        {
+            var validPath = WriteFixture(
+                "Valid.ucp-ui.json",
+                "{\"schemaVersion\":0,\"document\":\"./Document.uxml\",\"states\":{\"default\":{}}}");
+            var invalidPath = WriteFixture(
+                "Invalid.ucp-ui.json",
+                "{\"schemaVersion\":0,\"document\":\"./Document.uxml\",\"bogus\":1,\"states\":{\"default\":{}}}");
+
+            var result = (Dictionary<string, object>)UiScenarioLoader.List(
+                new Dictionary<string, object> { ["path"] = TestFolder });
+            var items = ((List<object>)result["items"]).Cast<Dictionary<string, object>>().ToList();
+
+            Assert.That(Convert.ToInt32(result["count"]), Is.EqualTo(4));
+            Assert.That(result["truncated"], Is.False);
+            Assert.That(
+                items.Select(item => item["target"]),
+                Is.EquivalentTo(new object[] { DocumentPath, RowPath, validPath, invalidPath }));
+            Assert.That(items.Count(item => Equals(item["type"], "uxml")), Is.EqualTo(2));
+
+            var valid = items.Single(item => Equals(item["target"], validPath));
+            Assert.That(valid["valid"], Is.True);
+            Assert.That(valid["defaultState"], Is.EqualTo("default"));
+
+            var invalid = items.Single(item => Equals(item["target"], invalidPath));
+            Assert.That(invalid["valid"], Is.False);
+            var diagnostic = (Dictionary<string, object>)((List<object>)invalid["diagnostics"])[0];
+            Assert.That(diagnostic["code"], Is.EqualTo("ui.unknown-field"));
+        }
+
+        private static UiResolvedScenario ScenarioWithSets(params UiSetOperation[] sets)
+        {
+            return new UiResolvedScenario(
+                DocumentPath,
+                null,
+                "default",
+                DocumentPath,
+                AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(DocumentPath),
+                new Dictionary<string, object>(),
+                sets,
+                Array.Empty<UiCollectionDefinition>(),
+                new UiViewport(),
+                new UiSettleOptions());
+        }
+
         private static Dictionary<string, object> Item(string name)
         {
             return new Dictionary<string, object> { ["name"] = name };

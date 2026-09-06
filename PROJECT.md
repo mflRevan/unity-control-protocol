@@ -212,6 +212,23 @@ atomic partial-file move. Detached recordings have a safety timeout; event arms 
 reloads through `SessionState`; active encoders finalize before reload; Game and Scene views share
 the same protocol and result shape.
 
+### UI Toolkit Harness
+
+`ucp ui` is the authoring loop for UI Toolkit documents and stylesheets. The Rust `ui` command
+owns argument validation, artifact copying, and the wait-for-notification/`ui/status` recovery
+loop; the bridge's `Editor/Ui/` directory owns the rest: `UiLintService` (importer-backed lint),
+`UiScenarioLoader`/`UiScenarioApplier` (strict `.ucp-ui.json` fixtures and data binding),
+`UiHost` (transient window, geometry sampling, capture), `UiVisualTreeInspector` (bounded
+snapshots and the audit), and `UiOperationManager` (queued, ticked render operations).
+
+Keep the harness scene-free: it must never load, modify, or dirty a scene, and it must not leave
+windows or render textures behind after success, failure, or a domain reload. Render operations
+are asynchronous by design because layout and capture need editor frames; keep that contract and
+the 300-second ceiling rather than blocking the RPC handler. Everything under `Editor/Ui/` is
+guarded by `UNITY_6000_0_OR_NEWER`; older editors get an explicit unsupported error, not a
+compile failure. Scenario schema changes are protocol changes: reject unknown fields, keep the
+`set` allowlist small, and report every error with a fixture location.
+
 ### Packaging And Metadata
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.

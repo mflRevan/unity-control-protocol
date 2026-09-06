@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.3] - Unreleased
+
+### Added
+
+- Added the `ui/list`, `ui/lint`, `ui/inspect`, `ui/screenshot`, `ui/check`, and `ui/status`
+  RPCs plus the `ui/result` completion notification for UI Toolkit authoring on Unity 6 and
+  newer. On older editors the methods are registered but return an explicit unsupported error.
+- Lint runs the synchronous UXML/USS/TSS importers, reads their import logs and
+  `importedWithErrors`/`importedWithWarnings` flags, follows UI dependencies, and clone-probes
+  each `VisualTreeAsset` under a scoped log capture. Immutable package assets are inspected from
+  their existing import artifacts without a forced reimport.
+- Render operations (`inspect`, `screenshot`, `check`) are queued and ticked on
+  `EditorApplication.update` in a transient `HideAndDontSave` utility window, wait for stable
+  finite geometry and stable pixels, capture through `InternalEditorUtility.CaptureEditorWindow`
+  with DPI compensation, write PNGs under `Library/UCP/UiCaptures`, and restore the previously
+  focused window. A 300-second overall ceiling and per-state settle timeouts bound every run;
+  `BridgeServer.Shutdown` fails in-flight operations with `editor_shutdown` before a reload.
+- Scenario support: strict `.ucp-ui.json` parsing with unknown-field rejection, deep data
+  overlays, an allowlisted `set` block, `repeat` and virtualized `list-view` collections driven
+  by JSON pointers, and automatic rewriting of `DataBinding` paths to dictionary keys through
+  `Unity.Properties`.
+
+### Fixed
+
+- Removed the empty `UCP.Bridge.Runtime` assembly definition that logged an "will not be
+  compiled, because it has no scripts associated with it" warning on every import (#4).
+
 ## [0.6.2] - 2026-08-31
 
 ### Added

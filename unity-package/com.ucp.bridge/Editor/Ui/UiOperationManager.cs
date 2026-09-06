@@ -85,8 +85,18 @@ namespace UCP.Bridge
             Tick();
         }
 
+        /// <summary>Promotes the next queued record to active without running its first tick.</summary>
+        internal static void ActivateNextForTests()
+        {
+            ActivateNext();
+        }
+
         private static void Tick()
         {
+            // Idle editors pay nothing: skip the pruning scan until an operation exists.
+            if (_active == null && Queue.Count == 0 && Operations.Count == 0)
+                return;
+
             PruneCompleted(false);
             ExpireQueuedOperations();
             if (_active == null)
@@ -666,7 +676,12 @@ namespace UCP.Bridge
             int scenarioIndex,
             string operationId)
         {
-            var targetToken = UiValue.SafeFileName(Path.GetFileNameWithoutExtension(targetPath));
+            // "Inventory.ucp-ui.json" should yield "Inventory-...", not "Inventory.ucp-ui-...".
+            var targetName = Path.GetFileNameWithoutExtension(targetPath) ?? string.Empty;
+            const string scenarioSuffix = ".ucp-ui";
+            if (targetName.EndsWith(scenarioSuffix, StringComparison.OrdinalIgnoreCase))
+                targetName = targetName.Substring(0, targetName.Length - scenarioSuffix.Length);
+            var targetToken = UiValue.SafeFileName(targetName);
             var stateToken = UiValue.SafeFileName(stateName);
             return $"{targetToken}-{stateToken}-s{scenarioIndex:D4}-{operationId}.png";
         }
