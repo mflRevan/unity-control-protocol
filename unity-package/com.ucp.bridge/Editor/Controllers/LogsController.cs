@@ -109,6 +109,30 @@ namespace UCP.Bridge
             }
         }
 
+        /// <summary>
+        /// Error/exception and warning counts in the bridge history after <paramref name="afterId"/>.
+        /// Walks back from the newest entry and stops at the cursor, so the cost is proportional to
+        /// what the current request logged, not to the history size.
+        /// </summary>
+        public static void CountLevels(long afterId, out int errors, out int warnings)
+        {
+            errors = 0;
+            warnings = 0;
+            lock (s_historyLock)
+            {
+                for (var index = s_history.Count - 1; index >= 0; index--)
+                {
+                    var entry = s_history[index];
+                    if (entry.Id <= afterId)
+                        break;
+                    if (entry.Level == "error" || entry.Level == "exception")
+                        errors++;
+                    else if (entry.Level == "warning")
+                        warnings++;
+                }
+            }
+        }
+
         public static long GetLatestId()
         {
             SeedHistoryFromConsole();

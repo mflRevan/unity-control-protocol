@@ -228,14 +228,16 @@ pub enum ProfilerFramesAction {
 
 pub async fn run(action: ProfilerAction, ctx: &Context) -> anyhow::Result<()> {
     match action {
-        ProfilerAction::Status => render_call(
-            ctx,
-            "profiler/status",
-            json!({}),
-            render_status,
-            "Profiler status retrieved",
-        )
-        .await,
+        ProfilerAction::Status => {
+            render_call(
+                ctx,
+                "profiler/status",
+                json!({}),
+                render_status,
+                "Profiler status retrieved",
+            )
+            .await
+        }
         ProfilerAction::Config { action } => match action {
             ProfilerConfigAction::Get => {
                 render_call(
@@ -704,9 +706,7 @@ fn render_status(result: &Value) {
         .and_then(Value::as_i64)
         .unwrap_or(0);
 
-    eprintln!(
-        "  active: {active}\n  mode: {effective_mode}\n  buffered frames: {frame_count}"
-    );
+    eprintln!("  active: {active}\n  mode: {effective_mode}\n  buffered frames: {frame_count}");
 
     if let Some(output_path) = result
         .get("session")

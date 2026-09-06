@@ -87,7 +87,8 @@ pub async fn ensure_editor_running(
             // ("Enter Safe Mode?", "Packages with Errors", ...). Answer it per the dialog policy
             // here, in the loop that actually waits on such editors; previously this only
             // happened in `wait_for_bridge`, which this function never reached in that case.
-            if let Ok(handled) = discovery::handle_unity_startup_dialogs(project, ctx.dialog_policy) {
+            if let Ok(handled) = discovery::handle_unity_startup_dialogs(project, ctx.dialog_policy)
+            {
                 for dialog in handled {
                     if !ctx.json {
                         output::print_info(&format!("Answered Unity dialog: {dialog}"));

@@ -22,6 +22,16 @@
   by JSON pointers, and automatic rewriting of `DataBinding` paths to dictionary keys through
   `Unity.Properties`.
 
+### Added
+
+- Every response produced on the main thread carries an `editor` summary next to `result` or
+  `error` (`EditorStateSummary`): mode, active scene dirtiness, Console badge counts read
+  through `LogEntries.GetCountsByType`, entries logged since the request was dispatched, and
+  conditional flags for compile errors, compiling, importing, building, prefab stage, and
+  recording. The handshake, which is answered off the main thread, reports
+  `mainThreadTickAgeMs` so a client can recognise a blocked main thread. Added `editor/state`
+  to fetch the summary on its own.
+
 ### Changed
 
 - Object ids are 64-bit end to end. `UnityObjectCompat.GetId()` returns a `long`

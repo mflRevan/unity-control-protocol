@@ -7,6 +7,7 @@ namespace UCP.Bridge
         public static void Register(CommandRouter router)
         {
             router.Register("editor/status", HandleStatus);
+            router.Register("editor/state", _ => EditorStateSummary.Capture(LogsController.GetLatestId()));
             router.Register("editor/quit", HandleQuit);
         }
 

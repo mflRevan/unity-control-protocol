@@ -80,7 +80,9 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
             }
             // BuildPipeline.BuildPlayer blocks the editor main thread synchronously and
             // can run for minutes; wait indefinitely rather than tripping --timeout.
-            client.call_with_timeout("build/start", params, None).await?
+            client
+                .call_with_timeout("build/start", params, None)
+                .await?
         }
         BuildAction::Defines => client.call("build/defines", serde_json::json!({})).await?,
         BuildAction::SetDefines { defines } => {

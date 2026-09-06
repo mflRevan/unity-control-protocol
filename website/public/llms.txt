@@ -30,6 +30,7 @@
 
 - [Play Mode & Compilation](https://unityctl.dev/docs/runtime/play-mode.md): Control Unity's play mode state from the command line.
 - [Screenshots, Recordings & Logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
+- [Editor State & Dialogs](https://unityctl.dev/docs/runtime/editor-state.md): Every command that talks to the bridge ends with one dim line describing the state it left the
 - [Testing](https://unityctl.dev/docs/runtime/testing.md): Run Unity Test Framework tests from the command line.
 - [Profiler](https://unityctl.dev/docs/runtime/profiler.md): Capture, inspect, and summarize Unity Profiler data through the bridge.
 

@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.Profiling;
 using UnityEngine.TestTools;
 
@@ -655,6 +656,60 @@ namespace UCP.Bridge.Tests
             Assert.That(getResult["level"], Is.EqualTo("exception"));
             Assert.That(getResult["message"], Is.EqualTo("Backfilled exception"));
             Assert.That(getResult["stackTrace"], Is.EqualTo("stack line 1\nstack line 2"));
+        }
+
+        [Test]
+        public void EditorStateSummary_ReportsModeSceneAndConsoleAndCountsNewEntries()
+        {
+            var cursor = LogsController.GetLatestId();
+            var summary = EditorStateSummary.Capture(cursor);
+
+            Assert.That(summary["mode"], Is.EqualTo("edit"));
+            var scene = (Dictionary<string, object>)summary["scene"];
+            Assert.That(scene["name"], Is.EqualTo(SceneManager.GetActiveScene().name));
+            Assert.That(scene["dirty"], Is.EqualTo(SceneManager.GetActiveScene().isDirty));
+            var console = (Dictionary<string, object>)summary["console"];
+            Assert.That(Convert.ToInt32(console["errors"]), Is.GreaterThanOrEqualTo(0));
+            Assert.That(Convert.ToInt32(console["warnings"]), Is.GreaterThanOrEqualTo(0));
+            Assert.That(console.ContainsKey("newWarnings"), Is.False, "nothing was logged after the cursor");
+            Assert.That(summary.ContainsKey("recording"), Is.False);
+
+            LogAssert.Expect(LogType.Warning, "ucp summary probe warning");
+            Debug.LogWarning("ucp summary probe warning");
+
+            var after = (Dictionary<string, object>)EditorStateSummary.Capture(cursor)["console"];
+            Assert.That(Convert.ToInt32(after["newWarnings"]), Is.EqualTo(1));
+            Assert.That(after.ContainsKey("newErrors"), Is.False);
+            LogsController.CountLevels(cursor, out var errors, out var warnings);
+            Assert.That(errors, Is.EqualTo(0));
+            Assert.That(warnings, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void EditorStateSummary_ReadsTheConsoleBadgeCounts()
+        {
+            Assert.That(EditorStateSummary.TryReadConsoleCounts(out var errors, out var warnings), Is.True,
+                "UnityEditor.LogEntries.GetCountsByType must be reachable on this editor");
+            Assert.That(errors, Is.GreaterThanOrEqualTo(0));
+            Assert.That(warnings, Is.GreaterThanOrEqualTo(0));
+        }
+
+        [Test]
+        public void Responses_CarryTheEditorSummaryOnlyWhenDispatchedOnTheMainThread()
+        {
+            var response = JsonRpcResponse.Success(7, new Dictionary<string, object> { ["ok"] = true });
+
+            var offThread = BridgeServer.ResponseToDict(response);
+            Assert.That(offThread.ContainsKey("editor"), Is.False);
+
+            var onThread = BridgeServer.ResponseToDict(response, LogsController.GetLatestId());
+            var editor = (Dictionary<string, object>)onThread["editor"];
+            Assert.That(editor["mode"], Is.EqualTo("edit"));
+            Assert.That(onThread["result"], Is.SameAs(response.result));
+
+            var json = MiniJson.Serialize(onThread);
+            var parsed = (Dictionary<string, object>)MiniJson.Deserialize(json);
+            Assert.That(((Dictionary<string, object>)parsed["editor"]).ContainsKey("console"), Is.True);
         }
 
         [Test]

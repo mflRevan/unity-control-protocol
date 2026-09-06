@@ -187,6 +187,10 @@ The Rust CLI should continue to emphasize:
 
 The CLI is the orchestration layer. It should remain easy to reason about even as the command surface expands.
 
+The CLI prints the bridge's editor-state summary once per command (`editor_state.rs`) and uses the
+handshake heartbeat to detect a blocked main thread before sending a request; only dialogs it
+recognises by title are answered automatically, everything else fails fast and names the dialog.
+
 ### Unity Bridge
 
 The Unity package should continue to emphasize:
@@ -196,6 +200,9 @@ The Unity package should continue to emphasize:
 - simple RPC routing
 - explicit request parsing and response shaping
 - compatibility with normal Unity editor behavior
+- every main-thread response carries `EditorStateSummary` (mode, scene dirtiness, console
+  counts, conditional flags); it must stay O(1), allocation-light, and exception-free, and the
+  off-thread handshake carries the main-thread heartbeat instead of touching editor APIs
 - object identity goes through `UnityObjectCompat` only: ids are `long` on the wire, backed by
   32-bit instance ids up to 6000.4 and 64-bit `EntityId` from 6000.5, and nothing outside that
   class may call `GetInstanceID()` or truncate an id to `int`

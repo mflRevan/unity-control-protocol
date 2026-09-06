@@ -62,6 +62,17 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 - Prefer `ucp packages add|remove` for normal Package Manager installs and `ucp packages dependency ...` for explicit manifest-driven local `file:` references.
 - Prefer `cm` for normal Unity Version Control work; use `ucp vcs` only as a lightweight fallback.
 
+## Editor state after every command
+
+Every command that reaches the bridge ends with a dim `[editor] ...` line (and an `editor` object in `--json` envelopes): edit/play/paused mode, the active scene with `(dirty)`/`(untitled)`, the console's error and warning counts, plus `(+N errors from this command)` when your last command logged something. Read it. `COMPILE ERRORS`, `compiling`, `importing assets`, `prefab stage <path>`, or `MODAL "<title>"` in that line changes what you should do next: check `ucp compile` or `ucp logs tail --level error`, wait, or answer the dialog.
+
+If a command fails immediately with `Unity is blocked by a modal dialog "<title>" [buttons]`, the editor's main thread is stuck on a prompt. Known Unity prompts are answered for you per `--dialog-policy`; anything else is left for you to decide:
+
+```bash
+ucp editor dialog                        # list open dialogs and their buttons
+ucp editor dialog --answer "Don't Save"  # press one (case-insensitive, substring ok)
+```
+
 ## Scene & editor basics
 
 If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --help`.

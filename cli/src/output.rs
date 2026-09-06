@@ -31,12 +31,44 @@ pub fn print_info(msg: &str) {
     eprintln!("{} {}", style(icon).cyan().bold(), msg);
 }
 
+/// The dim trailing line that reports editor state after a command.
+pub fn print_state(msg: &str) {
+    eprintln!("{}", style(msg).dim());
+}
+
 pub fn print_json(value: &serde_json::Value) {
-    println!("{}", serde_json::to_string_pretty(value).unwrap());
+    println!("{}", render_json(value, true));
 }
 
 pub fn print_json_compact(value: &serde_json::Value) {
-    println!("{}", serde_json::to_string(value).unwrap());
+    println!("{}", render_json(value, false));
+}
+
+/// Top-level command envelopes (objects with a `success` key) get the editor-state appendix
+/// appended as a trailing `editor` member; everything else is printed verbatim. The wrapper
+/// serializes by reference, so a large payload is never cloned for the sake of the appendix.
+fn render_json(value: &serde_json::Value, pretty: bool) -> String {
+    if crate::editor_state::enabled() && crate::editor_state::is_envelope(value) {
+        let editor = crate::editor_state::current();
+        let modal = crate::editor_state::modal();
+        if editor.is_some() || modal.is_some() {
+            let wrapped = crate::editor_state::WithEditorState {
+                inner: value.as_object().expect("checked by is_envelope"),
+                editor,
+                modal,
+            };
+            return if pretty {
+                serde_json::to_string_pretty(&wrapped).unwrap()
+            } else {
+                serde_json::to_string(&wrapped).unwrap()
+            };
+        }
+    }
+    if pretty {
+        serde_json::to_string_pretty(value).unwrap()
+    } else {
+        serde_json::to_string(value).unwrap()
+    }
 }
 
 pub fn success_json(data: serde_json::Value) -> serde_json::Value {

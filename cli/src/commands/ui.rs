@@ -1312,7 +1312,9 @@ mod tests {
             Some("bridge said no")
         );
 
-        assert!(failed_result_message(&serde_json::json!({ "passed": true }), "UI check").is_none());
+        assert!(
+            failed_result_message(&serde_json::json!({ "passed": true }), "UI check").is_none()
+        );
         assert!(failed_result_message(&serde_json::json!({}), "UI check").is_none());
     }
 
@@ -1336,8 +1338,10 @@ mod tests {
         assert_eq!(coded_only.failure.as_deref(), Some("UI inspect failed"));
         assert_eq!(coded_only.result["error"]["code"], "timeout");
 
-        let string_error =
-            ui_operation_outcome(serde_json::json!({ "status": "failed", "error": "boom" }), "check");
+        let string_error = ui_operation_outcome(
+            serde_json::json!({ "status": "failed", "error": "boom" }),
+            "check",
+        );
         assert_eq!(string_error.failure.as_deref(), Some("boom"));
     }
 
@@ -1345,7 +1349,9 @@ mod tests {
     fn range_validation_names_the_flag_and_bounds() {
         assert!(validate_range("--depth", 0, 0, 64).is_ok());
         assert!(validate_range("--depth", 64, 0, 64).is_ok());
-        let error = validate_range("--depth", 65, 0, 64).unwrap_err().to_string();
+        let error = validate_range("--depth", 65, 0, 64)
+            .unwrap_err()
+            .to_string();
         assert_eq!(error, "--depth must be between 0 and 64");
         assert!(validate_range("--max-elements", 0, 1, 5000).is_err());
     }

@@ -385,9 +385,7 @@ fn print_serialization_recommendation(project: &Path) {
         style("ucp references").bold(),
         missing.join(" and ")
     );
-    eprintln!(
-        "     Edit > Project Settings > Editor > Asset Serialization / Version Control"
-    );
+    eprintln!("     Edit > Project Settings > Editor > Asset Serialization / Version Control");
 }
 
 fn package_git_url() -> String {
@@ -1313,10 +1311,8 @@ mod tests {
 
     #[test]
     fn ensure_repo_ignore_entry_updates_git_and_plastic_files() {
-        let temp_root = std::env::temp_dir().join(format!(
-            "ucp-ignore-files-test-{}",
-            std::process::id()
-        ));
+        let temp_root =
+            std::env::temp_dir().join(format!("ucp-ignore-files-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&temp_root);
         fs::create_dir_all(&temp_root).unwrap();
         fs::create_dir_all(temp_root.join(".git")).unwrap();

@@ -34,6 +34,26 @@
 - Added a `ucp-ui` micro-skill, a UI Toolkit section in the omni skill, and a
   `docs/authoring/ui-toolkit.md` reference page with the scenario schema.
 
+### Added
+
+- Every command that reaches the bridge now ends with one dim `[editor] ...` line, and every
+  `--json` envelope carries the same data as an `editor` object: edit/play/paused mode, the
+  active scene with dirty and untitled flags, the Console window's error and warning counts,
+  how many errors or warnings the command itself produced, and, only when true, compile
+  errors, compiling, importing, building, an open prefab stage, an active or armed recording.
+  The bridge attaches the summary to responses it already produces on the main thread, so it
+  costs no request and no editor frame; measured medians are unchanged. `UCP_EDITOR_STATE=0`
+  disables it. Agents no longer have to discover a red console or a dirty scene three
+  commands later.
+- Modal dialogs are detected before a request is sent. The bridge's handshake reports how long
+  ago Unity's main thread last ticked; when it is stale the CLI enumerates the editor's dialog
+  windows, answers the ones it recognises per `--dialog-policy` (Safe Mode, Packages with
+  Errors, version mismatch, project upgrade), and otherwise fails within about a tenth of a
+  second naming the dialog and its buttons instead of waiting out the request timeout. The
+  line and the JSON envelope carry a `MODAL` entry.
+- Added `ucp editor dialog` to list the editor's open modal dialogs and `--answer <button>` to
+  press one deliberately (exact, then substring, case-insensitive). Windows only for now.
+
 ### Changed
 
 - Object ids on the wire are now 64-bit integers. Unity 6000.5 replaced 32-bit instance ids
@@ -54,6 +74,9 @@
 
 ### Fixed
 
+- Fixed the CLI sometimes resolving a project's editor to one of Unity's `AssetImportWorker`
+  processes, which carry the same `-projectPath`; window focus and dialog detection were flaky
+  as a result.
 - Fixed `ucp open` and every other command that finds a running editor without a bridge never
   answering Unity's startup prompts. The dialog policy (`--dialog-policy`, default `auto`) was
   only applied inside the bridge wait loop, but an editor parked on "Enter Safe Mode?" or

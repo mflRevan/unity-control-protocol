@@ -247,6 +247,9 @@ impl BridgeClient {
                 .map_err(|e| UcpError::Other(format!("Invalid RPC response: {e}")))?;
 
             if resp.id == Some(id) {
+                if let Some(state) = resp.editor {
+                    crate::editor_state::record(state);
+                }
                 if let Some(err) = resp.error {
                     return Err(UcpError::BridgeError {
                         code: err.code,

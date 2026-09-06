@@ -69,6 +69,14 @@ namespace UCP.Bridge
             }
         }
 
+        /// <summary>"recording", "armed", or null when idle -- for the per-response editor summary.</summary>
+        internal static string StateForSummary()
+        {
+            if (s_encoder != null) return "recording";
+            if (s_armed != null) return "armed";
+            return null;
+        }
+
         public static void Shutdown()
         {
             if (s_encoder == null) return;

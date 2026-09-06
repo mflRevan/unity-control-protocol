@@ -486,11 +486,13 @@ fn vcs_lifecycle_policy(action: &VcsAction) -> UnityLifecyclePolicy {
                 30,
             )
         }
-        VcsAction::Update | VcsAction::Resolve { .. } => UnityLifecyclePolicy::editor_settle_with_timeout(
-            "Waiting for Unity to finish processing version-control file changes...",
-            "version-control file processing",
-            30,
-        ),
+        VcsAction::Update | VcsAction::Resolve { .. } => {
+            UnityLifecyclePolicy::editor_settle_with_timeout(
+                "Waiting for Unity to finish processing version-control file changes...",
+                "version-control file processing",
+                30,
+            )
+        }
         VcsAction::Info
         | VcsAction::Status { .. }
         | VcsAction::Checkout { .. }

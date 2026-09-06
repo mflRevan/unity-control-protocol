@@ -17,6 +17,9 @@ pub struct RpcResponse {
     pub result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<RpcError>,
+    /// Editor-state appendix the bridge attaches to responses produced on Unity's main thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub editor: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

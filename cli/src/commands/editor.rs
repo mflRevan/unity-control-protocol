@@ -38,6 +38,12 @@ pub enum EditorAction {
     },
     /// List all running Unity editor processes discovered by UCP
     Ps,
+    /// List the modal dialogs currently blocking this project's editor, or press a button on one
+    Dialog {
+        /// Button label to press (exact or substring, case-insensitive), e.g. "Ignore"
+        #[arg(long, value_name = "BUTTON")]
+        answer: Option<String>,
+    },
 }
 
 pub async fn run(action: EditorAction, ctx: &Context) -> anyhow::Result<()> {
@@ -48,7 +54,67 @@ pub async fn run(action: EditorAction, ctx: &Context) -> anyhow::Result<()> {
         EditorAction::Restart { force } => restart(ctx, force).await,
         EditorAction::Status => status(ctx),
         EditorAction::Logs { lines } => logs(ctx, lines),
+        EditorAction::Dialog { answer } => dialog(ctx, answer),
     }
+}
+
+/// Modal dialogs block Unity's main thread, and with it every bridge request, while the bridge
+/// socket keeps answering; this is the escape hatch for the unknown ones the CLI refuses to
+/// answer on its own.
+fn dialog(ctx: &Context, answer: Option<String>) -> anyhow::Result<()> {
+    let project = resolve_project_path(ctx)?;
+    let dialogs = discovery::list_unity_dialogs(&project);
+
+    if let Some(label) = answer {
+        let pressed = discovery::answer_unity_dialog(&project, &label)?;
+        if ctx.json {
+            output::print_json(&output::success_json(serde_json::json!({
+                "answered": pressed,
+                "dialogs": dialogs.iter().map(dialog_json).collect::<Vec<_>>(),
+            })));
+            return Ok(());
+        }
+        match pressed {
+            Some(pressed) => output::print_success(&format!("Pressed {pressed}")),
+            None => anyhow::bail!(
+                "No open Unity dialog has a button matching \"{label}\"{}",
+                if dialogs.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "; open dialogs: {}",
+                        dialogs
+                            .iter()
+                            .map(|d| format!("\"{}\" [{}]", d.title, d.buttons.join(" | ")))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            ),
+        }
+        return Ok(());
+    }
+
+    if ctx.json {
+        output::print_json(&output::success_json(serde_json::json!({
+            "dialogs": dialogs.iter().map(dialog_json).collect::<Vec<_>>(),
+        })));
+        return Ok(());
+    }
+    if dialogs.is_empty() {
+        output::print_success("No modal dialogs are open");
+        return Ok(());
+    }
+    output::print_warn(&format!("{} modal dialog(s) open", dialogs.len()));
+    for dialog in &dialogs {
+        eprintln!("  \"{}\" [{}]", dialog.title, dialog.buttons.join(" | "));
+    }
+    eprintln!("  Answer with: ucp editor dialog --answer \"<button>\"");
+    Ok(())
+}
+
+fn dialog_json(dialog: &discovery::DialogInfo) -> serde_json::Value {
+    serde_json::json!({ "title": dialog.title, "buttons": dialog.buttons })
 }
 
 async fn open(ctx: &Context) -> anyhow::Result<()> {

@@ -15,6 +15,7 @@ import filesMd from '@docs/authoring/files.md?raw';
 import scriptingMd from '@docs/authoring/scripting.md?raw';
 import playModeMd from '@docs/runtime/play-mode.md?raw';
 import logsAndMediaMd from '@docs/runtime/logs-and-media.md?raw';
+import editorStateMd from '@docs/runtime/editor-state.md?raw';
 import testingMd from '@docs/runtime/testing.md?raw';
 import profilerMd from '@docs/runtime/profiler.md?raw';
 import packagesMd from '@docs/project/packages.md?raw';
@@ -72,6 +73,7 @@ export const docsNavigation: DocsNavGroup[] = [
     items: [
       { title: 'Play Mode & Compilation', href: '/docs/runtime/play-mode' },
       { title: 'Screenshots, Recordings & Logs', href: '/docs/runtime/logs-and-media' },
+      { title: 'Editor State & Dialogs', href: '/docs/runtime/editor-state' },
       { title: 'Testing', href: '/docs/runtime/testing' },
       { title: 'Profiler', href: '/docs/runtime/profiler' },
     ],
@@ -109,6 +111,7 @@ const canonicalDocsContent: Record<string, string> = {
   'authoring/scripting': scriptingMd,
   'runtime/play-mode': playModeMd,
   'runtime/logs-and-media': logsAndMediaMd,
+  'runtime/editor-state': editorStateMd,
   'runtime/testing': testingMd,
   'runtime/profiler': profilerMd,
   'project/packages': packagesMd,

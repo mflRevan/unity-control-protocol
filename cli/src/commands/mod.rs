@@ -42,7 +42,7 @@ use crate::error::UcpError;
 use crate::output;
 use clap::Subcommand;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
@@ -539,6 +539,59 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
     Ok((project, lock))
 }
 
+/// How long the editor's main thread may go without an `EditorApplication.update` tick before
+/// the CLI suspects a modal dialog rather than ordinary work. An idle editor ticks every
+/// ~100 ms; an unfocused one is throttled but stays well under a second.
+const MAIN_THREAD_STALL_MS: i64 = 1500;
+
+/// Uses the heartbeat the bridge reports in its (off-thread) handshake to notice a blocked main
+/// thread before sending a request that would only time out. A recognised Unity dialog is
+/// answered per `--dialog-policy`; an unknown one fails fast with its title and buttons so the
+/// agent can answer it deliberately with `ucp editor dialog --answer`.
+fn resolve_main_thread_stall(
+    project: &Path,
+    handshake: &serde_json::Value,
+    ctx: &Context,
+) -> anyhow::Result<()> {
+    let age_ms = handshake
+        .get("mainThreadTickAgeMs")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(-1);
+    if age_ms < MAIN_THREAD_STALL_MS {
+        return Ok(());
+    }
+
+    let dialogs = discovery::list_unity_dialogs(project);
+    if dialogs.is_empty() {
+        if !ctx.json {
+            output::print_info(&format!(
+                "Unity's main thread has been busy for {:.1}s (import, compile, or a native prompt); waiting...",
+                age_ms as f64 / 1000.0
+            ));
+        }
+        return Ok(());
+    }
+
+    let answered = discovery::answer_known_unity_dialogs(project, ctx.dialog_policy)?;
+    if !ctx.json {
+        for dialog in &answered {
+            output::print_info(&format!("Answered Unity dialog: {dialog}"));
+        }
+    }
+
+    let remaining = discovery::list_unity_dialogs(project);
+    let Some(dialog) = remaining.first() else {
+        return Ok(());
+    };
+    crate::editor_state::note_modal(&dialog.title, &dialog.buttons);
+    anyhow::bail!(
+        "Unity is blocked by a modal dialog \"{}\" [{}] and cannot run commands until it is closed. \
+         Answer it with `ucp editor dialog --answer \"<button>\"` (or in the editor).",
+        dialog.title,
+        dialog.buttons.join(" | ")
+    )
+}
+
 /// Per-request RPC deadline derived from the `--timeout` flag. `--timeout 0` opts out
 /// (wait indefinitely) for callers that need the legacy unbounded behavior.
 pub fn request_timeout(ctx: &Context) -> Option<Duration> {
@@ -561,7 +614,8 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
     if let Ok(lock) = discovery::read_lock_file(&project) {
         if let Ok(mut client) = BridgeClient::connect(&lock).await {
             client.set_request_timeout(request_timeout(ctx));
-            if client.handshake().await.is_ok() {
+            if let Ok(handshake) = client.handshake().await {
+                resolve_main_thread_stall(&project, &handshake, ctx)?;
                 return Ok((project, lock, client));
             }
             client.close().await;

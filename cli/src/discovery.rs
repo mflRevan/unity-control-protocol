@@ -106,6 +106,12 @@ pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
         if !is_unity_editor_executable(executable_path.as_deref(), &args) {
             continue;
         }
+        // Asset import workers are Unity.exe processes launched by the editor with the same
+        // -projectPath. They own no windows and no bridge; picking one at random made dialog
+        // detection and focus flaky.
+        if is_asset_import_worker(&args) {
+            continue;
+        }
 
         processes.push(UnityEditorProcess {
             pid: process.pid().as_u32(),
@@ -170,8 +176,28 @@ fn preferred_dialog_button_label(
     labels: &[String],
     policy: config::StartupDialogPolicy,
 ) -> Option<String> {
+    dialog_button_label(title, labels, policy, true)
+}
+
+/// Like `preferred_dialog_button_label` but without the generic per-policy fallback: only a
+/// dialog the CLI recognises by title gets an answer.
+fn known_dialog_button_label(
+    title: &str,
+    labels: &[String],
+    policy: config::StartupDialogPolicy,
+) -> Option<String> {
+    dialog_button_label(title, labels, policy, false)
+}
+
+fn dialog_button_label(
+    title: &str,
+    labels: &[String],
+    policy: config::StartupDialogPolicy,
+    allow_generic: bool,
+) -> Option<String> {
     let normalized_title = normalize_dialog_label(title);
-    let title_preferences: Option<&[&str]> = if normalized_title.contains("openingprojectinnonmatchingeditorinstallation")
+    let title_preferences: Option<&[&str]> = if normalized_title
+        .contains("openingprojectinnonmatchingeditorinstallation")
     {
         match policy {
             config::StartupDialogPolicy::Auto
@@ -198,9 +224,14 @@ fn preferred_dialog_button_label(
         match policy {
             config::StartupDialogPolicy::Auto
             | config::StartupDialogPolicy::Ignore
-            | config::StartupDialogPolicy::Recover => {
-                Some(&["confirm", "continue", "openproject", "openanyway", "ok", "yes"])
-            }
+            | config::StartupDialogPolicy::Recover => Some(&[
+                "confirm",
+                "continue",
+                "openproject",
+                "openanyway",
+                "ok",
+                "yes",
+            ]),
             config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
             config::StartupDialogPolicy::SafeMode | config::StartupDialogPolicy::Manual => None,
         }
@@ -216,9 +247,7 @@ fn preferred_dialog_button_label(
         match policy {
             config::StartupDialogPolicy::Auto
             | config::StartupDialogPolicy::Ignore
-            | config::StartupDialogPolicy::Recover => {
-                Some(&["ok", "continue", "confirm", "yes"])
-            }
+            | config::StartupDialogPolicy::Recover => Some(&["ok", "continue", "confirm", "yes"]),
             config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
             config::StartupDialogPolicy::SafeMode | config::StartupDialogPolicy::Manual => None,
         }
@@ -251,6 +280,10 @@ fn preferred_dialog_button_label(
                 return Some(label);
             }
         }
+    }
+
+    if !allow_generic {
+        return None;
     }
 
     let preferences: &[&str] = match policy {
@@ -359,6 +392,13 @@ fn is_unity_editor_executable(executable_path: Option<&Path>, args: &[String]) -
         .is_some_and(is_unity_editor_name)
 }
 
+fn is_asset_import_worker(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        let arg = arg.trim_matches('"');
+        arg.starts_with("AssetImportWorker") || arg == "-adb2"
+    })
+}
+
 fn is_unity_editor_name(name: &str) -> bool {
     name.eq_ignore_ascii_case("Unity.exe") || name.eq_ignore_ascii_case("Unity")
 }
@@ -448,33 +488,137 @@ fn focus_process_window(pid: u32) -> Result<bool, UcpError> {
     Ok(status.success())
 }
 
-#[cfg(windows)]
+/// A modal dialog owned by a Unity editor process: its title and button labels, plus the native
+/// handles needed to press one of them.
+#[derive(Debug, Clone)]
+pub struct DialogInfo {
+    pub title: String,
+    pub buttons: Vec<String>,
+    button_handles: Vec<usize>,
+}
+
+impl DialogInfo {
+    fn button_handle(&self, label: &str) -> Option<usize> {
+        let wanted = normalize_dialog_label(label);
+        let exact = self
+            .buttons
+            .iter()
+            .position(|candidate| normalize_dialog_label(candidate) == wanted);
+        let index = exact.or_else(|| {
+            self.buttons
+                .iter()
+                .position(|candidate| normalize_dialog_label(candidate).contains(&wanted))
+        })?;
+        self.button_handles.get(index).copied()
+    }
+}
+
+/// Visible top-level dialogs (with at least one button) belonging to the project's editor.
+pub fn list_unity_dialogs(project: &Path) -> Vec<DialogInfo> {
+    match unity_editor_pid_for_project(project) {
+        Some(pid) => enumerate_process_dialogs(pid),
+        None => Vec::new(),
+    }
+}
+
+/// Answers only dialogs the CLI recognises by title (Safe Mode, package errors, version
+/// mismatch, ...). Unknown dialogs are left alone: mid-session they may be a user script's own
+/// prompt, and pressing "OK" on one blindly is exactly the kind of surprise an agent must not cause.
+pub fn answer_known_unity_dialogs(
+    project: &Path,
+    policy: config::StartupDialogPolicy,
+) -> Result<Vec<String>, UcpError> {
+    if matches!(policy, config::StartupDialogPolicy::Manual) {
+        return Ok(Vec::new());
+    }
+    let Some(pid) = unity_editor_pid_for_project(project) else {
+        return Ok(Vec::new());
+    };
+    Ok(answer_process_dialogs(pid, policy, false))
+}
+
+/// Presses the button whose label matches `label` (exact first, then substring, case- and
+/// punctuation-insensitive) on the first dialog that has it. Returns "<title>: <button>".
+pub fn answer_unity_dialog(project: &Path, label: &str) -> Result<Option<String>, UcpError> {
+    let Some(pid) = unity_editor_pid_for_project(project) else {
+        return Ok(None);
+    };
+    for dialog in enumerate_process_dialogs(pid) {
+        if let Some(handle) = dialog.button_handle(label) {
+            let index = dialog
+                .button_handles
+                .iter()
+                .position(|h| *h == handle)
+                .unwrap_or(0);
+            let pressed = dialog.buttons.get(index).cloned().unwrap_or_default();
+            click_button(handle);
+            return Ok(Some(format!("{}: {pressed}", dialog.title)));
+        }
+    }
+    Ok(None)
+}
+
 fn handle_process_startup_dialogs(
     pid: u32,
     policy: config::StartupDialogPolicy,
 ) -> Result<Vec<String>, UcpError> {
+    Ok(answer_process_dialogs(pid, policy, true))
+}
+
+fn answer_process_dialogs(
+    pid: u32,
+    policy: config::StartupDialogPolicy,
+    allow_generic: bool,
+) -> Vec<String> {
+    let dialogs = enumerate_process_dialogs(pid);
+    tracing::debug!(
+        "startup dialogs: pid {pid} has {} candidate window(s): {:?}",
+        dialogs.len(),
+        dialogs.iter().map(|d| d.title.as_str()).collect::<Vec<_>>()
+    );
+
+    let mut handled = Vec::new();
+    for dialog in dialogs {
+        let selected = if allow_generic {
+            preferred_dialog_button_label(&dialog.title, &dialog.buttons, policy)
+        } else {
+            known_dialog_button_label(&dialog.title, &dialog.buttons, policy)
+        };
+        tracing::debug!(
+            "startup dialogs: window {:?} buttons {:?} -> policy {policy} selects {:?}",
+            dialog.title,
+            dialog.buttons,
+            selected
+        );
+        let Some(label) = selected else {
+            continue;
+        };
+        let Some(handle) = dialog.button_handle(&label) else {
+            continue;
+        };
+        click_button(handle);
+        let title = if dialog.title.is_empty() {
+            "Unity startup dialog".to_string()
+        } else {
+            dialog.title.clone()
+        };
+        handled.push(format!("{title}: {label}"));
+    }
+    handled
+}
+
+#[cfg(windows)]
+fn enumerate_process_dialogs(pid: u32) -> Vec<DialogInfo> {
     use std::ffi::c_void;
 
     type Bool = i32;
     type Hwnd = *mut c_void;
     type Lparam = isize;
 
-    #[derive(Clone)]
-    struct WindowInfo {
-        hwnd: Hwnd,
-        title: String,
-    }
-
     #[repr(C)]
     struct EnumWindowsState {
         target_pid: u32,
-        windows: Vec<WindowInfo>,
-    }
-
-    #[derive(Clone)]
-    struct ButtonInfo {
-        hwnd: Hwnd,
-        label: String,
+        windows: Vec<(Hwnd, String)>,
     }
 
     unsafe extern "system" {
@@ -493,7 +637,6 @@ fn handle_process_startup_dialogs(
         fn GetWindowTextW(hwnd: Hwnd, text: *mut u16, max_count: i32) -> i32;
         fn GetClassNameW(hwnd: Hwnd, class_name: *mut u16, max_count: i32) -> i32;
         fn IsWindowVisible(hwnd: Hwnd) -> Bool;
-        fn SendMessageW(hwnd: Hwnd, msg: u32, w_param: usize, l_param: isize) -> isize;
     }
 
     extern "system" fn enum_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
@@ -512,24 +655,19 @@ fn handle_process_startup_dialogs(
             let title = read_window_text(hwnd);
             let is_top_level_dialog = owner.is_null() && !title.trim().is_empty();
             let is_owned_popup = !owner.is_null();
-            if !is_top_level_dialog && !is_owned_popup {
-                return 1;
+            if is_top_level_dialog || is_owned_popup {
+                state.windows.push((hwnd, title));
             }
-            state.windows.push(WindowInfo {
-                hwnd,
-                title,
-            });
         }
-
         1
     }
 
     extern "system" fn enum_child_windows(hwnd: Hwnd, l_param: Lparam) -> Bool {
-        let buttons = unsafe { &mut *(l_param as *mut Vec<ButtonInfo>) };
+        let buttons = unsafe { &mut *(l_param as *mut Vec<(Hwnd, String)>) };
         let class_name = read_class_name(hwnd).to_ascii_lowercase();
         let label = read_window_text(hwnd);
         if class_name.contains("button") && !label.trim().is_empty() {
-            buttons.push(ButtonInfo { hwnd, label });
+            buttons.push((hwnd, label));
         }
         1
     }
@@ -561,77 +699,49 @@ fn handle_process_startup_dialogs(
         windows: Vec::new(),
     };
     let l_param = &mut state as *mut EnumWindowsState as isize;
-
     unsafe {
         EnumWindows(enum_windows, l_param);
     }
 
-    tracing::debug!(
-        "startup dialogs: pid {pid} has {} candidate window(s): {:?}",
-        state.windows.len(),
-        state.windows.iter().map(|w| w.title.as_str()).collect::<Vec<_>>()
-    );
-
-    let mut handled = Vec::new();
-    for window in state.windows {
-        let mut process_id = 0;
+    let mut dialogs = Vec::new();
+    for (hwnd, title) in state.windows {
+        let mut buttons = Vec::<(Hwnd, String)>::new();
+        let child_l_param = &mut buttons as *mut Vec<(Hwnd, String)> as isize;
         unsafe {
-            GetWindowThreadProcessId(window.hwnd, &mut process_id);
+            EnumChildWindows(hwnd, enum_child_windows, child_l_param);
         }
-        if process_id != pid {
+        if buttons.is_empty() {
+            // Unity's own tool windows are owned popups too; only button-bearing ones are dialogs.
             continue;
         }
-
-        let mut buttons = Vec::<ButtonInfo>::new();
-        let child_l_param = &mut buttons as *mut Vec<ButtonInfo> as isize;
-        unsafe {
-            EnumChildWindows(window.hwnd, enum_child_windows, child_l_param);
-        }
-
-        let labels = buttons
-            .iter()
-            .map(|button| button.label.clone())
-            .collect::<Vec<_>>();
-        let selected = preferred_dialog_button_label(&window.title, &labels, policy);
-        tracing::debug!(
-            "startup dialogs: window {:?} buttons {:?} -> policy {policy} selects {:?}",
-            window.title,
-            labels,
-            selected
-        );
-        let Some(selected_label) = selected else {
-            continue;
-        };
-
-        let Some(button) = buttons.into_iter().find(|button| {
-            normalize_dialog_label(&button.label) == normalize_dialog_label(&selected_label)
-        }) else {
-            continue;
-        };
-
-        const BM_CLICK: u32 = 0x00F5;
-        unsafe {
-            SendMessageW(button.hwnd, BM_CLICK, 0, 0);
-        }
-
-        let title = if window.title.is_empty() {
-            "Unity startup dialog".to_string()
-        } else {
-            window.title
-        };
-        handled.push(format!("{title}: {}", button.label));
+        dialogs.push(DialogInfo {
+            title,
+            button_handles: buttons.iter().map(|(h, _)| *h as usize).collect(),
+            buttons: buttons.into_iter().map(|(_, label)| label).collect(),
+        });
     }
+    dialogs
+}
 
-    Ok(handled)
+#[cfg(windows)]
+fn click_button(handle: usize) {
+    use std::ffi::c_void;
+    unsafe extern "system" {
+        fn SendMessageW(hwnd: *mut c_void, msg: u32, w_param: usize, l_param: isize) -> isize;
+    }
+    const BM_CLICK: u32 = 0x00F5;
+    unsafe {
+        SendMessageW(handle as *mut c_void, BM_CLICK, 0, 0);
+    }
 }
 
 #[cfg(not(windows))]
-fn handle_process_startup_dialogs(
-    _pid: u32,
-    _policy: config::StartupDialogPolicy,
-) -> Result<Vec<String>, UcpError> {
-    Ok(Vec::new())
+fn enumerate_process_dialogs(_pid: u32) -> Vec<DialogInfo> {
+    Vec::new()
 }
+
+#[cfg(not(windows))]
+fn click_button(_handle: usize) {}
 
 #[cfg(not(windows))]
 fn focus_process_window(_pid: u32) -> Result<bool, UcpError> {
@@ -681,8 +791,12 @@ mod tests {
         );
 
         assert_eq!(
-            preferred_dialog_button_label("Enter Safe Mode?", &safe_mode, StartupDialogPolicy::Auto)
-                .as_deref(),
+            preferred_dialog_button_label(
+                "Enter Safe Mode?",
+                &safe_mode,
+                StartupDialogPolicy::Auto
+            )
+            .as_deref(),
             Some("Ignore")
         );
         assert_eq!(
@@ -703,6 +817,69 @@ mod tests {
             .as_deref(),
             Some("Continue")
         );
+    }
+
+    #[test]
+    fn known_only_selection_leaves_unrecognised_dialogs_alone() {
+        use super::known_dialog_button_label;
+        let buttons = labels(&["Yes", "No"]);
+        assert_eq!(
+            known_dialog_button_label("Delete everything?", &buttons, StartupDialogPolicy::Auto),
+            None
+        );
+        assert_eq!(
+            known_dialog_button_label(
+                "Enter Safe Mode?",
+                &labels(&["Enter Safe Mode", "Ignore", "Quit"]),
+                StartupDialogPolicy::Auto
+            )
+            .as_deref(),
+            Some("Ignore")
+        );
+        // The generic path still answers it, as it always did at startup.
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Delete everything?",
+                &buttons,
+                StartupDialogPolicy::Auto
+            )
+            .as_deref(),
+            Some("Yes")
+        );
+    }
+
+    #[test]
+    fn asset_import_workers_are_not_editors() {
+        use super::is_asset_import_worker;
+        let worker = labels(&[
+            "D:\\Unity\\Installs\\6000.4.0f1\\Editor\\Unity.exe",
+            "-adb2",
+            "-batchMode",
+            "-noUpm",
+            "-name",
+            "AssetImportWorker0",
+            "-projectPath",
+            "C:/Projects/Demo",
+        ]);
+        assert!(is_asset_import_worker(&worker));
+
+        let editor = labels(&[
+            "D:\\Unity\\Installs\\6000.4.0f1\\Editor\\Unity.exe",
+            "-projectPath",
+            "C:/Projects/Demo",
+            "-logFile",
+            "C:/Projects/Demo/.ucp/logs/editor.log",
+        ]);
+        assert!(!is_asset_import_worker(&editor));
+
+        let batch_tests = labels(&[
+            "Unity.exe",
+            "-batchmode",
+            "-projectPath",
+            "C:/Projects/Demo",
+            "-runTests",
+        ]);
+        assert!(!is_asset_import_worker(&batch_tests));
     }
 
     #[test]
@@ -842,13 +1019,21 @@ mod tests {
     fn generic_fallback_matches_confirm_and_yes() {
         let labels = vec!["Cancel".to_string(), "Confirm".to_string()];
         assert_eq!(
-            preferred_dialog_button_label("Some Unknown Dialog", &labels, StartupDialogPolicy::Ignore),
+            preferred_dialog_button_label(
+                "Some Unknown Dialog",
+                &labels,
+                StartupDialogPolicy::Ignore
+            ),
             Some("Confirm".to_string())
         );
 
         let labels2 = vec!["No".to_string(), "Yes".to_string()];
         assert_eq!(
-            preferred_dialog_button_label("Another Unknown Dialog", &labels2, StartupDialogPolicy::Auto),
+            preferred_dialog_button_label(
+                "Another Unknown Dialog",
+                &labels2,
+                StartupDialogPolicy::Auto
+            ),
             Some("Yes".to_string())
         );
     }

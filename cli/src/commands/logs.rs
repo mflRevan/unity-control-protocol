@@ -350,7 +350,9 @@ async fn drain_buffered_logs(
         "logs/tail"
     };
 
-    let remaining = count.map(|limit| limit.saturating_sub(received)).unwrap_or(50);
+    let remaining = count
+        .map(|limit| limit.saturating_sub(received))
+        .unwrap_or(50);
     let fetch_count = remaining.max(20);
     let mut params = serde_json::json!({
         "count": fetch_count,
@@ -371,7 +373,11 @@ async fn drain_buffered_logs(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let client_pattern_filter = if method == "logs/search" { None } else { pattern };
+    let client_pattern_filter = if method == "logs/search" {
+        None
+    } else {
+        pattern
+    };
 
     for log in logs.into_iter().rev() {
         if let Some(limit) = count {

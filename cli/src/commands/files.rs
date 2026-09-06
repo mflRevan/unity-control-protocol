@@ -2,8 +2,8 @@ use crate::output;
 use clap::Subcommand;
 
 use super::Context;
-use super::compile;
 use super::UnityLifecyclePolicy;
+use super::compile;
 
 #[derive(Subcommand)]
 pub enum FilesAction {

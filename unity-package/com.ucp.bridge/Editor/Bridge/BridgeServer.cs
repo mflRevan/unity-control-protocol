@@ -45,6 +45,11 @@ namespace UCP.Bridge
 
         // Main-thread action queue
         private static readonly ConcurrentQueue<Action> s_mainThreadQueue = new();
+        // UTC ticks of the last EditorApplication.update we saw. Written by the main thread,
+        // read by the socket thread in the handshake so a client can tell "the editor's main
+        // thread is stalled" (modal dialog, synchronous import, domain reload) apart from "busy".
+        private static long s_lastMainThreadTick;
+        private static bool s_summaryFailureLogged;
 
         // Command router
         private static readonly CommandRouter s_router = new();
@@ -120,7 +125,8 @@ namespace UCP.Bridge
                     protocolVersion = ProtocolVersion,
                     unityVersion = s_unityVersion,
                     projectName = s_projectName,
-                    projectPath = s_projectPath
+                    projectPath = s_projectPath,
+                    mainThreadTickAgeMs = MainThreadTickAgeMs()
                 };
             });
 
@@ -438,16 +444,25 @@ namespace UCP.Bridge
             // Dispatch on main thread
             s_mainThreadQueue.Enqueue(() =>
             {
+                var logCursor = LogsController.GetLatestId();
                 var response = s_router.Dispatch(capturedMethod, capturedId, capturedParams);
-                SendResponse(capturedWs, response);
+                SendResponse(capturedWs, response, logCursor);
             });
         }
 
-        private static void SendResponse(WebSocket ws, JsonRpcResponse response)
+        /// <summary>Milliseconds since the main thread last pumped; -1 before the first pump.</summary>
+        internal static long MainThreadTickAgeMs()
+        {
+            var last = System.Threading.Volatile.Read(ref s_lastMainThreadTick);
+            if (last == 0) return -1;
+            return (DateTime.UtcNow.Ticks - last) / TimeSpan.TicksPerMillisecond;
+        }
+
+        private static void SendResponse(WebSocket ws, JsonRpcResponse response, long? logCursor = null)
         {
             try
             {
-                var json = MiniJson.Serialize(ResponseToDict(response));
+                var json = MiniJson.Serialize(ResponseToDict(response, logCursor));
                 var bytes = Encoding.UTF8.GetBytes(json);
                 _ = ws.SendAsync(new ArraySegment<byte>(bytes),
                     WebSocketMessageType.Text, true, CancellationToken.None);
@@ -524,6 +539,7 @@ namespace UCP.Bridge
 
         private static void PumpMainThread()
         {
+            System.Threading.Volatile.Write(ref s_lastMainThreadTick, DateTime.UtcNow.Ticks);
             int processed = 0;
             while (s_mainThreadQueue.TryDequeue(out var action) && processed < 50)
             {
@@ -614,13 +630,35 @@ namespace UCP.Bridge
             Application.logMessageReceivedThreaded -= OnLogMessage;
         }
 
-        private static Dictionary<string, object> ResponseToDict(JsonRpcResponse r)
+        /// <param name="logCursor">
+        /// Present for responses produced on the main thread: the log id captured before dispatch.
+        /// The editor-state summary is attached as a sibling of result/error, and only then --
+        /// the handshake is answered off-thread where none of the editor APIs may be touched.
+        /// </param>
+        internal static Dictionary<string, object> ResponseToDict(JsonRpcResponse r, long? logCursor = null)
         {
             var dict = new Dictionary<string, object>
             {
                 ["jsonrpc"] = "2.0",
                 ["id"] = r.id
             };
+
+            if (logCursor.HasValue)
+            {
+                try
+                {
+                    dict["editor"] = EditorStateSummary.Capture(logCursor.Value);
+                }
+                catch (Exception ex)
+                {
+                    // Never let awareness break a response; note the failure once per domain.
+                    if (!s_summaryFailureLogged)
+                    {
+                        s_summaryFailureLogged = true;
+                        Debug.LogWarning($"[UCP] editor state summary unavailable: {ex.Message}");
+                    }
+                }
+            }
 
             if (r.error != null)
             {

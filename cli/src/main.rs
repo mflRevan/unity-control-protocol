@@ -6,6 +6,7 @@ mod config;
 mod discovery;
 mod editor_diagnosis;
 mod editor_runtime;
+mod editor_state;
 mod error;
 mod output;
 mod protocol;
@@ -156,7 +157,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let json_output = ctx.json;
-    if let Err(e) = commands::run(cli.command, ctx).await {
+    let outcome = commands::run(cli.command, ctx).await;
+    if let Err(e) = outcome {
         if json_output {
             let err = if let Some(test_run_failure) =
                 e.downcast_ref::<commands::tests::TestRunFailure>()
@@ -186,11 +188,21 @@ async fn main() -> anyhow::Result<()> {
                     "error": { "message": format!("{e:#}") }
                 })
             };
-            println!("{}", serde_json::to_string(&err).unwrap());
+            // Error envelopes go through the same appendix path as success envelopes.
+            output::print_json_compact(&err);
         } else {
             output::print_error(&format!("{e:#}"));
+            if let Some(line) = editor_state::summary_line() {
+                output::print_state(&line);
+            }
         }
         std::process::exit(1);
+    }
+
+    if !json_output {
+        if let Some(line) = editor_state::summary_line() {
+            output::print_state(&line);
+        }
     }
 
     Ok(())
