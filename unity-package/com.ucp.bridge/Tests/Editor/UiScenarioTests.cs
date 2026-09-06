@@ -1,11 +1,13 @@
 #if UNITY_6000_0_OR_NEWER
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UnityEngine.UIElements;
 
 namespace UCP.Bridge.Tests
@@ -48,6 +50,25 @@ namespace UCP.Bridge.Tests
 
             Assert.That(exception.Code, Is.EqualTo("ui.unknown-field"));
             Assert.That(exception.Location, Does.EndWith(".unexpected"));
+        }
+
+        [TestCase("Packages/com.example.ui/Styles/../Theme.tss", null, "Packages/com.example.ui/Theme.tss")]
+        [TestCase("./Theme.tss", "Packages/com.example.ui/Panel.ucp-ui.json", "Packages/com.example.ui/Theme.tss")]
+        [TestCase("Assets/UI/../Panel.uxml", null, "Assets/Panel.uxml")]
+        public void NormalizeAssetPath_PreservesVirtualRoots(string path, string fixture, string expected)
+        {
+            Assert.That(UiScenarioLoader.NormalizeAssetPath(path, fixture, "$test"), Is.EqualTo(expected));
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+            Assert.That(UiScenarioLoader.NormalizeAssetPath(Path.Combine(projectRoot, expected), null, "$test"),
+                Is.EqualTo(expected));
+        }
+
+        [TestCase("Packages/../../outside.uss")]
+        [TestCase("Assets/../Library/Theme.tss")]
+        [TestCase("Packages/com.example/../../Library/Theme.tss")]
+        public void NormalizeAssetPath_RejectsEscapesAfterCollapsingSegments(string path)
+        {
+            Assert.Throws<UiScenarioException>(() => UiScenarioLoader.NormalizeAssetPath(path, null, "$test"));
         }
 
         [Test]
@@ -270,6 +291,154 @@ namespace UCP.Bridge.Tests
 
             var exception = Assert.Throws<UiScenarioException>(() => UiScenarioApplier.Apply(root, scenario));
             Assert.That(exception.Code, Is.EqualTo("ui.selector-ambiguous"));
+        }
+
+        [UnityTest]
+        public IEnumerator InspectAndAudit_IncludeRealizedListViewRowsAndBindingFailures()
+        {
+            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+                Assert.Ignore("Realized ListView binding coverage requires an Editor graphics device");
+
+            var previousFocus = EditorWindow.focusedWindow;
+            var window = UiHostWindow.Open(320, 240);
+            try
+            {
+                var root = window.ContentRoot;
+                Binding.SetPanelLogLevel(root.panel, BindingLogLevel.None);
+                var list = new ListView { name = "rows" };
+                list.style.height = 160;
+                root.Add(list);
+                var scenario = new UiResolvedScenario(
+                    DocumentPath, null, "default", DocumentPath,
+                    AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(DocumentPath),
+                    new Dictionary<string, object>
+                    {
+                        ["items"] = new List<object> { Item("One"), new Dictionary<string, object>() }
+                    },
+                    Array.Empty<UiSetOperation>(),
+                    new[]
+                    {
+                        new UiCollectionDefinition("#rows", UiCollectionMode.ListView, "/items", RowPath,
+                            AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(RowPath), 24f, "$test.list")
+                    },
+                    new UiViewport(320, 240), new UiSettleOptions());
+                var report = UiScenarioApplier.Apply(root, scenario);
+                var metadata = UiScenarioApplier.GetCollectionMetadata(root);
+                List<Label> labels = null;
+                var deadline = EditorApplication.timeSinceStartup + 10;
+                while (EditorApplication.timeSinceStartup < deadline)
+                {
+                    window.Repaint();
+                    EditorApplication.QueuePlayerLoopUpdate();
+                    yield return null;
+                    labels = root.Query<Label>("row-label").ToList();
+                    if (labels.Any(label => label.text == "One") && labels.Any(label =>
+                            label.TryGetLastBindingToUIResult("text", out var result) &&
+                            result.status == BindingStatus.Failure))
+                        break;
+                }
+                Assert.That(labels, Has.Count.EqualTo(2), "Both visible rows should be realized");
+                Assert.That(labels.Any(label => label.text == "One"), Is.True, "Valid row binding should resolve");
+                Assert.That(labels.Any(label =>
+                    label.TryGetLastBindingToUIResult("text", out var result) &&
+                    result.status == BindingStatus.Failure), Is.True, "Missing row data should fail binding");
+
+                var snapshot = UiVisualTreeInspector.Inspect(root,
+                    UiInspectOptions.Parse(new Dictionary<string, object> { ["query"] = "#row-label" }), metadata);
+                Assert.That(snapshot["matchCount"], Is.EqualTo(2));
+                Assert.That(snapshot["returnedElementCount"], Is.EqualTo(2));
+                var fullSnapshot = UiVisualTreeInspector.Inspect(list,
+                    UiInspectOptions.Parse(new Dictionary<string, object> { ["depth"] = 64 }), metadata);
+                Assert.That(MiniJson.Serialize(fullSnapshot), Does.Contain("row-label"));
+                var boundedSnapshot = UiVisualTreeInspector.Inspect(list,
+                    UiInspectOptions.Parse(new Dictionary<string, object> { ["depth"] = 64, ["max"] = 2 }), metadata);
+                Assert.That(boundedSnapshot["returnedElementCount"], Is.EqualTo(2));
+                Assert.That(boundedSnapshot["truncated"], Is.True);
+
+                var before = UiGeometrySampler.Measure(root);
+                labels[0].text = "Changed row";
+                Assert.That(UiGeometrySampler.Measure(root).Hash, Is.Not.EqualTo(before.Hash),
+                    "Row changes must invalidate geometry stability");
+
+                var audit = UiAudit.Run(root, report, metadata);
+                Assert.That(audit["passed"], Is.False);
+                var errors = (List<object>)audit["errors"];
+                Assert.That(errors.OfType<Dictionary<string, object>>().Any(error =>
+                    Equals(error["code"], "binding_failure") &&
+                    Equals(((Dictionary<string, object>)error["element"])["name"], "row-label")), Is.True);
+                Assert.That(((List<object>)audit["warnings"]).OfType<Dictionary<string, object>>().Any(warning =>
+                    Equals(warning["code"], "duplicate_name")), Is.False,
+                    "Repeated names in managed rows must still be exempt from duplicate-name warnings");
+
+                for (var index = 0; index < 200; index++)
+                    report.AddDiagnostic("warning", "test", "warning before binding audit");
+                var truncatedAudit = UiAudit.Run(root, report, metadata);
+                Assert.That(truncatedAudit["passed"], Is.False);
+                Assert.That(truncatedAudit["errorCount"], Is.EqualTo(audit["errorCount"]));
+                Assert.That((List<object>)truncatedAudit["warnings"],
+                    Has.Count.EqualTo(200 - ((List<object>)audit["errors"]).Count));
+                Assert.That(MiniJson.Serialize(truncatedAudit["errors"]),
+                    Is.EqualTo(MiniJson.Serialize(audit["errors"])));
+                Assert.That(truncatedAudit["diagnosticsTruncated"], Is.True);
+            }
+            finally
+            {
+                if (window != null && window.rootVisualElement.panel != null)
+                    Binding.ResetPanelLogLevel(window.rootVisualElement.panel);
+                UiHostWindow.CloseAndDestroy(window);
+                if (previousFocus != null)
+                    previousFocus.Focus();
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Audit_VisibleEmptyListViewSkipsInternalFocusTargetsButChecksAuthoredControls()
+        {
+            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+                Assert.Ignore("Empty ListView layout coverage requires an Editor graphics device");
+
+            var previousFocus = EditorWindow.focusedWindow;
+            var window = UiHostWindow.Open(320, 240);
+            try
+            {
+                var root = window.ContentRoot;
+                var list = new ListView { name = "rows", itemsSource = new List<object>() };
+                list.style.height = 160;
+                root.Add(list);
+                var deadline = EditorApplication.timeSinceStartup + 10;
+                var stableFrames = 0;
+                while (stableFrames < 3 && EditorApplication.timeSinceStartup < deadline)
+                {
+                    window.Pump();
+                    yield return null;
+                    stableFrames = list.worldBound.height > 0 && list.worldBound.width > 0
+                        ? stableFrames + 1 : 0;
+                }
+                Assert.That(stableFrames, Is.EqualTo(3), "The empty list must be displayed and laid out");
+                var audit = UiAudit.Run(root, new UiApplyReport(), Array.Empty<UiCollectionMetadata>());
+                Assert.That(audit["errorCount"], Is.EqualTo(0));
+                Assert.That(audit["warningCount"], Is.EqualTo(0), MiniJson.Serialize(audit));
+
+                // An unnamed authored control must not be exempted with the internals.
+                var authored = new VisualElement { focusable = true };
+                authored.style.width = 0;
+                authored.style.height = 0;
+                root.Add(authored);
+                for (var frame = 0; frame < 3; frame++)
+                {
+                    window.Pump();
+                    yield return null;
+                }
+                audit = UiAudit.Run(root, new UiApplyReport(), Array.Empty<UiCollectionMetadata>());
+                Assert.That(audit["warningCount"], Is.EqualTo(1));
+                Assert.That(MiniJson.Serialize(audit["warnings"]), Does.Contain("focusable_zero_size"));
+            }
+            finally
+            {
+                UiHostWindow.CloseAndDestroy(window);
+                if (previousFocus != null)
+                    previousFocus.Focus();
+            }
         }
 
         private static Dictionary<string, object> Item(string name)

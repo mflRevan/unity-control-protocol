@@ -131,7 +131,7 @@ namespace UCP.Bridge
                     "UI_PATH_UNSUPPORTED",
                     assetPath,
                     "request",
-                    "Expected a .uxml, .uss, .ucp-ui.json, or project folder path");
+                    "Expected a .uxml, .uss, .tss, .ucp-ui.json, or project folder path");
                 return;
             }
 
@@ -213,6 +213,7 @@ namespace UCP.Bridge
                 ["contentHash"] = string.Empty,
                 ["importedWithErrors"] = false,
                 ["importedWithWarnings"] = false,
+                ["reimported"] = false,
                 ["cloneAttempted"] = false,
                 ["cloneSucceeded"] = false,
                 ["cloneElementCount"] = 0,
@@ -227,9 +228,13 @@ namespace UCP.Bridge
 
             try
             {
-                AssetDatabase.ImportAsset(
-                    assetPath,
-                    ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+                if (ShouldReimport(assetPath))
+                {
+                    AssetDatabase.ImportAsset(
+                        assetPath,
+                        ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+                    report["reimported"] = true;
+                }
                 report["contentHash"] = AssetDatabase.GetAssetDependencyHash(assetPath).ToString();
             }
             catch (Exception ex)
@@ -390,11 +395,24 @@ namespace UCP.Bridge
                    File.Exists(Path.Combine(projectRoot, assetPath));
         }
 
+        internal static bool ShouldReimport(string assetPath)
+        {
+            if (!assetPath.StartsWith("Packages/", StringComparison.OrdinalIgnoreCase))
+                return true;
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
+            // Immutable packages already have imported artifacts. Inspect those
+            // artifacts and logs without forcing work on the package cache.
+            return package != null &&
+                   (package.source == UnityEditor.PackageManager.PackageSource.Embedded ||
+                    package.source == UnityEditor.PackageManager.PackageSource.Local);
+        }
+
         private static bool IsUiAssetPath(string path)
         {
             return path != null &&
                    (path.EndsWith(".uxml", StringComparison.OrdinalIgnoreCase) ||
-                    path.EndsWith(".uss", StringComparison.OrdinalIgnoreCase));
+                    path.EndsWith(".uss", StringComparison.OrdinalIgnoreCase) ||
+                    path.EndsWith(".tss", StringComparison.OrdinalIgnoreCase));
         }
 
         private static bool IsFixturePath(string path)
@@ -477,7 +495,7 @@ namespace UCP.Bridge
             return parsed;
         }
 
-        private sealed class DiagnosticCollector
+        internal sealed class DiagnosticCollector
         {
             private readonly int _limit;
 
@@ -507,7 +525,16 @@ namespace UCP.Bridge
                     WarningCount++;
 
                 if (Items.Count >= _limit)
-                    return;
+                {
+                    if (severity != "error")
+                        return;
+                    var warningIndex = Items.FindLastIndex(item =>
+                        item is Dictionary<string, object> diagnostic &&
+                        Equals(diagnostic["severity"], "warning"));
+                    if (warningIndex < 0)
+                        return;
+                    Items.RemoveAt(warningIndex);
+                }
 
                 Items.Add(new Dictionary<string, object>
                 {

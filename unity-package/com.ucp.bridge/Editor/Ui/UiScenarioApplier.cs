@@ -203,7 +203,7 @@ namespace UCP.Bridge
             if (matches)
                 output.Add(element);
 
-            foreach (var child in element.Children())
+            foreach (var child in element.hierarchy.Children())
                 CollectMatches(child, selector, output);
         }
 
@@ -400,7 +400,7 @@ namespace UCP.Bridge
                 changed++;
             }
 
-            foreach (var child in element.Children())
+            foreach (var child in element.hierarchy.Children())
                 RewriteBindingsRecursive(child, ref changed);
         }
 

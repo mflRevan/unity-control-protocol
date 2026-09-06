@@ -180,7 +180,7 @@ namespace UCP.Bridge
             var children = new List<object>();
             if (depth < context.Options.MaxDepth)
             {
-                foreach (var child in element.Children())
+                foreach (var child in element.hierarchy.Children())
                 {
                     if (context.ReturnedCount >= context.Options.MaxElements)
                     {
@@ -338,7 +338,9 @@ namespace UCP.Bridge
             if (root == null)
                 return;
             action(root);
-            foreach (var child in root.Children())
+            // Collection controls can have a null contentContainer while their
+            // realized rows still exist in the physical visual hierarchy.
+            foreach (var child in root.hierarchy.Children())
                 Visit(child, action);
         }
 
@@ -406,10 +408,7 @@ namespace UCP.Bridge
             UiApplyReport applyReport,
             IReadOnlyList<UiCollectionMetadata> collectionMetadata)
         {
-            var errors = new List<object>();
-            var warnings = new List<object>();
-            var diagnosticCount = 0;
-            var truncated = false;
+            var diagnostics = new DiagnosticCollector();
             var collectionRoots = FindCollectionRoots(root, collectionMetadata);
             var namedElements = new Dictionary<string, List<VisualElement>>(StringComparer.Ordinal);
 
@@ -420,22 +419,12 @@ namespace UCP.Bridge
                     var severity = diagnostic.TryGetValue("severity", out var value)
                         ? value?.ToString()
                         : null;
-                    Add(
-                        severity == "error" ? errors : warnings,
-                        diagnostic,
-                        ref diagnosticCount,
-                        ref truncated);
+                    diagnostics.Add(severity == "error", diagnostic);
                 }
             }
 
             UiVisualTreeInspector.Visit(root, element =>
             {
-                if (diagnosticCount >= MaxDiagnostics)
-                {
-                    truncated = true;
-                    return;
-                }
-
                 var insideDynamicCollection = HasAncestor(element, collectionRoots);
                 if (!insideDynamicCollection && IsUserElementName(element.name))
                 {
@@ -447,16 +436,16 @@ namespace UCP.Bridge
                     matches.Add(element);
                 }
 
-                if (element.focusable && IsVisibleThroughAncestors(element))
+                if (element.focusable && !IsUnityInternalName(element.name) && IsVisibleThroughAncestors(element))
                 {
                     var rect = element.worldBound;
                     if (UiValue.IsFinite(rect.width) && UiValue.IsFinite(rect.height) &&
                         (rect.width <= 0f || rect.height <= 0f))
                     {
-                        Add(warnings, Diagnostic(
+                        diagnostics.Add(false, Diagnostic(
                             "focusable_zero_size",
                             "Focusable element has zero rendered width or height",
-                            element), ref diagnosticCount, ref truncated);
+                            element));
                     }
                     else if (!insideDynamicCollection && !HasScrollViewAncestor(element) &&
                              IsFinitePositive(rect) && IsFinitePositive(root.worldBound))
@@ -465,18 +454,18 @@ namespace UCP.Bridge
                         var intersection = Intersect(rect, viewport);
                         if (intersection.width <= 0f || intersection.height <= 0f)
                         {
-                            Add(warnings, Diagnostic(
+                            diagnostics.Add(false, Diagnostic(
                                 "focusable_outside_viewport",
                                 "Focusable element is fully outside the UI viewport",
-                                element), ref diagnosticCount, ref truncated);
+                                element));
                         }
                         else if (intersection.width + 0.5f < rect.width ||
                                  intersection.height + 0.5f < rect.height)
                         {
-                            Add(warnings, Diagnostic(
+                            diagnostics.Add(false, Diagnostic(
                                 "focusable_partially_outside_viewport",
                                 "Focusable element is partially outside the UI viewport",
-                                element), ref diagnosticCount, ref truncated);
+                                element));
                         }
                     }
                 }
@@ -489,18 +478,12 @@ namespace UCP.Bridge
                         binding,
                         "toUi",
                         element,
-                        errors,
-                        warnings,
-                        ref diagnosticCount,
-                        ref truncated);
+                        diagnostics);
                     CheckBindingResult(
                         binding,
                         "toSource",
                         element,
-                        errors,
-                        warnings,
-                        ref diagnosticCount,
-                        ref truncated);
+                        diagnostics);
                 }
             });
 
@@ -508,7 +491,7 @@ namespace UCP.Bridge
             {
                 if (pair.Value.Count < 2)
                     continue;
-                Add(warnings, new Dictionary<string, object>
+                diagnostics.Add(false, new Dictionary<string, object>
                 {
                     ["code"] = "duplicate_name",
                     ["message"] = $"Element name '{pair.Key}' is used {pair.Value.Count} times outside dynamic collections",
@@ -517,17 +500,17 @@ namespace UCP.Bridge
                         ["type"] = pair.Value[0].GetType().Name,
                         ["name"] = pair.Key
                     }
-                }, ref diagnosticCount, ref truncated);
+                });
             }
 
             return new Dictionary<string, object>
             {
-                ["passed"] = errors.Count == 0,
-                ["errorCount"] = errors.Count,
-                ["warningCount"] = warnings.Count,
-                ["diagnosticsTruncated"] = truncated,
-                ["errors"] = errors,
-                ["warnings"] = warnings
+                ["passed"] = diagnostics.ErrorCount == 0,
+                ["errorCount"] = diagnostics.ErrorCount,
+                ["warningCount"] = diagnostics.WarningCount,
+                ["diagnosticsTruncated"] = diagnostics.Truncated,
+                ["errors"] = diagnostics.Errors,
+                ["warnings"] = diagnostics.Warnings
             };
         }
 
@@ -535,10 +518,7 @@ namespace UCP.Bridge
             Dictionary<string, object> binding,
             string direction,
             VisualElement element,
-            List<object> errors,
-            List<object> warnings,
-            ref int diagnosticCount,
-            ref bool truncated)
+            DiagnosticCollector diagnostics)
         {
             if (!binding.TryGetValue(direction, out var resultObject) ||
                 resultObject is not Dictionary<string, object> result ||
@@ -559,10 +539,7 @@ namespace UCP.Bridge
                 "binding_" + (status ?? "unknown").ToLowerInvariant(),
                 $"Binding {direction} for '{property}' reported {status}: {message}",
                 element);
-            Add(string.Equals(status, "Failure", StringComparison.OrdinalIgnoreCase) ? errors : warnings,
-                diagnostic,
-                ref diagnosticCount,
-                ref truncated);
+            diagnostics.Add(string.Equals(status, "Failure", StringComparison.OrdinalIgnoreCase), diagnostic);
         }
 
         private static Dictionary<string, object> Diagnostic(
@@ -628,7 +605,12 @@ namespace UCP.Bridge
         private static bool IsUserElementName(string name)
         {
             return !string.IsNullOrEmpty(name) &&
-                   !name.StartsWith("unity-", StringComparison.Ordinal);
+                   !IsUnityInternalName(name);
+        }
+
+        private static bool IsUnityInternalName(string name)
+        {
+            return name != null && name.StartsWith("unity-", StringComparison.Ordinal);
         }
 
         private static bool IsVisibleThroughAncestors(VisualElement element)
@@ -660,19 +642,33 @@ namespace UCP.Bridge
             return Rect.MinMaxRect(xMin, yMin, Mathf.Max(xMin, xMax), Mathf.Max(yMin, yMax));
         }
 
-        private static void Add(
-            List<object> target,
-            object diagnostic,
-            ref int diagnosticCount,
-            ref bool truncated)
+        private sealed class DiagnosticCollector
         {
-            if (diagnosticCount >= MaxDiagnostics)
+            internal List<object> Errors { get; } = new List<object>();
+            internal List<object> Warnings { get; } = new List<object>();
+            internal int ErrorCount { get; private set; }
+            internal int WarningCount { get; private set; }
+            internal bool Truncated { get; private set; }
+
+            internal void Add(bool isError, object diagnostic)
             {
-                truncated = true;
-                return;
+                // Bound the response, but keep counting every diagnostic so
+                // truncation cannot hide a failing audit or warning policy.
+                if (isError)
+                    ErrorCount++;
+                else
+                    WarningCount++;
+
+                if (Errors.Count + Warnings.Count >= MaxDiagnostics)
+                {
+                    Truncated = true;
+                    if (!isError || Warnings.Count == 0)
+                        return;
+                    // Preserve the cause of failure even when warnings arrived first.
+                    Warnings.RemoveAt(Warnings.Count - 1);
+                }
+                (isError ? Errors : Warnings).Add(diagnostic);
             }
-            target.Add(diagnostic);
-            diagnosticCount++;
         }
     }
 }

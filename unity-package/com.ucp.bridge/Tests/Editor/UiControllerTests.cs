@@ -85,6 +85,52 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void OperationManager_ShutdownFailsActiveAndQueuedOperations()
+        {
+            UiOperationManager.ResetForTests();
+            try
+            {
+                var active = UiOperationManager.Start("inspect", new Dictionary<string, object>());
+                var queued = UiOperationManager.Start("inspect", new Dictionary<string, object>());
+                // Activate without advancing initialization (which would resolve a target).
+                typeof(UiOperationManager).GetMethod("ActivateNext",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+                    .Invoke(null, null);
+                Assert.That(UiOperationManager.Status(active["operationId"].ToString())["status"], Is.EqualTo("running"));
+                UiOperationManager.Shutdown();
+                foreach (var start in new[] { active, queued })
+                {
+                    var status = UiOperationManager.Status(start["operationId"].ToString());
+                    Assert.That(status["status"], Is.EqualTo("failed"));
+                    Assert.That(((Dictionary<string, object>)status["error"])["code"], Is.EqualTo("editor_shutdown"));
+                }
+                UiOperationManager.TickForTests();
+                Assert.That(UiOperationManager.Status(queued["operationId"].ToString())["status"], Is.EqualTo("failed"));
+            }
+            finally
+            {
+                UiOperationManager.ResetForTests();
+            }
+        }
+
+        [Test]
+        public void Audit_RetainsFirstErrorsWhenErrorsExhaustBudget()
+        {
+            var report = new UiApplyReport();
+            report.AddDiagnostic("warning", "test", "displaced warning");
+            for (var index = 0; index < 201; index++)
+                report.AddDiagnostic("error", "test", "error " + index);
+            var audit = UiAudit.Run(new VisualElement(), report, Array.Empty<UiCollectionMetadata>());
+            Assert.That(audit["errorCount"], Is.EqualTo(201));
+            Assert.That(audit["warningCount"], Is.EqualTo(1));
+            Assert.That(audit["diagnosticsTruncated"], Is.True);
+            Assert.That((List<object>)audit["warnings"], Is.Empty);
+            var errors = (List<object>)audit["errors"];
+            Assert.That(errors, Has.Count.EqualTo(200));
+            Assert.That(((Dictionary<string, object>)errors[199])["message"], Is.EqualTo("error 199"));
+        }
+
+        [Test]
         public void Cleanup_RunsEveryActionAndRetainsFirstFailure()
         {
             var visited = new List<int>();
@@ -180,6 +226,30 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void InspectorAndGeometrySampler_IncludePhysicalChildrenOfListView()
+        {
+            var list = new ListView();
+            var row = new Label("Before") { name = "row-label" };
+            // A ListView owns its physical hierarchy and exposes no contentContainer.
+            // Model a realized row without needing a graphics device for this regression.
+            list.hierarchy.Add(row);
+            Assert.That(list.contentContainer, Is.Null);
+
+            var snapshot = UiVisualTreeInspector.Inspect(list,
+                UiInspectOptions.Parse(new Dictionary<string, object> { ["query"] = "#row-label" }),
+                Array.Empty<UiCollectionMetadata>());
+            Assert.That(snapshot["matchCount"], Is.EqualTo(1));
+            var fullSnapshot = UiVisualTreeInspector.Inspect(list,
+                UiInspectOptions.Parse(new Dictionary<string, object> { ["depth"] = 64 }),
+                Array.Empty<UiCollectionMetadata>());
+            Assert.That(MiniJson.Serialize(fullSnapshot), Does.Contain("row-label"));
+
+            var before = UiGeometrySampler.Measure(list);
+            row.text = "After";
+            Assert.That(UiGeometrySampler.Measure(list).Hash, Is.Not.EqualTo(before.Hash));
+        }
+
+        [Test]
         public void Audit_ReportsDuplicateStaticNames()
         {
             var root = new VisualElement();
@@ -217,7 +287,52 @@ namespace UCP.Bridge.Tests
                 Array.Empty<UiCollectionMetadata>());
 
             Assert.That(Convert.ToInt32(result["errorCount"]), Is.EqualTo(199));
-            Assert.That(Convert.ToInt32(result["warningCount"]), Is.EqualTo(1));
+            Assert.That(Convert.ToInt32(result["warningCount"]), Is.EqualTo(2));
+            Assert.That((List<object>)result["errors"], Has.Count.EqualTo(199));
+            Assert.That((List<object>)result["warnings"], Has.Count.EqualTo(1));
+            Assert.That(result["diagnosticsTruncated"], Is.True);
+        }
+
+        [TestCase(199)]
+        [TestCase(200)]
+        [TestCase(201)]
+        public void Audit_CountsErrorsBeyondReturnedDiagnosticLimit(int warningCount)
+        {
+            var report = new UiApplyReport();
+            for (var index = 0; index < warningCount; index++)
+                report.AddDiagnostic("warning", "test", "warning");
+            report.AddDiagnostic("error", "test", "error after warnings");
+
+            var result = UiAudit.Run(new VisualElement(), report, Array.Empty<UiCollectionMetadata>());
+            var errors = (List<object>)result["errors"];
+            var warnings = (List<object>)result["warnings"];
+
+            Assert.That(result["passed"], Is.False);
+            Assert.That(result["errorCount"], Is.EqualTo(1));
+            Assert.That(result["warningCount"], Is.EqualTo(warningCount));
+            Assert.That(errors.Count + warnings.Count, Is.EqualTo(200));
+            Assert.That(errors, Has.Count.EqualTo(1));
+            Assert.That(((Dictionary<string, object>)errors[0])["message"], Is.EqualTo("error after warnings"));
+            Assert.That(warnings, Has.Count.EqualTo(199));
+            Assert.That(result["diagnosticsTruncated"], Is.EqualTo(warningCount >= 200));
+        }
+
+        [Test]
+        public void Audit_ContinuesCheckingTreeAfterApplicationDiagnosticsFillLimit()
+        {
+            var report = new UiApplyReport();
+            for (var index = 0; index < 200; index++)
+                report.AddDiagnostic("warning", "test", "warning");
+            var root = new VisualElement();
+            root.Add(new Label { name = "duplicate" });
+            root.Add(new Label { name = "duplicate" });
+
+            var result = UiAudit.Run(root, report, Array.Empty<UiCollectionMetadata>());
+
+            Assert.That(result["passed"], Is.True);
+            Assert.That(result["errorCount"], Is.EqualTo(0));
+            Assert.That(result["warningCount"], Is.EqualTo(201));
+            Assert.That((List<object>)result["warnings"], Has.Count.EqualTo(200));
             Assert.That(result["diagnosticsTruncated"], Is.True);
         }
 

@@ -88,6 +88,74 @@ namespace UCP.Bridge.Tests
             Assert.That(UiLintService.Passes(1, 0, false), Is.False);
         }
 
+        [TestCase(1)]
+        [TestCase(3)]
+        public void DiagnosticLimit_PreservesErrorsAndCountsEverySeverity(int limit)
+        {
+            var collector = new UiLintService.DiagnosticCollector(limit);
+            for (var index = 0; index < limit + 1; index++)
+                collector.Add("warning", "warning-" + index, Root, "test", "warning");
+            collector.Add("error", "late-error", Root, "test", "cause of failure");
+            Assert.That(collector.ErrorCount, Is.EqualTo(1));
+            Assert.That(collector.WarningCount, Is.EqualTo(limit + 1));
+            Assert.That(collector.Truncated, Is.True);
+            Assert.That(collector.Items, Has.Count.EqualTo(limit));
+            var details = collector.Items.Cast<Dictionary<string, object>>().ToList();
+            Assert.That(details.Last()["code"], Is.EqualTo("late-error"));
+            if (limit > 1)
+                Assert.That(details[limit - 2]["code"], Is.EqualTo("warning-" + (limit - 2)));
+            for (var index = 0; index < limit; index++)
+                collector.Add("error", "error-" + index, Root, "test", "error");
+            collector.Add("warning", "dropped", Root, "test", "warning");
+            Assert.That(collector.ErrorCount, Is.EqualTo(limit + 1));
+            Assert.That(collector.WarningCount, Is.EqualTo(limit + 2));
+            Assert.That(collector.Items, Has.Count.EqualTo(limit));
+            Assert.That(collector.Items.Cast<Dictionary<string, object>>()
+                .All(item => Equals(item["severity"], "error")), Is.True);
+            Assert.That(((Dictionary<string, object>)collector.Items[0])["code"], Is.EqualTo("late-error"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ThemeStyleSheets_AreLintedWithTheirDependencies(bool folder)
+        {
+            WriteAsset(Root + "/Theme.uss", ".probe { width: 100px; }\n");
+            WriteAsset(Root + "/Theme.tss", "@import url(\"Theme.uss\");\n");
+            var result = UiLintService.Run(new Dictionary<string, object>
+            {
+                ["paths"] = new List<object> { folder ? Root : Root + "/Theme.tss" },
+                ["failOnWarnings"] = true
+            });
+            Assert.That(result["passed"], Is.True, MiniJson.Serialize(result));
+            var assets = ((List<object>)result["assets"]).Cast<Dictionary<string, object>>().ToList();
+            Assert.That(assets.Select(asset => asset["path"]),
+                Does.Contain(Root + "/Theme.tss").And.Contain(Root + "/Theme.uss"));
+            Assert.That(assets.All(asset => Equals(asset["reimported"], true)), Is.True);
+        }
+
+        [Test]
+        public void ImmutablePackageStyleSheet_UsesExistingImport()
+        {
+            var path = AssetDatabase.GetAllAssetPaths().FirstOrDefault(candidate =>
+                candidate.StartsWith("Packages/", StringComparison.Ordinal) &&
+                (candidate.EndsWith(".uss", StringComparison.OrdinalIgnoreCase) ||
+                 candidate.EndsWith(".tss", StringComparison.OrdinalIgnoreCase)) &&
+                !UiLintService.ShouldReimport(candidate));
+            if (path == null)
+                Assert.Ignore("No immutable package stylesheet is installed");
+            var result = UiLintService.Run(new Dictionary<string, object>
+            {
+                ["paths"] = new List<object> { path }
+            });
+            var asset = ((List<object>)result["assets"]).Cast<Dictionary<string, object>>()
+                .SingleOrDefault(item => Equals(item["path"], path));
+            Assert.That(asset, Is.Not.Null, MiniJson.Serialize(result));
+            Assert.That(asset["reimported"], Is.False);
+            Assert.That(asset["assetType"], Is.Not.Null);
+            Assert.That(((List<object>)result["diagnostics"]).Cast<Dictionary<string, object>>()
+                .Any(item => Equals(item["code"], "UI_IMPORT_FAILED")), Is.False);
+        }
+
         private static void WriteAsset(string assetPath, string contents)
         {
             var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));

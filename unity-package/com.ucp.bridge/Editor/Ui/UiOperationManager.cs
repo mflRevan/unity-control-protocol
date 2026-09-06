@@ -30,8 +30,6 @@ namespace UCP.Bridge
         static UiOperationManager()
         {
             EditorApplication.update += Tick;
-            AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
-            EditorApplication.quitting += Shutdown;
         }
 
         internal static Dictionary<string, object> Start(
@@ -79,6 +77,7 @@ namespace UCP.Bridge
         internal static void ResetForTests()
         {
             Shutdown();
+            Operations.Clear();
         }
 
         internal static void TickForTests()
@@ -234,8 +233,18 @@ namespace UCP.Bridge
                 Operations.Remove(id);
         }
 
-        private static void Shutdown()
+        internal static void Shutdown()
         {
+            // The bridge calls this before closing client sockets on reload/quit.
+            // Retain terminal records for status recovery until the domain unloads.
+            foreach (var record in Operations.Values.Where(record => !record.IsTerminal).ToList())
+            {
+                CompleteAndBroadcast(record, null, new Dictionary<string, object>
+                {
+                    ["code"] = "editor_shutdown",
+                    ["message"] = "UI operation interrupted by an Editor domain reload or shutdown"
+                });
+            }
             var active = _active;
             _active = null;
             try
@@ -249,7 +258,6 @@ namespace UCP.Bridge
             finally
             {
                 Queue.Clear();
-                Operations.Clear();
             }
         }
     }

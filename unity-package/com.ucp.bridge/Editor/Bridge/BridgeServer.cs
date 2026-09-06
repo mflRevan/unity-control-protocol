@@ -577,6 +577,9 @@ namespace UCP.Bridge
 
         private static void Shutdown()
         {
+#if UNITY_6000_0_OR_NEWER
+            UiOperationManager.Shutdown();
+#endif
             if (!s_running) return;
             s_running = false;
 

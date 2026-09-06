@@ -29,14 +29,14 @@ Invalid scenarios remain in the result with `valid: false` and a structured diag
 
 ### `ucp ui lint <paths...>`
 
-Runs Unity's synchronous UXML and USS importers, reads their import logs and flags, resolves dependencies, and clones each UXML tree while capturing scoped Unity diagnostics. The clone step matters because an unknown UXML element can import without an error and fail only when Unity tries to instantiate it.
+Runs Unity's synchronous UXML, USS, and TSS importers, reads their import logs and flags, resolves dependencies, and clones each UXML tree while capturing scoped Unity diagnostics. The clone step matters because an unknown UXML element can import without an error and fail only when Unity tries to instantiate it.
 
 ```bash
 ucp ui lint Assets/UI
 ucp ui lint Assets/UI/Inventory.ucp-ui.json --fail-on-warnings --max-diagnostics 200
 ```
 
-A scenario lint also validates its schema and lints its document, USS dependencies, and collection templates. Errors fail the command. Warnings fail only with `--fail-on-warnings`.
+A scenario lint also validates its schema and lints its document, USS/TSS dependencies, and collection templates. Assets in immutable packages use their existing imported artifacts and logs; assets under `Assets/` and in local or embedded packages are synchronously reimported. Each asset report includes `reimported` to distinguish these cases. Errors fail the command. Warnings fail only with `--fail-on-warnings`.
 
 ### `ucp ui inspect <target>`
 
@@ -49,6 +49,8 @@ ucp ui inspect Assets/UI/Inventory.ucp-ui.json --state empty --detail verbose --
 
 `--query` accepts one simple `#name`, `.class`, or element-type selector. Detail is `summary`, `normal`, or `verbose`. The snapshot reports actual UI Toolkit state; it does not claim matched-USS-rule provenance or an accessibility tree.
 
+Traversal includes the physical children of controls, including realized ListView rows. The default snapshot depth is 6 for `inspect` and 4 for `check`, measured from the snapshot root. Internal control containers consume depth, so realized row labels can fall beyond those defaults (for example, Inventory row labels are eight levels deep). Use `--query '#row-label'` or a deeper `--depth`, such as `--depth 12`, when inspecting rows; `truncated: true` signals a depth or element limit. Audits traverse the entire tree independently of snapshot limits. Virtualized items that have not been realized are represented by collection counts rather than element snapshots.
+
 ### `ucp ui screenshot <target>`
 
 Captures the resolved Editor panel after stable geometry and pixel samples. The defaults are three identical finite geometry samples and two identical pixel samples; a scenario can override them with `settle`.
@@ -60,7 +62,7 @@ ucp ui screenshot Assets/UI/Inventory.uxml --width 1280 --height 720 -o artifact
 
 Without `--out`, the bridge retains the PNG under `Library/UCP/UiCaptures` and returns its path and pixel hash. `--out` copies that artifact without overwriting an existing file unless `--force` is explicit. Width and height must be supplied together; if omitted, a scenario's viewport is preserved and direct UXML uses `960x640`.
 
-The capture backend briefly opens and focuses a transient utility window, then closes it and restores the previously focused window. It does not load or dirty a scene. Use a longer global `--timeout` for scenarios with many states or deliberately slow deferred UI updates.
+The capture backend briefly opens and focuses a transient utility window, then closes it and restores the previously focused window. It does not load or dirty a scene. `ui inspect`, `ui screenshot`, and `ui check` default to a 310-second CLI timeout so the bridge can report its 300-second overall limit, including sequential multi-state runs. Other commands retain a 30-second default. An explicit global `--timeout` overrides these defaults; `--timeout 0` disables the CLI deadline but does not disable the bridge ceiling. On a result timeout, the CLI makes one status lookup (up to five additional seconds) to recover a completed result or report the last known state. A CLI timeout does not cancel the operation. Editor reload/quit interrupts active and queued operations with `editor_shutdown`; if the connection closes before that notification arrives, the CLI reports that completion could not be confirmed.
 
 ### `ucp ui check <target>`
 
@@ -71,7 +73,9 @@ ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui
 ucp ui check Assets/UI/Inventory.ucp-ui.json --state populated --fail-on-warnings
 ```
 
-The v0 audits treat binding/application failures as errors. They warn for focusable zero-size controls, focusable controls outside the viewport, and duplicate element names outside harness-managed collections. They intentionally avoid speculative claims such as unused selectors or contrast failures. `--fail-on-warnings` makes both lint and audit warnings fail the command.
+The v0 audits treat binding/application failures as errors. They warn for authored focusable zero-size controls, authored focusable controls outside the viewport, and duplicate element names outside harness-managed collections. Focusable audits skip named `unity-` internal elements, including the zero-height content container of a visible empty ListView; unnamed authored controls are still audited. They intentionally avoid speculative claims such as unused selectors or contrast failures. `--fail-on-warnings` makes both lint and audit warnings fail the command.
+
+Audit responses retain at most 200 diagnostic details across `errors` and `warnings`. `errorCount`, `warningCount`, and `passed` still account for every diagnostic; `diagnosticsTruncated` indicates omitted details. Errors take priority over warning details: when the budget is full, a later error replaces the newest retained warning. If errors alone exceed the budget, the earliest errors are retained. Lint uses the same policy with its `--max-diagnostics` budget. A binding error therefore remains visible when earlier warnings fill the response limit.
 
 ## Scenario format
 

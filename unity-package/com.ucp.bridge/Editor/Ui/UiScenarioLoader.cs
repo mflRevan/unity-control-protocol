@@ -585,7 +585,7 @@ namespace UCP.Bridge
 
             if (Path.IsPathRooted(normalizedInput))
             {
-                absolute = Path.GetFullPath(normalizedInput);
+                absolute = NormalizePathSegments(normalizedInput);
             }
             else
             {
@@ -608,11 +608,10 @@ namespace UCP.Bridge
                     projectRelative = normalizedInput;
                 }
 
-                absolute = Path.GetFullPath(Path.Combine(projectRoot, projectRelative));
+                absolute = NormalizePathSegments(Path.Combine(projectRoot, projectRelative));
             }
 
-            var rootWithSeparator = projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                                    + Path.DirectorySeparatorChar;
+            var rootWithSeparator = projectRoot.Replace('\\', '/').TrimEnd('/') + "/";
             if (!absolute.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
                 throw Error("ui.path-outside-project", "UI asset paths must stay inside the Unity project.", location);
 
@@ -626,6 +625,29 @@ namespace UCP.Bridge
             }
 
             return relative;
+        }
+
+        private static string NormalizePathSegments(string absolutePath)
+        {
+            // Unity's Path.GetFullPath remaps virtual Packages paths into
+            // Library/PackageCache. Collapse dot segments without resolving that
+            // alias so validation and AssetDatabase receive the virtual path.
+            var path = absolutePath.Replace('\\', '/');
+            var root = Path.GetPathRoot(path).Replace('\\', '/');
+            var segments = new List<string>();
+            foreach (var segment in path.Substring(root.Length).Split('/'))
+            {
+                if (segment.Length == 0 || segment == ".")
+                    continue;
+                if (segment == "..")
+                {
+                    if (segments.Count > 0)
+                        segments.RemoveAt(segments.Count - 1);
+                    continue;
+                }
+                segments.Add(segment);
+            }
+            return root + string.Join("/", segments);
         }
 
         internal static void ValidateSelector(string selector, string location)

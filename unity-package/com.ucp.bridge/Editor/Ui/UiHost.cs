@@ -194,7 +194,7 @@ namespace UCP.Bridge
                 Add(ref hash, element.resolvedStyle.visibility.ToString());
             }
 
-            foreach (var child in element.Children())
+            foreach (var child in element.hierarchy.Children())
                 Visit(child, displayed, ref hash, ref elementCount, ref renderedCount, ref invalidCount);
         }
 

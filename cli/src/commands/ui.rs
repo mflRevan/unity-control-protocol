@@ -67,9 +67,9 @@ pub enum UiAction {
         #[arg(long, default_value_t = 100)]
         limit: usize,
     },
-    /// Import and validate UXML and USS assets
+    /// Import and validate UXML, USS, and TSS assets
     Lint {
-        /// UXML, USS, scenario, or folder paths to lint
+        /// UXML, USS, TSS, scenario, or folder paths to lint
         #[arg(required = true, num_args = 1..)]
         paths: Vec<String>,
         /// Treat warnings as a failed lint result
@@ -241,10 +241,9 @@ pub async fn run(action: UiAction, ctx: &Context) -> anyhow::Result<()> {
                         insert_result_field(
                             result,
                             "outputPaths",
-                            serde_json::json!(copied
-                                .iter()
-                                .map(|p| display_path(p))
-                                .collect::<Vec<_>>()),
+                            serde_json::json!(
+                                copied.iter().map(|p| display_path(p)).collect::<Vec<_>>()
+                            ),
                         );
                     }
                     Ok(())
@@ -418,51 +417,97 @@ async fn wait_for_ui_result(
 ) -> anyhow::Result<UiOperationOutcome> {
     let wait = async {
         loop {
-            let notification = client.next_notification().await.ok_or_else(|| {
-                anyhow::anyhow!("Connection closed before UI {operation} completed")
-            })?;
-            if notification.method != "ui/result"
-                || notification.params.get("operationId") != Some(&operation_id)
+            let notification = client.next_notification().await?;
+            if notification.method == "ui/result"
+                && notification.params.get("operationId") == Some(&operation_id)
             {
-                continue;
+                return Some(notification.params);
             }
-
-            let status = notification
-                .params
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("failed");
-            if status == "completed" {
-                let result = notification
-                    .params
-                    .get("result")
-                    .cloned()
-                    .unwrap_or(Value::Null);
-                return Ok(UiOperationOutcome {
-                    result,
-                    failure: None,
-                });
-            }
-
-            let message = operation_error_message(&notification.params)
-                .unwrap_or_else(|| format!("UI {operation} failed"));
-            return Ok(UiOperationOutcome {
-                result: notification.params,
-                failure: Some(message),
-            });
         }
     };
 
-    if timeout_secs == 0 {
-        wait.await
+    let received = if timeout_secs == 0 {
+        Ok(wait.await)
     } else {
-        tokio::time::timeout(Duration::from_secs(timeout_secs), wait)
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "Timed out after {timeout_secs}s waiting for UI {operation} result notification"
+        tokio::time::timeout(Duration::from_secs(timeout_secs), wait).await
+    };
+    match received {
+        Ok(Some(envelope)) => Ok(ui_operation_outcome(envelope, operation)),
+        Ok(None) => Ok(UiOperationOutcome {
+            result: serde_json::json!({
+                "operationId": operation_id,
+                "operation": operation,
+                "status": "unknown",
+                "error": { "code": "connection_closed" }
+            }),
+            failure: Some(format!(
+                "Connection closed before UI {operation} ({operation_id}) completed; \
+                 the Editor may have reloaded or quit. Completion could not be confirmed."
+            )),
+        }),
+        Err(_) => {
+            // A notification can be lost while a request is being read. Recover
+            // terminal results, or report the bridge's last known state.
+            let status = client
+                .call_with_timeout(
+                    "ui/status",
+                    serde_json::json!({ "operationId": operation_id }),
+                    Some(Duration::from_secs(5)),
                 )
-            })?
+                .await;
+            match status {
+                Ok(envelope)
+                    if matches!(
+                        envelope.get("status").and_then(Value::as_str),
+                        Some("completed" | "failed")
+                    ) =>
+                {
+                    Ok(ui_operation_outcome(envelope, operation))
+                }
+                Ok(envelope) => {
+                    let state = envelope
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .unwrap_or("not found");
+                    let message = format!(
+                        "Timed out after {timeout_secs}s waiting for UI {operation} ({operation_id}); \
+                         bridge status: {state}. The operation was not cancelled and may still be running."
+                    );
+                    Ok(UiOperationOutcome {
+                        result: envelope,
+                        failure: Some(message),
+                    })
+                }
+                Err(error) => Ok(UiOperationOutcome {
+                    result: serde_json::json!({
+                        "operationId": operation_id,
+                        "operation": operation,
+                        "status": "unknown",
+                        "error": { "code": "status_unavailable", "message": error.to_string() }
+                    }),
+                    failure: Some(format!(
+                        "Timed out after {timeout_secs}s waiting for UI {operation} ({operation_id}); \
+                         status lookup failed: {error}. The operation was not cancelled."
+                    )),
+                }),
+            }
+        }
+    }
+}
+
+fn ui_operation_outcome(envelope: Value, operation: &str) -> UiOperationOutcome {
+    if envelope.get("status").and_then(Value::as_str) == Some("completed") {
+        UiOperationOutcome {
+            result: envelope.get("result").cloned().unwrap_or(Value::Null),
+            failure: None,
+        }
+    } else {
+        let message =
+            operation_error_message(&envelope).unwrap_or_else(|| format!("UI {operation} failed"));
+        UiOperationOutcome {
+            result: envelope,
+            failure: Some(message),
+        }
     }
 }
 
@@ -658,7 +703,7 @@ fn copy_result_artifacts(
                 destination.display()
             );
         }
-        preflight_destination(&source, &destination, force)?;
+        preflight_destination(&destination, force)?;
         plans.push((source, destination));
     }
 
@@ -678,7 +723,7 @@ fn copy_artifact(
     let project = canonical_project(project)?;
     let source = resolve_artifact_source(&project, artifact)?;
     let destination = absolute_destination(destination)?;
-    preflight_destination(&source, &destination, force)?;
+    preflight_destination(&destination, force)?;
     copy_resolved_artifact(&source, &destination, force)
 }
 
@@ -703,7 +748,7 @@ fn resolve_artifact_source(project: &Path, artifact: &Path) -> anyhow::Result<Pa
             source_candidate.display()
         )
     })?;
-    if !source.starts_with(&project) {
+    if !source.starts_with(project) {
         anyhow::bail!(
             "Refusing to copy a UI artifact outside the Unity project: {}",
             source.display()
@@ -715,7 +760,7 @@ fn resolve_artifact_source(project: &Path, artifact: &Path) -> anyhow::Result<Pa
     Ok(source)
 }
 
-fn preflight_destination(source: &Path, destination: &Path, force: bool) -> anyhow::Result<()> {
+fn preflight_destination(destination: &Path, force: bool) -> anyhow::Result<()> {
     if destination.exists() && !force {
         anyhow::bail!(
             "Output already exists: {} (use --force to replace it)",
@@ -743,9 +788,6 @@ fn preflight_destination(source: &Path, destination: &Path, force: bool) -> anyh
             existing_ancestor.display()
         );
     }
-    if destination == source {
-        return Ok(());
-    }
     Ok(())
 }
 
@@ -768,7 +810,7 @@ fn copy_resolved_artifact(
     })?;
 
     let temporary = parent.join(format!(".ucp-ui-{}.tmp", uuid::Uuid::new_v4().as_simple()));
-    if let Err(err) = fs::copy(&source, &temporary) {
+    if let Err(err) = fs::copy(source, &temporary) {
         let _ = fs::remove_file(&temporary);
         return Err(anyhow::anyhow!(
             "Failed to copy UI artifact to {}: {err}",
@@ -783,7 +825,7 @@ fn copy_resolved_artifact(
                 destination.display()
             );
         }
-        if let Err(err) = fs::remove_file(&destination) {
+        if let Err(err) = fs::remove_file(destination) {
             let _ = fs::remove_file(&temporary);
             return Err(anyhow::anyhow!(
                 "Failed to replace {}: {err}",
@@ -791,7 +833,7 @@ fn copy_resolved_artifact(
             ));
         }
     }
-    if let Err(err) = fs::rename(&temporary, &destination) {
+    if let Err(err) = fs::rename(&temporary, destination) {
         let _ = fs::remove_file(&temporary);
         return Err(anyhow::anyhow!(
             "Failed to finalize UI artifact {}: {err}",
@@ -827,10 +869,7 @@ fn display_path(path: &Path) -> String {
 }
 
 fn print_list_result(result: &Value) {
-    let entries = result
-        .get("targets")
-        .or_else(|| result.get("items"))
-        .and_then(Value::as_array);
+    let entries = result.get("items").and_then(Value::as_array);
     let count = result
         .get("count")
         .and_then(Value::as_u64)
@@ -839,16 +878,8 @@ fn print_list_result(result: &Value) {
     output::print_success(&format!("Found {count} UI target(s)"));
     if let Some(entries) = entries {
         for entry in entries.iter().take(20) {
-            let path = entry
-                .get("path")
-                .or_else(|| entry.get("target"))
-                .and_then(Value::as_str)
-                .unwrap_or("?");
-            let kind = entry
-                .get("type")
-                .or_else(|| entry.get("kind"))
-                .and_then(Value::as_str)
-                .unwrap_or("ui");
+            let path = entry.get("target").and_then(Value::as_str).unwrap_or("?");
+            let kind = entry.get("type").and_then(Value::as_str).unwrap_or("ui");
             eprintln!("  {path} ({kind})");
         }
         if entries.len() > 20 {
@@ -953,6 +984,132 @@ fn print_async_result(operation: &str, result: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn ui_wait_recovers_lost_results_and_reports_running_or_interrupted_operations() {
+        use futures_util::{SinkExt, StreamExt};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio_tungstenite::tungstenite::{Message, protocol::Role};
+
+        for mode in [
+            "completed",
+            "failed",
+            "running",
+            "missing",
+            "shutdown",
+            "disconnected",
+        ] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    request.push(stream.read_u8().await.unwrap());
+                }
+                let request = String::from_utf8(request).unwrap();
+                let key = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Sec-WebSocket-Key:"))
+                    .unwrap()
+                    .trim();
+                let accept = {
+                    use sha1::{Digest, Sha1};
+                    let mut hasher = Sha1::new();
+                    hasher.update(key.as_bytes());
+                    hasher.update("258EAFA5-E914-47DA-95CA-5AB5DC85B11B");
+                    base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        hasher.finalize(),
+                    )
+                };
+                stream.write_all(format!("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n").as_bytes()).await.unwrap();
+                let mut ws =
+                    tokio_tungstenite::WebSocketStream::from_raw_socket(stream, Role::Server, None)
+                        .await;
+                ready_rx.await.unwrap();
+                if mode == "disconnected" {
+                    ws.close(None).await.unwrap();
+                    return;
+                }
+                let envelope = if mode == "missing" {
+                    serde_json::json!({ "operationId": "ui-test", "found": false })
+                } else {
+                    serde_json::json!({
+                        "operationId": "ui-test", "found": true,
+                        "status": if mode == "shutdown" { "failed" } else { mode },
+                        "result": { "passed": true, "artifactPath": "capture.png" },
+                        "error": { "code": "editor_shutdown", "message": "Editor reloaded" }
+                    })
+                };
+                if mode == "shutdown" {
+                    // Unrelated results must not complete our operation.
+                    ws.send(Message::Text(
+                        serde_json::json!({ "jsonrpc": "2.0", "method": "ui/result", "params": {
+                            "operationId": "other", "status": "completed"
+                        }})
+                        .to_string()
+                        .into(),
+                    ))
+                    .await
+                    .unwrap();
+                    ws.send(Message::Text(
+                        serde_json::json!({ "jsonrpc": "2.0", "method": "ui/result", "params": envelope })
+                            .to_string()
+                            .into(),
+                    ))
+                    .await
+                    .unwrap();
+                } else {
+                    let request: Value =
+                        serde_json::from_str(ws.next().await.unwrap().unwrap().to_text().unwrap())
+                            .unwrap();
+                    assert_eq!(request["method"], "ui/status");
+                    assert_eq!(request["params"]["operationId"], "ui-test");
+                    ws.send(Message::Text(serde_json::json!({ "jsonrpc": "2.0", "id": request["id"], "result": envelope }).to_string().into())).await.unwrap();
+                }
+            });
+            let lock = crate::config::LockFile {
+                pid: 0,
+                port,
+                protocol_version: "test".into(),
+                unity_version: "test".into(),
+                project_path: "test".into(),
+                started_at: "test".into(),
+                token: "test".into(),
+            };
+            let mut client = BridgeClient::connect(&lock).await.unwrap();
+            ready_tx.send(()).unwrap();
+            let outcome = wait_for_ui_result(&mut client, serde_json::json!("ui-test"), "check", 1)
+                .await
+                .unwrap();
+            match mode {
+                "completed" => {
+                    assert!(outcome.failure.is_none());
+                    assert_eq!(outcome.result["artifactPath"], "capture.png");
+                }
+                "failed" | "shutdown" => {
+                    assert_eq!(outcome.failure.as_deref(), Some("Editor reloaded"))
+                }
+                "running" | "missing" => {
+                    assert!(outcome.failure.unwrap().contains("was not cancelled"));
+                    assert_eq!(outcome.result["operationId"], "ui-test");
+                }
+                "disconnected" => {
+                    assert!(
+                        outcome
+                            .failure
+                            .unwrap()
+                            .contains("may have reloaded or quit")
+                    );
+                    assert_eq!(outcome.result["error"]["code"], "connection_closed");
+                }
+                _ => unreachable!(),
+            }
+            server.await.unwrap();
+        }
+    }
 
     #[test]
     fn loads_inline_and_file_data_objects() {

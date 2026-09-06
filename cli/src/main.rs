@@ -59,9 +59,9 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
-    /// Per-request command timeout in seconds; 0 waits indefinitely
-    #[arg(long, global = true, default_value = "30")]
-    timeout: u64,
+    /// Command timeout in seconds (default: 310 for UI renders, 30 otherwise); 0 waits indefinitely
+    #[arg(long, global = true)]
+    timeout: Option<u64>,
 
     /// Enable verbose logging
     #[arg(long, short, global = true)]
@@ -77,6 +77,20 @@ struct Cli {
     /// recovery), safe-mode (enter Safe Mode), cancel (decline)
     #[arg(long, global = true, env = "UCP_DIALOG_POLICY", value_enum)]
     dialog_policy: Option<config::StartupDialogPolicy>,
+}
+
+impl Cli {
+    fn effective_timeout(&self) -> u64 {
+        self.timeout.unwrap_or(match &self.command {
+            commands::Command::Ui {
+                action:
+                    commands::ui::UiAction::Inspect { .. }
+                    | commands::ui::UiAction::Screenshot { .. }
+                    | commands::ui::UiAction::Check { .. },
+            } => 310, // Allow the bridge's 300-second ceiling to report its result.
+            _ => 30,
+        })
+    }
 }
 
 #[tokio::main]
@@ -121,13 +135,14 @@ async fn main() -> anyhow::Result<()> {
         .without_time()
         .init();
 
+    let timeout = cli.effective_timeout();
     let ctx = commands::Context {
         project: cli.project,
         port: cli.port,
         unity: cli.unity.or(cli_settings.unity_path),
         force_unity_version: cli.force_unity_version,
         json: cli.json,
-        timeout: cli.timeout,
+        timeout,
         verbose: cli.verbose,
         bridge_update_policy: cli
             .bridge_update_policy
@@ -915,6 +930,43 @@ mod tests {
             }
             _ => panic!("unexpected command variant"),
         }
+    }
+
+    #[test]
+    fn ui_render_timeout_defaults_allow_the_bridge_ceiling_and_preserve_overrides() {
+        for action in ["inspect", "screenshot", "check"] {
+            let args = ["ucp", "ui", action, "Assets/Panel.uxml"];
+            assert_eq!(Cli::try_parse_from(args).unwrap().effective_timeout(), 310);
+            for explicit in ["0", "30", "60"] {
+                let mut args = args.to_vec();
+                args.extend(["--timeout", explicit]);
+                assert_eq!(
+                    Cli::try_parse_from(args).unwrap().effective_timeout(),
+                    explicit.parse::<u64>().unwrap()
+                );
+            }
+        }
+        for args in [
+            vec!["ucp", "ui", "list"],
+            vec!["ucp", "ui", "lint", "Assets/UI"],
+            vec!["ucp", "doctor"],
+        ] {
+            assert_eq!(Cli::try_parse_from(args).unwrap().effective_timeout(), 30);
+        }
+        assert_eq!(
+            Cli::try_parse_from([
+                "ucp",
+                "--timeout",
+                "30",
+                "ui",
+                "check",
+                "Assets/Panel.uxml",
+                "--all-states"
+            ])
+            .unwrap()
+            .effective_timeout(),
+            30
+        );
     }
 
     #[test]
