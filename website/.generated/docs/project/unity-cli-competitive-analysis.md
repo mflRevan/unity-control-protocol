@@ -396,7 +396,8 @@ Render and install them into the same client set Unity targets, embedded in the 
 `refresh`. Cheap: the content exists; only the per-client writers are new.
 
 **P2.3 · Drive a running Player. (L)**
-The `UCP.Bridge.Runtime` asmdef exists and is currently empty. A runtime bridge in development builds
+There is no runtime assembly today (the empty `UCP.Bridge.Runtime` asmdef only produced an import
+warning and was removed in 0.6.3). A runtime bridge in development builds
 would close the "verify the actual build" loop and match `--runtime`. Real work — schedule only if
 Play-Mode/runtime verification becomes a stated goal.
 
