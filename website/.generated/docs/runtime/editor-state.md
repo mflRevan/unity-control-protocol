@@ -71,6 +71,23 @@ before sending the request:
 
 - No dialog but a stalled main thread means a synchronous import, compile, or a native prompt the
   window enumeration cannot see; the CLI says so and waits as before.
+- A dialog that opens after the check, while a request is already in flight, cannot be seen until
+  that request times out; when it does, the CLI performs the same check, answers a recognised
+  prompt, and names an unrecognised one in the error so the retry is deliberate.
+
+Dialogs seen in practice, with the answer that keeps an unattended editor useful:
+
+| dialog | buttons | automatic answer |
+|---|---|---|
+| `Enter Safe Mode?` (compile errors at open) | Enter Safe Mode / Ignore / Quit | Ignore (`auto`, `ignore`), Enter Safe Mode (`recover`, `safe-mode`) |
+| `Packages with Errors` | Open Package Manager / Dismiss Forever / Dismiss | Dismiss |
+| `Opening Project in Non-Matching Editor Installation` | Continue / Quit | Continue |
+| `Project Upgrade Required` | Confirm / Cancel | Confirm |
+| `Opening file failed` (asset database lost its `Library/` underneath the editor) | Try Again / Force Quit / Cancel | none; the editor is unrecoverable, `ucp editor dialog --answer "Force Quit"` and reopen |
+| `Fatal Error!` (follows Force Quit and crashes) | Quit | none; press Quit, the process exits |
+| `Script Updating Consent` (API updater) | Yes for these and later / No / Yes just these | none; pass `-accept-apiupdate` or answer it |
+| `Input System native platform backend not enabled` | Enable & Restart / Don't Enable | none |
+| a script's own `EditorUtility.DisplayDialog` | anything | none; fail fast and name it |
 
 Answer a dialog deliberately with `ucp editor dialog`:
 

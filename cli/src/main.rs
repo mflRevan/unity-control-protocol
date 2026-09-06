@@ -137,6 +137,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let timeout = cli.effective_timeout();
+    let project_arg = cli.project.clone();
+    let dialog_policy = cli.dialog_policy.unwrap_or_default();
     let ctx = commands::Context {
         project: cli.project,
         port: cli.port,
@@ -159,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
     let json_output = ctx.json;
     let outcome = commands::run(cli.command, ctx).await;
     if let Err(e) = outcome {
+        let e = explain_request_timeout(e, project_arg.as_deref(), dialog_policy);
         if json_output {
             let err = if let Some(test_run_failure) =
                 e.downcast_ref::<commands::tests::TestRunFailure>()
@@ -206,6 +209,45 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// A request that timed out on the main thread may have been blocked by a dialog that opened
+/// after the connect-time check. Look now: answer a recognised prompt so a retry goes through,
+/// and name an unrecognised one so the agent can answer it deliberately.
+fn explain_request_timeout(
+    error: anyhow::Error,
+    project_arg: Option<&str>,
+    policy: config::StartupDialogPolicy,
+) -> anyhow::Error {
+    let Some(error::UcpError::RequestTimeout { .. }) = error.downcast_ref::<error::UcpError>()
+    else {
+        return error;
+    };
+    let Ok(project) = discovery::resolve_project(project_arg) else {
+        return error;
+    };
+
+    let answered = discovery::answer_known_unity_dialogs(&project, policy).unwrap_or_default();
+    let remaining = discovery::list_unity_dialogs(&project);
+    let mut hints = Vec::new();
+    if !answered.is_empty() {
+        hints.push(format!(
+            "Unity was showing a dialog; answered {}. Retry the command.",
+            answered.join(", ")
+        ));
+    }
+    if let Some(dialog) = remaining.first() {
+        editor_state::note_modal(&dialog.title, &dialog.buttons);
+        hints.push(format!(
+            "Unity is showing the dialog \"{}\" [{}], which blocks every command. Answer it with `ucp editor dialog --answer \"<button>\"` (or in the editor), then retry.",
+            dialog.title,
+            dialog.buttons.join(" | ")
+        ));
+    }
+    if hints.is_empty() {
+        return error;
+    }
+    anyhow::anyhow!("{error:#}\n  {}", hints.join("\n  "))
 }
 
 #[cfg(test)]

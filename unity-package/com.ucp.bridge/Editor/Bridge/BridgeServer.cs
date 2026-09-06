@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.6.2";
+        private const string ProtocolVersion = "0.6.3";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -49,6 +49,9 @@ namespace UCP.Bridge
         // read by the socket thread in the handshake so a client can tell "the editor's main
         // thread is stalled" (modal dialog, synchronous import, domain reload) apart from "busy".
         private static long s_lastMainThreadTick;
+        // EditorApplication.isCompiling as of the last pump, so the off-thread handshake can warn
+        // a client that a domain reload is imminent instead of letting its request race it.
+        private static int s_compiling;
         private static bool s_summaryFailureLogged;
 
         // Command router
@@ -126,7 +129,8 @@ namespace UCP.Bridge
                     unityVersion = s_unityVersion,
                     projectName = s_projectName,
                     projectPath = s_projectPath,
-                    mainThreadTickAgeMs = MainThreadTickAgeMs()
+                    mainThreadTickAgeMs = MainThreadTickAgeMs(),
+                    compiling = System.Threading.Volatile.Read(ref s_compiling) == 1
                 };
             });
 
@@ -540,6 +544,7 @@ namespace UCP.Bridge
         private static void PumpMainThread()
         {
             System.Threading.Volatile.Write(ref s_lastMainThreadTick, DateTime.UtcNow.Ticks);
+            System.Threading.Volatile.Write(ref s_compiling, EditorApplication.isCompiling ? 1 : 0);
             int processed = 0;
             while (s_mainThreadQueue.TryDequeue(out var action) && processed < 50)
             {

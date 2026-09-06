@@ -539,6 +539,35 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
     Ok((project, lock))
 }
 
+/// The heartbeat a 0.6.3+ bridge reports in its handshake: milliseconds since Unity's main thread
+/// last pumped, `-1` when it has not pumped since the bridge loaded, `None` for older bridges.
+pub fn main_thread_tick_age_ms(handshake: &serde_json::Value) -> Option<i64> {
+    handshake
+        .get("mainThreadTickAgeMs")
+        .and_then(serde_json::Value::as_i64)
+}
+
+/// Whether the editor can actually run a request right now, as far as the handshake can tell.
+/// Older bridges (no heartbeat) are assumed responsive so nothing regresses against them.
+pub fn main_thread_responsive(handshake: &serde_json::Value) -> bool {
+    if editor_compiling(handshake) {
+        return false;
+    }
+    match main_thread_tick_age_ms(handshake) {
+        Some(age) => (0..MAIN_THREAD_STALL_MS).contains(&age),
+        None => true,
+    }
+}
+
+/// Whether the bridge reported `EditorApplication.isCompiling` at its last main-thread pump. A
+/// request sent now would race the domain reload that ends the compile.
+pub fn editor_compiling(handshake: &serde_json::Value) -> bool {
+    handshake
+        .get("compiling")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
 /// How long the editor's main thread may go without an `EditorApplication.update` tick before
 /// the CLI suspects a modal dialog rather than ordinary work. An idle editor ticks every
 /// ~100 ms; an unfocused one is throttled but stays well under a second.
@@ -553,21 +582,27 @@ fn resolve_main_thread_stall(
     handshake: &serde_json::Value,
     ctx: &Context,
 ) -> anyhow::Result<()> {
-    let age_ms = handshake
-        .get("mainThreadTickAgeMs")
-        .and_then(serde_json::Value::as_i64)
-        .unwrap_or(-1);
-    if age_ms < MAIN_THREAD_STALL_MS {
+    let Some(age_ms) = main_thread_tick_age_ms(handshake) else {
+        // Bridge predates the heartbeat: nothing to judge from.
+        return Ok(());
+    };
+    if age_ms >= 0 && age_ms < MAIN_THREAD_STALL_MS {
         return Ok(());
     }
 
     let dialogs = discovery::list_unity_dialogs(project);
     if dialogs.is_empty() {
         if !ctx.json {
-            output::print_info(&format!(
-                "Unity's main thread has been busy for {:.1}s (import, compile, or a native prompt); waiting...",
-                age_ms as f64 / 1000.0
-            ));
+            if age_ms < 0 {
+                output::print_info(
+                    "Unity's main thread has not started serving requests yet (first import or compile in progress); waiting...",
+                );
+            } else {
+                output::print_info(&format!(
+                    "Unity's main thread has been busy for {:.1}s (import, compile, or a native prompt); waiting...",
+                    age_ms as f64 / 1000.0
+                ));
+            }
         }
         return Ok(());
     }
@@ -615,6 +650,31 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
         if let Ok(mut client) = BridgeClient::connect(&lock).await {
             client.set_request_timeout(request_timeout(ctx));
             if let Ok(handshake) = client.handshake().await {
+                if editor_compiling(&handshake) {
+                    // A request sent now would race the domain reload that ends the compile and
+                    // come back as a dropped connection. Wait for the bridge to come back (or
+                    // settle, if the compile produced no reload) and connect again.
+                    client.close().await;
+                    if !ctx.json {
+                        output::print_info(
+                            "Unity is compiling scripts; waiting for the reload to finish...",
+                        );
+                    }
+                    bridge_lifecycle::wait_for_bridge(
+                        &project,
+                        Some(&lock),
+                        ctx.timeout,
+                        ctx.dialog_policy,
+                        WaitMode::RestartOptional,
+                    )
+                    .await?;
+                    let lock = discovery::read_lock_file(&project)?;
+                    let mut client = BridgeClient::connect(&lock).await?;
+                    client.set_request_timeout(request_timeout(ctx));
+                    let handshake = client.handshake().await?;
+                    resolve_main_thread_stall(&project, &handshake, ctx)?;
+                    return Ok((project, lock, client));
+                }
                 resolve_main_thread_stall(&project, &handshake, ctx)?;
                 return Ok((project, lock, client));
             }

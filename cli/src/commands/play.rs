@@ -16,7 +16,16 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
         .await?;
     }
 
-    let mut result = client.call(method, payload).await?;
+    let mut result = match client.call(method, payload).await {
+        Ok(result) => result,
+        // Entering play mode reloads the domain, and on some editor versions the teardown wins
+        // the race against the response to the very request that triggered it. The request has
+        // already taken effect; confirm the state instead of reporting a lost connection.
+        Err(UcpError::BridgeConnectionLost { .. }) if method == "play" => {
+            serde_json::json!({ "status": "ok", "responseLost": true })
+        }
+        Err(err) => return Err(err.into()),
+    };
 
     if method == "play" {
         client.close().await;
@@ -113,8 +122,15 @@ async fn confirm_play_mode_entry(ctx: &Context, request_result: Value) -> anyhow
             .unwrap_or(false)
         {
             observed_transition = true;
-        } else if observed_transition || started.elapsed() >= request_grace {
-            anyhow::bail!("Failed to enter play mode: fix all errors before entering playmode");
+        } else if (observed_transition || started.elapsed() >= request_grace)
+            && compile_errors_reported()
+        {
+            // Unity refuses play mode only for script compilation failures; the summary on the
+            // last response says so directly. Seeing neither flag set is not proof of refusal:
+            // 6000.5 answers the first poll after the reload with both false for a moment.
+            anyhow::bail!(
+                "Failed to enter play mode: Unity reports script compilation errors; fix them first (`ucp compile`)"
+            );
         }
 
         if started.elapsed() >= timeout {
@@ -123,6 +139,14 @@ async fn confirm_play_mode_entry(ctx: &Context, request_result: Value) -> anyhow
 
         sleep(Duration::from_millis(200)).await;
     }
+}
+
+/// Whether the editor-state summary on the most recent bridge response reports
+/// `EditorUtility.scriptCompilationFailed`.
+fn compile_errors_reported() -> bool {
+    crate::editor_state::current()
+        .and_then(|state| state.get("compileErrors").and_then(Value::as_bool))
+        .unwrap_or(false)
 }
 
 async fn poll_play_status(ctx: &Context) -> anyhow::Result<Value> {

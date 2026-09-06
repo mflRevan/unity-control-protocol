@@ -86,9 +86,17 @@ pub async fn wait_for_bridge(
         match discovery::read_lock_file(project) {
             Ok(lock) => match BridgeClient::connect(&lock).await {
                 Ok(mut client) => {
-                    if client.handshake().await.is_ok() {
-                        client.close().await;
-
+                    let handshake = client.handshake().await;
+                    client.close().await;
+                    // The socket answers from a background thread; "available" has to mean the
+                    // main thread is pumping too, or `ucp open` returns into a first import.
+                    let responsive = handshake
+                        .as_ref()
+                        .map(crate::commands::main_thread_responsive)
+                        .unwrap_or(false);
+                    if handshake.is_ok() && !responsive {
+                        // Keep polling; the editor is importing or compiling behind a live bridge.
+                    } else if handshake.is_ok() {
                         let token_changed = previous_token
                             .map(|token| lock.token != token)
                             .unwrap_or(true);

@@ -1,9 +1,33 @@
 # Changelog
 
-## [0.6.3] - Unreleased
+## [0.6.3] - 2026-09-07
 
 ### Added
 
+- Every command that reaches the bridge now ends with one dim `[editor] ...` line, and every
+  `--json` envelope carries the same data as an `editor` object: edit/play/paused mode, the
+  active scene with dirty and untitled flags, the Console window's error and warning counts,
+  how many errors or warnings the command itself produced, and, only when true, compile
+  errors, compiling, importing, building, an open prefab stage, an active or armed recording.
+  The bridge attaches the summary to responses it already produces on the main thread, so it
+  costs no request and no editor frame; measured medians are unchanged. `UCP_EDITOR_STATE=0`
+  disables it. Agents no longer have to discover a red console or a dirty scene three
+  commands later.
+- Modal dialogs are detected before a request is sent. The bridge's handshake reports how long
+  ago Unity's main thread last ticked; when it is stale the CLI enumerates the editor's dialog
+  windows, answers the ones it recognises per `--dialog-policy` (Safe Mode, Packages with
+  Errors, version mismatch, project upgrade), and otherwise fails within about a tenth of a
+  second naming the dialog and its buttons instead of waiting out the request timeout. A
+  dialog that appears later, while a request is already waiting, is reported the same way when
+  that request times out (recognised prompts are answered so a retry succeeds). The line and
+  the JSON envelope carry a `MODAL` entry.
+- Added `ucp editor dialog` to list the editor's open modal dialogs and `--answer <button>` to
+  press one deliberately (exact, then substring, case-insensitive). Windows only for now.
+- `ucp connect` now reports whether Unity's main thread is actually serving requests
+  (`mainThreadResponsive` in JSON, a "Main thread:" line in text), and `ucp open` no longer
+  returns while the editor is still in its first import or compile behind a live bridge socket.
+  Previously a fresh editor looked "connected" seconds after launch and the first real command
+  then sat in the request timeout.
 - Added a UI Toolkit authoring loop through `ucp ui list|lint|inspect|screenshot|check` for
   Unity 6 and newer. `list` discovers UXML documents and `.ucp-ui.json` scenarios; `lint` runs
   Unity's own UXML, USS, and TSS importers and then clones each document, so an unknown element
@@ -34,26 +58,6 @@
 - Added a `ucp-ui` micro-skill, a UI Toolkit section in the omni skill, and a
   `docs/authoring/ui-toolkit.md` reference page with the scenario schema.
 
-### Added
-
-- Every command that reaches the bridge now ends with one dim `[editor] ...` line, and every
-  `--json` envelope carries the same data as an `editor` object: edit/play/paused mode, the
-  active scene with dirty and untitled flags, the Console window's error and warning counts,
-  how many errors or warnings the command itself produced, and, only when true, compile
-  errors, compiling, importing, building, an open prefab stage, an active or armed recording.
-  The bridge attaches the summary to responses it already produces on the main thread, so it
-  costs no request and no editor frame; measured medians are unchanged. `UCP_EDITOR_STATE=0`
-  disables it. Agents no longer have to discover a red console or a dirty scene three
-  commands later.
-- Modal dialogs are detected before a request is sent. The bridge's handshake reports how long
-  ago Unity's main thread last ticked; when it is stale the CLI enumerates the editor's dialog
-  windows, answers the ones it recognises per `--dialog-policy` (Safe Mode, Packages with
-  Errors, version mismatch, project upgrade), and otherwise fails within about a tenth of a
-  second naming the dialog and its buttons instead of waiting out the request timeout. The
-  line and the JSON envelope carry a `MODAL` entry.
-- Added `ucp editor dialog` to list the editor's open modal dialogs and `--answer <button>` to
-  press one deliberately (exact, then substring, case-insensitive). Windows only for now.
-
 ### Changed
 
 - Object ids on the wire are now 64-bit integers. Unity 6000.5 replaced 32-bit instance ids
@@ -69,11 +73,22 @@
   reported as covered rather than re-run. On 6000.5 and newer the matrix lifts
   `com.unity.ai.navigation`, `com.unity.collab-proxy`, `com.unity.inputsystem`,
   `com.unity.timeline`, and `com.unity.visualscripting` to the versions bundled with 6000.5
-  (the pinned older ones no longer compile there) and drops the removed
-  `com.unity.modules.vr` module.
+  (the pinned older ones no longer compile there). For every slot it reconciles the manifest's
+  `com.unity.modules.*` entries with what that editor ships, so a manifest last rewritten by
+  6000.5 (which added `physicscore2d` and dropped `vr`) no longer parks an older editor on
+  "Packages with Errors".
 
 ### Fixed
 
+- Commands no longer race a pending script compile. The bridge reports `compiling` in its
+  handshake (cached from the main thread's last pump), and a command that connects while Unity
+  is compiling waits for the domain reload to finish before sending its request instead of
+  failing with "the bridge closed the connection during ...". `ucp compile --no-wait` followed
+  by any other command now behaves like `ucp compile` followed by that command.
+- Fixed `ucp play` failing with "the bridge closed the connection during 'play'" when Unity
+  tears the domain down before the response to the play request is flushed (seen on 6000.4).
+  The request had already taken effect; the command now proceeds to its state confirmation
+  instead of reporting a lost connection.
 - Fixed the CLI sometimes resolving a project's editor to one of Unity's `AssetImportWorker`
   processes, which carry the same `-projectPath`; window focus and dialog detection were flaky
   as a result.

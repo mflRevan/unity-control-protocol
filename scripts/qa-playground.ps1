@@ -230,7 +230,10 @@ function Wait-BridgeReady {
 	$lastDetail = ''
 	for ($i = 0; $i -lt $MaxAttempts; $i++) {
 		$probe = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
-		if (Test-UcpSuccess $probe) {
+		# `connect` reports whether Unity's main thread is actually serving; a bridge whose socket
+		# answers while the first import still runs is not ready. Older bridges omit the field.
+		$responsive = $null -eq $probe.Json.data.mainThreadResponsive -or $probe.Json.data.mainThreadResponsive -eq $true
+		if ((Test-UcpSuccess $probe) -and $responsive) {
 			return [pscustomobject]@{
 				Ready = $true
 				Attempts = $i + 1
@@ -333,7 +336,8 @@ Run-Step -Name 'open' -UcpArgs @('open') -ProcessTimeoutSeconds ([Math]::Min($Ti
 	[pscustomobject]@{ Passed = $passed; Detail = $detail }
 } | Out-Null
 
-$postOpenAttempts = [Math]::Max([int][Math]::Ceiling([double]$TimeoutSeconds / 12.0), 3)
+# A first import after a Library wipe takes minutes; waiting here is what keeps every later step honest.
+$postOpenAttempts = [Math]::Max([int][Math]::Ceiling([double]$TimeoutSeconds / 2.0), 90)
 $connect = Run-Step -Name 'connect' -UcpArgs @('connect') -AllowFailure -Assert {
 	param($r)
 	if (Test-UcpSuccess $r) {
@@ -396,7 +400,7 @@ $qaRoot = Run-Step -Name 'object-create-root' -UcpArgs @('object', 'create', 'Uc
 	[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.instanceId); Detail = "id=$($r.Json.data.instanceId)" }
 }
 
-$qaRootId = if ($qaRoot) { [int]$qaRoot.Json.data.instanceId } else { 0 }
+$qaRootId = if ($qaRoot) { [long]$qaRoot.Json.data.instanceId } else { 0 }
 
 if ($qaRootId -ne 0) {
 	Run-Step -Name 'object-set-name' -UcpArgs @('object', 'set-name', '--id', "$qaRootId", '--name', 'UcpQaRootRenamed') -Assert {
@@ -409,7 +413,7 @@ if ($qaRootId -ne 0) {
 		[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.instanceId); Detail = "id=$($r.Json.data.instanceId)" }
 	}
 
-	$qaChildId = if ($qaChild) { [int]$qaChild.Json.data.instanceId } else { 0 }
+	$qaChildId = if ($qaChild) { [long]$qaChild.Json.data.instanceId } else { 0 }
 	if ($qaChildId -ne 0) {
 		Run-Step -Name 'object-create-grandchild' -UcpArgs @('object', 'create', 'UcpQaGrandchild', '--parent', "$qaChildId") -Assert {
 			param($r)
@@ -485,7 +489,7 @@ if ($qaRootId -ne 0) {
 		[pscustomobject]@{ Passed = ($r.Json.success -and $r.Json.data.instanceId); Detail = "id=$($r.Json.data.instanceId)" }
 	}
 
-	$instId = if ($inst) { [int]$inst.Json.data.instanceId } else { 0 }
+	$instId = if ($inst) { [long]$inst.Json.data.instanceId } else { 0 }
 	if ($instId -ne 0) {
 		Run-Step -Name 'prefab-status' -UcpArgs @('prefab', 'status', '--id', "$instId") -Assert {
 			param($r)
@@ -650,8 +654,10 @@ if (Test-Path $playLogPath) {
 Run-Step -Name 'play' -UcpArgs @('play', '--log-file', $playLogPath) -AllowFailure -Assert {
 	param($r)
 	$reconnected = Wait-BridgeReady -Reason 'play-domain-reload' -MaxAttempts 15 -DelaySeconds 2
-	$passed = $reconnected.Ready
-	$detail = if ($reconnected.Ready) { 'bridge-reconnected-after-play' } else { "timeout after play: $($reconnected.Detail)" }
+	# A reconnected bridge proves the editor reacted, not that it is playing; `ucp play` itself
+	# confirms the state (or reports why Unity refused), so its result must count too.
+	$passed = $reconnected.Ready -and (Test-UcpSuccess $r)
+	$detail = if ($reconnected.Ready) { "bridge-reconnected-after-play :: $($r.Raw)" } else { "timeout after play: $($reconnected.Detail)" }
 	[pscustomobject]@{ Passed = $passed; Detail = $detail }
 } | Out-Null
 
@@ -664,7 +670,13 @@ Run-Step -Name 'pause' -UcpArgs @('pause') -AllowFailure -Assert {
 		}
 		$r = Invoke-UcpJson -UcpArgs @('pause') -AllowFailure
 	}
-	[pscustomobject]@{ Passed = (Test-UcpSuccess $r); Detail = $r.Raw }
+	# Every bridge response now carries the editor state; pausing must leave play mode paused,
+	# not toggle the pause flag in edit mode because play never started.
+	$mode = $r.Json.editor.mode
+	[pscustomobject]@{
+		Passed = ((Test-UcpSuccess $r) -and ($mode -eq 'paused'))
+		Detail = "mode=$mode :: $($r.Raw)"
+	}
 } | Out-Null
 
 Run-Step -Name 'stop' -UcpArgs @('stop') -AllowFailure -Assert {

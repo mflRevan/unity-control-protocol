@@ -1,9 +1,17 @@
 # Changelog
 
-## [0.6.3] - Unreleased
+## [0.6.3] - 2026-09-07
 
 ### Added
 
+- Every response produced on the main thread carries an `editor` summary next to `result` or
+  `error` (`EditorStateSummary`): mode, active scene dirtiness, Console badge counts read
+  through `LogEntries.GetCountsByType`, entries logged since the request was dispatched, and
+  conditional flags for compile errors, compiling, importing, building, prefab stage, and
+  recording. The handshake, which is answered off the main thread, reports
+  `mainThreadTickAgeMs` and `compiling` so a client can recognise a blocked main thread or a
+  pending domain reload before sending a request. Added `editor/state`
+  to fetch the summary on its own.
 - Added the `ui/list`, `ui/lint`, `ui/inspect`, `ui/screenshot`, `ui/check`, and `ui/status`
   RPCs plus the `ui/result` completion notification for UI Toolkit authoring on Unity 6 and
   newer. On older editors the methods are registered but return an explicit unsupported error.
@@ -21,16 +29,6 @@
   overlays, an allowlisted `set` block, `repeat` and virtualized `list-view` collections driven
   by JSON pointers, and automatic rewriting of `DataBinding` paths to dictionary keys through
   `Unity.Properties`.
-
-### Added
-
-- Every response produced on the main thread carries an `editor` summary next to `result` or
-  `error` (`EditorStateSummary`): mode, active scene dirtiness, Console badge counts read
-  through `LogEntries.GetCountsByType`, entries logged since the request was dispatched, and
-  conditional flags for compile errors, compiling, importing, building, prefab stage, and
-  recording. The handshake, which is answered off the main thread, reports
-  `mainThreadTickAgeMs` so a client can recognise a blocked main thread. Added `editor/state`
-  to fetch the summary on its own.
 
 ### Changed
 

@@ -246,7 +246,8 @@ function Update-ManifestForUnityVersion {
         [Parameter(Mandatory = $true)]
         [string]$ProjectPath,
         [Parameter(Mandatory = $true)]
-        [string]$UnityVersionId
+        [string]$UnityVersionId,
+        [string]$UnityPath
     )
 
     $manifestPath = Join-Path $ProjectPath "Packages\manifest.json"
@@ -285,17 +286,30 @@ function Update-ManifestForUnityVersion {
             "com.unity.timeline" = "1.8.12"
             "com.unity.visualscripting" = "1.9.11"
         }
-        # 6000.5 also removed the built-in VR module; a manifest that still lists it fails to resolve.
-        if ($dependencies.ContainsKey("com.unity.modules.vr")) {
-            $dependencies.Remove("com.unity.modules.vr")
-            $changed = $true
-            Write-Host "  Removed com.unity.modules.vr (not available in Unity $UnityVersionId)" -ForegroundColor Yellow
-        }
         foreach ($name in $minimumFor65.Keys) {
             if ($dependencies.ContainsKey($name) -and $dependencies[$name] -ne $minimumFor65[$name]) {
                 Write-Host ("  Raised {0} {1} -> {2} (Unity {3})" -f $name, $dependencies[$name], $minimumFor65[$name], $UnityVersionId) -ForegroundColor Yellow
                 $dependencies[$name] = $minimumFor65[$name]
                 $changed = $true
+            }
+        }
+    }
+
+    # Built-in modules differ per editor: 6000.5 dropped com.unity.modules.vr and added
+    # com.unity.modules.physicscore2d, and an editor rewrites the manifest with its own set when it
+    # opens the project. Reconcile against what this editor actually ships, so a manifest last
+    # touched by a newer editor does not leave an older one on "Packages with Errors".
+    if (-not [string]::IsNullOrWhiteSpace($UnityPath)) {
+        $builtIn = Join-Path (Split-Path -Parent $UnityPath) "Data\Resources\PackageManager\BuiltInPackages"
+        if (Test-Path $builtIn) {
+            $shipped = @{}
+            foreach ($entry in Get-ChildItem -Path $builtIn -Directory) { $shipped[$entry.Name] = $true }
+            foreach ($name in @($dependencies.Keys)) {
+                if ($name -like "com.unity.modules.*" -and -not $shipped.ContainsKey($name)) {
+                    $dependencies.Remove($name)
+                    $changed = $true
+                    Write-Host "  Removed $name (not shipped by Unity $UnityVersionId)" -ForegroundColor Yellow
+                }
             }
         }
     }
@@ -505,7 +519,7 @@ if ($Run) {
 
         # Backup and sanitize manifest for this version
         Backup-ManifestJson -ProjectPath $Project
-        Update-ManifestForUnityVersion -ProjectPath $Project -UnityVersionId $slot.ActualVersionId
+        Update-ManifestForUnityVersion -ProjectPath $Project -UnityVersionId $slot.ActualVersionId -UnityPath $slot.UnityPath
 
         if ($EditModeTests) {
             $resultsXml = Join-Path $resultsRoot "$($slot.RequestedSlot.Replace('.', '_'))-editmode.xml"
