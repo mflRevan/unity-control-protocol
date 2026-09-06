@@ -11,7 +11,7 @@ homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI, the UCP Bridge package, and Unity 6.0+ in the target project.
 metadata:
   author: mflRevan
-  version: '0.6.0'
+  version: '0.6.2'
 ---
 
 # UCP UI Toolkit
