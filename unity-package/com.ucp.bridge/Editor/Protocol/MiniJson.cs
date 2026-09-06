@@ -516,7 +516,7 @@ namespace UCP.Bridge
                 }
 
                 string name;
-                int id;
+                long id;
                 try
                 {
                     name = uo.name;

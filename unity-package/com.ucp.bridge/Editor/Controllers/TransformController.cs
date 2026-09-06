@@ -148,7 +148,7 @@ namespace UCP.Bridge
                 var list = new List<object>();
                 foreach (var idObj in ids)
                 {
-                    var go = ObjectLocator.FindByInstanceId(Convert.ToInt32(idObj));
+                    var go = ObjectLocator.FindByInstanceId(Convert.ToInt64(idObj));
                     if (go == null) continue;
                     list.Add(DescribeTransform(go));
                 }

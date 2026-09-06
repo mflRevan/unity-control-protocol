@@ -51,7 +51,7 @@ namespace UCP.Bridge
             Camera cam = null;
             if (p != null && (p.TryGetValue("camera", out var camObj)) && camObj != null)
             {
-                var go = ObjectLocator.FindByInstanceId(Convert.ToInt32(camObj));
+                var go = ObjectLocator.FindByInstanceId(Convert.ToInt64(camObj));
                 if (go != null) cam = go.GetComponent<Camera>();
                 if (cam == null) throw new ArgumentException($"No Camera component on object {camObj}");
             }

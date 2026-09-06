@@ -227,7 +227,7 @@ namespace UCP.Bridge
             // Resolve by instanceId (scene object's renderer material)
             if (p.TryGetValue("instanceId", out var idObj))
             {
-                int instanceId = Convert.ToInt32(idObj);
+                long instanceId = Convert.ToInt64(idObj);
                 var obj = UnityObjectCompat.ResolveByInstanceId(instanceId);
 
                 if (obj is Material directMat)
@@ -330,7 +330,7 @@ namespace UCP.Bridge
                         }
                         else if (texDict.TryGetValue("instanceId", out var tid))
                         {
-                            var tex = UnityObjectCompat.ResolveByInstanceId<Texture>(Convert.ToInt32(tid));
+                            var tex = UnityObjectCompat.ResolveByInstanceId<Texture>(Convert.ToInt64(tid));
                             mat.SetTexture(propName, tex);
                         }
                     }

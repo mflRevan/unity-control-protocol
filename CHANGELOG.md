@@ -34,8 +34,40 @@
 - Added a `ucp-ui` micro-skill, a UI Toolkit section in the omni skill, and a
   `docs/authoring/ui-toolkit.md` reference page with the scenario schema.
 
+### Changed
+
+- Object ids on the wire are now 64-bit integers. Unity 6000.5 replaced 32-bit instance ids
+  with `EntityId`, whose upper word is a per-session stamp; truncating one to `int` produced a
+  number that resolved to nothing (only the hierarchy-scan fallback kept `object` commands
+  working, and `prefab create`, `material` texture references, and `get-property` on a fresh id
+  failed outright). Every `instanceId` the bridge returns or accepts is a `long`; on 6000.0
+  through 6000.4 the numbers are unchanged, on 6000.5 and newer they are wide (for example
+  `568105589213680530`). The CLI already parsed ids as 64-bit. Clients that store ids in a
+  JavaScript `number` should treat them as opaque strings above 2^53.
+- The Unity compatibility matrix and release validation now request slots `6000.0` through
+  `6000.6`. A slot without an installed editor falls back to the nearest installed one and is
+  reported as covered rather than re-run. On 6000.5 and newer the matrix lifts
+  `com.unity.ai.navigation`, `com.unity.collab-proxy`, `com.unity.inputsystem`,
+  `com.unity.timeline`, and `com.unity.visualscripting` to the versions bundled with 6000.5
+  (the pinned older ones no longer compile there) and drops the removed
+  `com.unity.modules.vr` module.
+
 ### Fixed
 
+- Fixed `ucp open` and every other command that finds a running editor without a bridge never
+  answering Unity's startup prompts. The dialog policy (`--dialog-policy`, default `auto`) was
+  only applied inside the bridge wait loop, but an editor parked on "Enter Safe Mode?" or
+  "Packages with Errors" is handled by an earlier readiness check that timed out and printed
+  advice to re-run with the policy that was already in effect. That check now answers dialogs
+  on every poll, and reports which button it pressed.
+- Fixed `ucp run-tests` failing its console guard on log lines a test explicitly declared as
+  expected. Unity's runner brackets `LogAssert.ignoreFailingMessages` sections with
+  `IgnoreFailingMessages:true/false` marker lines; the guard now skips everything inside such a
+  window (and the markers), so tests that deliberately import a broken asset no longer show up
+  as an extra failed "test".
+- Fixed the bridge's edit-mode test assembly failing to compile on Unity 6000.5, where
+  `Object.GetInstanceID()` is obsolete-as-error; the one remaining direct call in the tests now
+  goes through the `EntityId`-aware compat helper the rest of the package already uses.
 - Removed the empty `UCP.Bridge.Runtime` assembly definition. Every install logged `Assembly
   for Assembly Definition File 'Packages/com.ucp.bridge/Runtime/UCP.Bridge.Runtime.asmdef' will
   not be compiled, because it has no scripts associated with it` on import, which also meant

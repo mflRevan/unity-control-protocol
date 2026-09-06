@@ -154,7 +154,7 @@ namespace UCP.Bridge
                 _failed = 0;
                 _skipped = 0;
                 CollectLeafResults(result);
-                var logSummary = LogsController.BuildStatusSummary(_logCursor);
+                var logSummary = LogsController.BuildTestGuardSummary(_logCursor);
                 var consoleWarnings = GetLevelCount(logSummary, "warning");
                 var consoleErrors = GetLevelCount(logSummary, "error") + GetLevelCount(logSummary, "exception");
 

@@ -12,7 +12,7 @@ namespace UCP.Bridge
     {
         private sealed class TrackedSceneChange
         {
-            public int? InstanceId;
+            public long? InstanceId;
             public string Name;
             public HashSet<string> Components = new();
         }
@@ -36,7 +36,7 @@ namespace UCP.Bridge
             RecordSceneChange(gameObject.scene, gameObject.GetId(), gameObject.name, componentName);
         }
 
-        public static void RecordDeletedObject(Scene scene, int instanceId, string name, string componentName)
+        public static void RecordDeletedObject(Scene scene, long instanceId, string name, string componentName)
         {
             RecordSceneChange(scene, instanceId, name, componentName);
         }
@@ -135,7 +135,7 @@ namespace UCP.Bridge
             }
         }
 
-        private static void RecordSceneChange(Scene scene, int? instanceId, string name, string componentName)
+        private static void RecordSceneChange(Scene scene, long? instanceId, string name, string componentName)
         {
             if (!scene.IsValid() || !scene.isLoaded)
                 return;

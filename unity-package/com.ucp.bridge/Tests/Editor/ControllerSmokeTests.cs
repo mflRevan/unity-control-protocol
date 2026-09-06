@@ -189,7 +189,7 @@ namespace UCP.Bridge.Tests
             try
             {
                 go.transform.localPosition = new Vector3(1.5f, 2.5f, 3.5f);
-                var id = go.GetInstanceID();
+                var id = go.GetId();
 
                 var serialized = _router.Dispatch("object/get-property", 1, "{\"instanceId\":ID,\"component\":\"Transform\",\"property\":\"m_LocalPosition\"}".Replace("ID", id.ToString()));
                 Assert.That(serialized.error, Is.Null);
@@ -658,13 +658,33 @@ namespace UCP.Bridge.Tests
         }
 
         [Test]
+        public void TestGuard_IgnoresLogsInsideIgnoreFailingMessagesWindows()
+        {
+            var entries = new List<string>
+            {
+                "real error before",
+                "\n" + LogsController.IgnoreFailingMessagesOnMarker,
+                "expected importer error",
+                "expected warning",
+                LogsController.IgnoreFailingMessagesOffMarker + "\n",
+                "real error after",
+                LogsController.IgnoreFailingMessagesOnMarker,
+                "still ignored when a test never resets the flag"
+            };
+
+            var kept = LogsController.ExcludeExpectedNoise(entries, entry => entry);
+
+            Assert.That(kept, Is.EqualTo(new[] { "real error before", "real error after" }));
+        }
+
+        [Test]
         public void ObjectLifecycle_CreateMutateAndDelete_WorksEndToEnd()
         {
             var create = _router.Dispatch("object/create", 1, "{\"name\":\"SmokeObject\"}");
             Assert.That(create.error, Is.Null);
 
             var createResult = (Dictionary<string, object>)create.result;
-            var instanceId = Convert.ToInt32(createResult["instanceId"]);
+            var instanceId = Convert.ToInt64(createResult["instanceId"]);
 
             var rename = _router.Dispatch("object/set-name", 1, "{\"instanceId\":" + instanceId + ",\"name\":\"RenamedSmoke\"}");
             Assert.That(rename.error, Is.Null);
@@ -1376,7 +1396,7 @@ namespace UCP.Bridge.Tests
         {
             var create = _router.Dispatch("object/create", 1, "{\"name\":\"PrefabSource\"}");
             Assert.That(create.error, Is.Null);
-            var sourceId = Convert.ToInt32(((Dictionary<string, object>)create.result)["instanceId"]);
+            var sourceId = Convert.ToInt64(((Dictionary<string, object>)create.result)["instanceId"]);
 
             var createPrefab = _router.Dispatch(
                 "prefab/create",
@@ -1391,7 +1411,7 @@ namespace UCP.Bridge.Tests
                 "{\"prefab\":\"Assets/UcpControllerSmoke.prefab\",\"name\":\"PrefabInstance\"}"
             );
             Assert.That(instantiate.error, Is.Null);
-            var instanceId = Convert.ToInt32(((Dictionary<string, object>)instantiate.result)["instanceId"]);
+            var instanceId = Convert.ToInt64(((Dictionary<string, object>)instantiate.result)["instanceId"]);
 
             var status = _router.Dispatch("prefab/status", 1, "{\"instanceId\":" + instanceId + "}");
             Assert.That(status.error, Is.Null);

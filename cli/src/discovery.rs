@@ -135,6 +135,10 @@ pub fn handle_unity_startup_dialogs(
     }
 
     let Some(pid) = unity_editor_pid_for_project(project) else {
+        tracing::debug!(
+            "startup dialogs: no Unity editor process matched {}",
+            project.display()
+        );
         return Ok(Vec::new());
     };
 
@@ -200,6 +204,14 @@ fn preferred_dialog_button_label(
             config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
             config::StartupDialogPolicy::SafeMode | config::StartupDialogPolicy::Manual => None,
         }
+    } else if normalized_title.contains("packageswitherrors") {
+        // "This project contains one or more packages with errors. Do you want to open Package
+        // Manager?" -- shown once per session after load. Closing it is always right for an
+        // automated session; "Dismiss Forever" would hide a real signal from the human.
+        match policy {
+            config::StartupDialogPolicy::Manual => None,
+            _ => Some(&["dismiss"]),
+        }
     } else if normalized_title.contains("autographicsapi") {
         match policy {
             config::StartupDialogPolicy::Auto
@@ -219,13 +231,24 @@ fn preferred_dialog_button_label(
         .map(|label| (normalize_dialog_label(label), label))
         .collect();
 
+    // Exact matches win over substring matches, otherwise "dismiss" would pick "Dismiss Forever"
+    // when it happens to be enumerated first.
+    fn pick(normalized: &[(String, &String)], preferred: &str) -> Option<String> {
+        normalized
+            .iter()
+            .find(|(candidate, _)| candidate == preferred)
+            .or_else(|| {
+                normalized
+                    .iter()
+                    .find(|(candidate, _)| candidate.contains(preferred))
+            })
+            .map(|(_, label)| (*label).clone())
+    }
+
     if let Some(preferences) = title_preferences {
         for preferred in preferences {
-            if let Some((_, label)) = normalized
-                .iter()
-                .find(|(candidate, _)| candidate.contains(preferred))
-            {
-                return Some((*label).clone());
+            if let Some(label) = pick(&normalized, preferred) {
+                return Some(label);
             }
         }
     }
@@ -275,11 +298,8 @@ fn preferred_dialog_button_label(
     };
 
     for preferred in preferences {
-        if let Some((_, label)) = normalized
-            .iter()
-            .find(|(candidate, _)| candidate.contains(preferred))
-        {
-            return Some((*label).clone());
+        if let Some(label) = pick(&normalized, preferred) {
+            return Some(label);
         }
     }
 
@@ -546,6 +566,12 @@ fn handle_process_startup_dialogs(
         EnumWindows(enum_windows, l_param);
     }
 
+    tracing::debug!(
+        "startup dialogs: pid {pid} has {} candidate window(s): {:?}",
+        state.windows.len(),
+        state.windows.iter().map(|w| w.title.as_str()).collect::<Vec<_>>()
+    );
+
     let mut handled = Vec::new();
     for window in state.windows {
         let mut process_id = 0;
@@ -566,7 +592,14 @@ fn handle_process_startup_dialogs(
             .iter()
             .map(|button| button.label.clone())
             .collect::<Vec<_>>();
-        let Some(selected_label) = preferred_dialog_button_label(&window.title, &labels, policy) else {
+        let selected = preferred_dialog_button_label(&window.title, &labels, policy);
+        tracing::debug!(
+            "startup dialogs: window {:?} buttons {:?} -> policy {policy} selects {:?}",
+            window.title,
+            labels,
+            selected
+        );
+        let Some(selected_label) = selected else {
             continue;
         };
 
@@ -613,6 +646,74 @@ mod tests {
     };
     use crate::config::StartupDialogPolicy;
     use std::path::{Path, PathBuf};
+
+    fn labels(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn answers_the_startup_dialogs_observed_on_unity_6() {
+        // Button lists exactly as Unity 6000.5.1f1 enumerates them (Win32 child order).
+        let safe_mode = labels(&["Enter Safe Mode", "Ignore", "Quit"]);
+        let package_errors = labels(&["Open Package Manager", "Dismiss Forever", "Dismiss"]);
+        let non_matching = labels(&["Quit", "Continue"]);
+
+        for policy in [
+            StartupDialogPolicy::Auto,
+            StartupDialogPolicy::Ignore,
+            StartupDialogPolicy::Recover,
+            StartupDialogPolicy::Cancel,
+        ] {
+            assert_eq!(
+                preferred_dialog_button_label("Packages with Errors", &package_errors, policy)
+                    .as_deref(),
+                Some("Dismiss"),
+                "{policy}: must close the dialog without hiding it forever"
+            );
+        }
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Packages with Errors",
+                &package_errors,
+                StartupDialogPolicy::Manual
+            ),
+            None
+        );
+
+        assert_eq!(
+            preferred_dialog_button_label("Enter Safe Mode?", &safe_mode, StartupDialogPolicy::Auto)
+                .as_deref(),
+            Some("Ignore")
+        );
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Enter Safe Mode?",
+                &safe_mode,
+                StartupDialogPolicy::SafeMode
+            )
+            .as_deref(),
+            Some("Enter Safe Mode")
+        );
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Opening Project in Non-Matching Editor Installation",
+                &non_matching,
+                StartupDialogPolicy::Auto
+            )
+            .as_deref(),
+            Some("Continue")
+        );
+    }
+
+    #[test]
+    fn exact_button_labels_beat_substring_matches() {
+        let buttons = labels(&["OK Forever", "OK"]);
+        assert_eq!(
+            preferred_dialog_button_label("Anything", &buttons, StartupDialogPolicy::Auto)
+                .as_deref(),
+            Some("OK")
+        );
+    }
 
     #[test]
     fn extracts_project_path_from_split_flag() {

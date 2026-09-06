@@ -9,7 +9,7 @@ namespace UCP.Bridge
     /// Shared GameObject resolution for the spatial/visual controllers.
     ///
     /// A target may be addressed three ways, tried in priority order:
-    ///   1. instanceId (int)   — canonical, survives nothing but a domain reload; preferred.
+    ///   1. instanceId (64-bit integer)   — canonical, survives nothing but a domain reload; preferred.
     ///   2. path (string)      — hierarchy path "Root/Child/Leaf" (leading '/' optional),
     ///                           resolved across all loaded scenes; survives reloads.
     ///   3. name (string)      — first GameObject whose name matches; ambiguous under
@@ -32,7 +32,7 @@ namespace UCP.Bridge
 
             if ((p.TryGetValue("instanceId", out var idObj) || p.TryGetValue("id", out idObj)) && idObj != null)
             {
-                var id = Convert.ToInt32(idObj);
+                var id = Convert.ToInt64(idObj);
                 var byId = FindByInstanceId(id);
                 if (byId != null)
                     return byId;
@@ -60,7 +60,7 @@ namespace UCP.Bridge
             throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
         }
 
-        internal static GameObject FindByInstanceId(int instanceId)
+        internal static GameObject FindByInstanceId(long instanceId)
         {
             var direct = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (direct != null)
@@ -82,7 +82,7 @@ namespace UCP.Bridge
             return null;
         }
 
-        private static GameObject FindInHierarchyById(GameObject go, int instanceId)
+        private static GameObject FindInHierarchyById(GameObject go, long instanceId)
         {
             if (go.GetId() == instanceId)
                 return go;

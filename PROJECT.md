@@ -75,7 +75,7 @@ Some parts of the repository are foundational and should stay aligned:
 - `version.json` is the source of truth for release and protocol metadata.
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
 - `scripts/validate-release.ps1` is the shared validation entrypoint for local release preflight and GitHub Actions gating.
-- `scripts/unity-version-matrix.ps1` is the canonical Unity compatibility harness for Unity 6 slot coverage (`6000.0` through `6000.4`) with explicit fallback and skip reporting.
+- `scripts/unity-version-matrix.ps1` is the canonical Unity compatibility harness for Unity 6 slot coverage (`6000.0` through `6000.6`) with explicit fallback and skip reporting.
 - `skills/unity-control-protocol/` is the canonical agent skill source used by docs and the Claude Code plugin wrapper.
 - `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
@@ -196,6 +196,9 @@ The Unity package should continue to emphasize:
 - simple RPC routing
 - explicit request parsing and response shaping
 - compatibility with normal Unity editor behavior
+- object identity goes through `UnityObjectCompat` only: ids are `long` on the wire, backed by
+  32-bit instance ids up to 6000.4 and 64-bit `EntityId` from 6000.5, and nothing outside that
+  class may call `GetInstanceID()` or truncate an id to `int`
 
 The bridge should stay pragmatic and reliable. It should not become harder to evolve than the editor workflows it is meant to automate.
 
@@ -254,9 +257,9 @@ Push-Location website; npm run sync-content && npm run build; Pop-Location
 # Single-version QA against the dev project (runs all 52 bridge exercise steps)
 .\scripts\qa-playground.ps1 -Project unity-project-dev\ucp-dev -TimeoutSeconds 180
 
-# Full Unity compatibility matrix (6000.0 through 6000.4)
+# Full Unity compatibility matrix (6000.0 through 6000.6)
 .\scripts\unity-version-matrix.ps1 -Project 'unity-project-dev\ucp-dev' `
-    -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4') `
+    -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4','6000.5','6000.6') `
     -TimeoutSeconds 180 -Run
 
 # Shared preflight entrypoint (runs cargo test + version check + website build)
@@ -332,7 +335,7 @@ Unrecognized dialogs fall through to a generic button preference list that inclu
 1. **Run local Unity matrix** (pre-release, local only — requires Unity installs):
    ```powershell
    .\scripts\unity-version-matrix.ps1 -Project 'unity-project-dev\ucp-dev' `
-       -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4') `
+       -RequestedSlots @('6000.0','6000.1','6000.2','6000.3','6000.4','6000.5','6000.6') `
        -TimeoutSeconds 180 -Run
    ```
 2. **Bump version**: edit `version.json`, then run `node scripts/sync-version.mjs <new-version>` to propagate to Cargo.toml, npm/package.json, Unity package.json, docs, and skill metadata.

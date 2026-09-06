@@ -1,6 +1,6 @@
 param(
     [string]$Project = "unity-project-dev\ucp-dev",
-    [string[]]$RequestedSlots = @("6000.0", "6000.1", "6000.2", "6000.3", "6000.4"),
+    [string[]]$RequestedSlots = @("6000.0", "6000.1", "6000.2", "6000.3", "6000.4", "6000.5", "6000.6"),
     [int]$TimeoutSeconds = 180,
     [switch]$Run,
     # Validate each version by running the editmode test assembly in batchmode (compile + unit
@@ -270,6 +270,32 @@ function Update-ManifestForUnityVersion {
                 $dependencies.Remove($name)
                 $changed = $true
                 Write-Host "  Removed $name (not available in Unity $UnityVersionId)" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    # Unity 6000.5 turned Object.GetInstanceID() into an obsolete-as-error API; the package versions
+    # pinned for 6000.0-6000.4 still call it and fail to compile, which puts an interactive editor on
+    # the "Enter Safe Mode?" prompt. Lift them to the versions bundled with 6000.5.1f1.
+    if ($parsed -and $parsed.Minor -ge 5) {
+        $minimumFor65 = @{
+            "com.unity.ai.navigation" = "2.0.13"
+            "com.unity.collab-proxy" = "2.12.4"
+            "com.unity.inputsystem" = "1.19.0"
+            "com.unity.timeline" = "1.8.12"
+            "com.unity.visualscripting" = "1.9.11"
+        }
+        # 6000.5 also removed the built-in VR module; a manifest that still lists it fails to resolve.
+        if ($dependencies.ContainsKey("com.unity.modules.vr")) {
+            $dependencies.Remove("com.unity.modules.vr")
+            $changed = $true
+            Write-Host "  Removed com.unity.modules.vr (not available in Unity $UnityVersionId)" -ForegroundColor Yellow
+        }
+        foreach ($name in $minimumFor65.Keys) {
+            if ($dependencies.ContainsKey($name) -and $dependencies[$name] -ne $minimumFor65[$name]) {
+                Write-Host ("  Raised {0} {1} -> {2} (Unity {3})" -f $name, $dependencies[$name], $minimumFor65[$name], $UnityVersionId) -ForegroundColor Yellow
+                $dependencies[$name] = $minimumFor65[$name]
+                $changed = $true
             }
         }
     }

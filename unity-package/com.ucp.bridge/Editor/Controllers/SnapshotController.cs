@@ -156,7 +156,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             int maxDepth = 1;
             if (p.TryGetValue("depth", out var depthObj))
                 maxDepth = Math.Max(1, Convert.ToInt32(depthObj));
@@ -349,7 +349,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new System.ArgumentException("Missing 'instanceId' parameter");
 
-            int instanceId = System.Convert.ToInt32(idObj);
+            long instanceId = System.Convert.ToInt64(idObj);
             var go = FindByInstanceId(instanceId);
             if (go == null)
                 throw new System.Exception($"GameObject not found: {instanceId}");
@@ -383,7 +383,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new System.ArgumentException("Missing 'instanceId' parameter");
 
-            int instanceId = System.Convert.ToInt32(idObj);
+            long instanceId = System.Convert.ToInt64(idObj);
             var go = FindByInstanceId(instanceId);
             if (go == null)
                 throw new System.Exception($"GameObject not found: {instanceId}");
@@ -401,7 +401,7 @@ namespace UCP.Bridge
             };
         }
 
-        private static GameObject FindByInstanceId(int id)
+        private static GameObject FindByInstanceId(long id)
         {
             var direct = UnityObjectCompat.ResolveByInstanceId<GameObject>(id);
             if (direct != null)
@@ -424,7 +424,7 @@ namespace UCP.Bridge
             return null;
         }
 
-        private static GameObject FindInHierarchy(GameObject go, int instanceId)
+        private static GameObject FindInHierarchy(GameObject go, long instanceId)
         {
             if (go.GetId() == instanceId)
                 return go;

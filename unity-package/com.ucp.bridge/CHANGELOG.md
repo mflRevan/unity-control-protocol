@@ -22,8 +22,21 @@
   by JSON pointers, and automatic rewriting of `DataBinding` paths to dictionary keys through
   `Unity.Properties`.
 
+### Changed
+
+- Object ids are 64-bit end to end. `UnityObjectCompat.GetId()` returns a `long`
+  (`EntityId.ToULong` on 6000.5+, the instance id below that), `ResolveByInstanceId` takes a
+  `long`, and every controller reads `instanceId` parameters with `Convert.ToInt64`. On
+  6000.5 an `EntityId` carries a per-session upper word, so the previous `int` truncation
+  produced ids that could not be resolved back.
+
 ### Fixed
 
+- Fixed the `tests/run` console guard counting log lines emitted inside a test's
+  `LogAssert.ignoreFailingMessages` window; the `IgnoreFailingMessages:true/false` markers the
+  test runner writes now delimit an exclusion range.
+- Fixed the edit-mode test assembly failing to compile on Unity 6000.5 (`GetInstanceID()` is
+  obsolete-as-error there); tests use the `EntityId`-aware `GetId()` helper throughout.
 - Removed the empty `UCP.Bridge.Runtime` assembly definition that logged an "will not be
   compiled, because it has no scripts associated with it" warning on every import (#4).
 

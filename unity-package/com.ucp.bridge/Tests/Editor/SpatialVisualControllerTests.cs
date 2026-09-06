@@ -62,7 +62,7 @@ namespace UCP.Bridge.Tests
         {
             var res = Result(_router.Dispatch("object/create", 1,
                 "{\"name\":\"Greybox\",\"primitive\":\"Cube\"}"));
-            var id = Convert.ToInt32(res["instanceId"]);
+            var id = Convert.ToInt64(res["instanceId"]);
             var go = ObjectLocator.FindByInstanceId(id);
             _spawned.Add(go);
 
@@ -179,7 +179,7 @@ namespace UCP.Bridge.Tests
             var res = Result(_router.Dispatch("physics/raycast", 1,
                 "{\"origin\":[0,5,0],\"direction\":[0,-1,0]}"));
             Assert.That(Convert.ToBoolean(res["hit"]), Is.True);
-            Assert.That(Convert.ToInt32(res["instanceId"]), Is.EqualTo(ground.GetId()));
+            Assert.That(Convert.ToInt64(res["instanceId"]), Is.EqualTo(ground.GetId()));
         }
 
         [Test]

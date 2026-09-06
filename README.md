@@ -164,7 +164,7 @@ Every command accepts `--json`. The docs site publishes per-page Markdown mirror
 | macOS    | x64, ARM (Apple Silicon) |
 | Linux    | x64                      |
 
-Unity 2021.3+. Tested across Unity 6 (`6000.0` – `6000.4`).
+Unity 2021.3+. Tested across Unity 6 (`6000.0` – `6000.5`).
 
 <br>
 

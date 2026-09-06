@@ -44,7 +44,7 @@ namespace UCP.Bridge
             // Optional parent
             if (p != null && p.TryGetValue("parent", out var parentObj))
             {
-                int parentId = Convert.ToInt32(parentObj);
+                long parentId = Convert.ToInt64(parentObj);
                 var parent = FindGameObject(parentId);
                 go.transform.SetParent(parent.transform, false);
             }
@@ -84,7 +84,7 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
             string name = go.name;
             var scene = go.scene;
@@ -107,14 +107,14 @@ namespace UCP.Bridge
             if (p == null || !p.TryGetValue("instanceId", out var idObj))
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
 
             Undo.SetTransformParent(go.transform, null, "UCP Reparent");
 
             if (p.TryGetValue("parent", out var parentObj) && parentObj != null)
             {
-                int parentId = Convert.ToInt32(parentObj);
+                long parentId = Convert.ToInt64(parentObj);
                 var parent = FindGameObject(parentId);
                 Undo.SetTransformParent(go.transform, parent.transform, "UCP Reparent");
             }
@@ -163,7 +163,7 @@ namespace UCP.Bridge
             // Instantiate from existing scene object (clone)
             else if (p.TryGetValue("sourceId", out var srcObj))
             {
-                int srcId = Convert.ToInt32(srcObj);
+                long srcId = Convert.ToInt64(srcObj);
                 source = FindGameObject(srcId);
             }
             else
@@ -183,7 +183,7 @@ namespace UCP.Bridge
             // Optional parent
             if (p.TryGetValue("parent", out var parentObj) && parentObj != null)
             {
-                int parentId = Convert.ToInt32(parentObj);
+                long parentId = Convert.ToInt64(parentObj);
                 var parent = FindGameObject(parentId);
                 instance.transform.SetParent(parent.transform, false);
             }
@@ -222,7 +222,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("type", out var typeObj) || typeObj == null)
                 throw new ArgumentException("Missing 'type' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
             string typeName = typeObj.ToString();
 
@@ -252,7 +252,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("type", out var typeObj) || typeObj == null)
                 throw new ArgumentException("Missing 'type' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
             string typeName = typeObj.ToString();
 
@@ -344,7 +344,7 @@ namespace UCP.Bridge
             return null;
         }
 
-        private static GameObject FindGameObject(int instanceId)
+        private static GameObject FindGameObject(long instanceId)
         {
             var obj = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (obj != null) return obj;
@@ -363,7 +363,7 @@ namespace UCP.Bridge
             throw new ArgumentException($"GameObject not found: {instanceId}");
         }
 
-        private static GameObject FindInHierarchy(GameObject go, int instanceId)
+        private static GameObject FindInHierarchy(GameObject go, long instanceId)
         {
             if (go.GetId() == instanceId) return go;
             for (int i = 0; i < go.transform.childCount; i++)

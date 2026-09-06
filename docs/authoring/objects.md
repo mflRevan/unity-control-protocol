@@ -28,6 +28,11 @@ ucp object get-children --id 46894 --depth 2
 | `--id <instanceId>` | Instance ID of the target GameObject         |
 | `--depth <levels>`  | Child hierarchy depth to include (default 1) |
 
+Instance ids are 64-bit integers. On Unity 6000.0 through 6000.4 they are the familiar small
+numbers; on Unity 6000.5 and newer they are wide `EntityId` values such as `568105589213680530`.
+Treat them as opaque handles: they are stable within an editor session and change after a domain
+reload, so re-run `ucp scene snapshot` rather than caching them across commands that recompile.
+
 This returns the same child metadata shape used by `ucp scene snapshot`, but scoped to one object so scripts do not need to crawl the whole active scene just to inspect a subtree.
 
 **Human output:**

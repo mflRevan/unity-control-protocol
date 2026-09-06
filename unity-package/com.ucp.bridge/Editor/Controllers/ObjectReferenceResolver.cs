@@ -39,7 +39,7 @@ namespace UCP.Bridge
             if (value is Dictionary<string, object> reference)
             {
                 if (reference.TryGetValue("instanceId", out var instanceId) && instanceId != null)
-                    return ResolveByInstanceId(Convert.ToInt32(instanceId), propertyName);
+                    return ResolveByInstanceId(Convert.ToInt64(instanceId), propertyName);
 
                 if (reference.TryGetValue("path", out var path) && path != null)
                     return ResolveByPath(path.ToString(), propertyName);
@@ -58,12 +58,12 @@ namespace UCP.Bridge
             }
 
             if (value is sbyte || value is byte || value is short || value is ushort || value is int || value is uint || value is long || value is ulong)
-                return ResolveByInstanceId(Convert.ToInt32(value), propertyName);
+                return ResolveByInstanceId(Convert.ToInt64(value), propertyName);
 
             throw new ArgumentException($"Unsupported object reference value for '{propertyName}'");
         }
 
-        private static UnityEngine.Object ResolveByInstanceId(int instanceId, string propertyName)
+        private static UnityEngine.Object ResolveByInstanceId(long instanceId, string propertyName)
         {
             var resolved = UnityObjectCompat.ResolveByInstanceId(instanceId);
             if (resolved == null)

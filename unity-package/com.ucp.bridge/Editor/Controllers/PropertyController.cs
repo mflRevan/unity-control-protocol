@@ -27,7 +27,7 @@ namespace UCP.Bridge
                 throw new ArgumentException("Missing 'instanceId' parameter");
 
             var componentType = p.TryGetValue("component", out var cObj) ? cObj?.ToString() : null;
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
 
             if (componentType != null)
@@ -72,7 +72,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("property", out var propObj) || propObj == null)
                 throw new ArgumentException("Missing 'property' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
             var comp = FindComponent(go, cObj.ToString());
             string propName = propObj.ToString();
@@ -100,7 +100,7 @@ namespace UCP.Bridge
             if (!p.ContainsKey("value"))
                 throw new ArgumentException("Missing 'value' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
             var comp = FindComponent(go, cObj.ToString());
             string propName = propObj.ToString();
@@ -128,7 +128,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("active", out var activeObj))
                 throw new ArgumentException("Missing 'active' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
 
             Undo.RecordObject(go, "UCP Set Active");
@@ -153,7 +153,7 @@ namespace UCP.Bridge
             if (!p.TryGetValue("name", out var nameObj) || nameObj == null)
                 throw new ArgumentException("Missing 'name' parameter");
 
-            int instanceId = Convert.ToInt32(idObj);
+            long instanceId = Convert.ToInt64(idObj);
             var go = FindGameObject(instanceId);
 
             Undo.RecordObject(go, "UCP Rename");
@@ -532,7 +532,7 @@ namespace UCP.Bridge
             return Convert.ChangeType(jsonValue, targetType);
         }
 
-        private static GameObject FindGameObject(int instanceId)
+        private static GameObject FindGameObject(long instanceId)
         {
             var obj = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (obj != null) return obj;
@@ -552,7 +552,7 @@ namespace UCP.Bridge
             throw new ArgumentException($"GameObject not found: {instanceId}");
         }
 
-        private static GameObject FindInHierarchy(GameObject go, int instanceId)
+        private static GameObject FindInHierarchy(GameObject go, long instanceId)
         {
             if (go.GetId() == instanceId) return go;
             for (int i = 0; i < go.transform.childCount; i++)

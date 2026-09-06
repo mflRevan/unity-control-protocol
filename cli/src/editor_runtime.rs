@@ -83,6 +83,18 @@ pub async fn ensure_editor_running(
                 return Ok(outcome);
             }
 
+            // A running editor without a bridge is very often one parked on a startup prompt
+            // ("Enter Safe Mode?", "Packages with Errors", ...). Answer it per the dialog policy
+            // here, in the loop that actually waits on such editors; previously this only
+            // happened in `wait_for_bridge`, which this function never reached in that case.
+            if let Ok(handled) = discovery::handle_unity_startup_dialogs(project, ctx.dialog_policy) {
+                for dialog in handled {
+                    if !ctx.json {
+                        output::print_info(&format!("Answered Unity dialog: {dialog}"));
+                    }
+                }
+            }
+
             if Instant::now() >= wait_deadline {
                 // Before blaming a slow shutdown, check the far more common cause: the editor is
                 // in Safe Mode (or otherwise failed to load packages), so the bridge assembly

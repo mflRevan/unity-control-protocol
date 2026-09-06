@@ -132,6 +132,53 @@ namespace UCP.Bridge
             }
         }
 
+        /// <summary>
+        /// Status summary for the test-run console guard. Unity's test runner writes
+        /// "IgnoreFailingMessages:true" / "IgnoreFailingMessages:false" log lines whenever a test
+        /// toggles <c>LogAssert.ignoreFailingMessages</c>; everything logged inside such a window is
+        /// noise the test declared as expected, so it must not fail the guard. The markers
+        /// themselves are dropped as well.
+        /// </summary>
+        public static Dictionary<string, object> BuildTestGuardSummary(long afterId)
+        {
+            SeedHistoryFromConsole();
+            lock (s_historyLock)
+            {
+                var ordered = s_history
+                    .Where(entry => entry.Id > afterId)
+                    .OrderBy(entry => entry.Id)
+                    .ToList();
+
+                return BuildStatusResult(ExcludeExpectedNoise(ordered, entry => entry.Message), afterId);
+            }
+        }
+
+        internal const string IgnoreFailingMessagesOnMarker = "IgnoreFailingMessages:true";
+        internal const string IgnoreFailingMessagesOffMarker = "IgnoreFailingMessages:false";
+
+        internal static List<T> ExcludeExpectedNoise<T>(IEnumerable<T> entries, Func<T, string> message)
+        {
+            var result = new List<T>();
+            var ignoring = false;
+            foreach (var entry in entries)
+            {
+                var text = (message(entry) ?? string.Empty).Trim();
+                if (text == IgnoreFailingMessagesOnMarker)
+                {
+                    ignoring = true;
+                    continue;
+                }
+                if (text == IgnoreFailingMessagesOffMarker)
+                {
+                    ignoring = false;
+                    continue;
+                }
+                if (!ignoring)
+                    result.Add(entry);
+            }
+            return result;
+        }
+
         private static object HandleTail(string paramsJson)
         {
             var query = ParseQuery(paramsJson, includePattern: false);

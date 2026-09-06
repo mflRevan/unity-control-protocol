@@ -138,7 +138,7 @@ namespace UCP.Bridge
             if (parameters == null || !parameters.TryGetValue("instanceId", out var idObj))
                 throw new System.ArgumentException("Missing 'instanceId' parameter");
 
-            var instanceId = System.Convert.ToInt32(idObj);
+            var instanceId = System.Convert.ToInt64(idObj);
             var target = FindGameObject(instanceId);
             var bounds = CalculateFocusBounds(target);
             var sceneView = SceneView.lastActiveSceneView ?? EditorWindow.GetWindow<SceneView>();
@@ -267,7 +267,7 @@ namespace UCP.Bridge
             return bounds;
         }
 
-        private static GameObject FindGameObject(int instanceId)
+        private static GameObject FindGameObject(long instanceId)
         {
             var direct = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
             if (direct != null)
@@ -290,7 +290,7 @@ namespace UCP.Bridge
             throw new System.ArgumentException($"GameObject not found: {instanceId}");
         }
 
-        private static GameObject FindInHierarchy(GameObject gameObject, int instanceId)
+        private static GameObject FindInHierarchy(GameObject gameObject, long instanceId)
         {
             if (gameObject.GetId() == instanceId)
                 return gameObject;

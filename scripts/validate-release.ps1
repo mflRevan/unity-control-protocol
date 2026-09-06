@@ -1,7 +1,7 @@
 param(
     [string]$Project = "C:\Users\aimma\Workspace\unity-control-protocol\unity-project-dev\ucp-dev",
     [string]$Version,
-    [string[]]$UnitySlots = @("6000.0", "6000.1", "6000.2", "6000.3", "6000.4"),
+    [string[]]$UnitySlots = @("6000.0", "6000.1", "6000.2", "6000.3", "6000.4", "6000.5", "6000.6"),
     [switch]$SkipCargo,
     [switch]$SkipWebsite,
     [switch]$SkipUnityMatrix,
