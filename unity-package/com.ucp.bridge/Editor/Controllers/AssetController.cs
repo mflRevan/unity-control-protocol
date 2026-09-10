@@ -508,7 +508,7 @@ namespace UCP.Bridge
 
             string assetPath = pathObj.ToString();
             var normalizedPath = assetPath.Replace("\\", "/");
-            if (!AssetDatabase.AssetPathExists(normalizedPath))
+            if (!AssetDatabaseCompat.AssetPathExists(normalizedPath))
                 throw new ArgumentException($"Asset not found: {normalizedPath}");
 
             if (!AssetDatabase.DeleteAsset(normalizedPath))
@@ -917,7 +917,7 @@ namespace UCP.Bridge
         private static ValidatedMove ValidateMoveRequest(string normalizedSource, string destination)
         {
             var isFolder = AssetDatabase.IsValidFolder(normalizedSource);
-            if (!isFolder && !AssetDatabase.AssetPathExists(normalizedSource))
+            if (!isFolder && !AssetDatabaseCompat.AssetPathExists(normalizedSource))
                 throw new ArgumentException(BuildAssetNotFoundMessage(normalizedSource));
 
             if (!IsMovableAssetPath(normalizedSource))
@@ -931,7 +931,7 @@ namespace UCP.Bridge
             if (string.Equals(normalizedSource, resolvedDestination, StringComparison.OrdinalIgnoreCase))
                 return new ValidatedMove(identity, resolvedDestination, false);
 
-            if (AssetDatabase.AssetPathExists(resolvedDestination) || AssetDatabase.IsValidFolder(resolvedDestination))
+            if (AssetDatabaseCompat.AssetPathExists(resolvedDestination) || AssetDatabase.IsValidFolder(resolvedDestination))
                 throw new ArgumentException($"Destination already exists: {resolvedDestination}");
 
             return new ValidatedMove(identity, resolvedDestination, true);

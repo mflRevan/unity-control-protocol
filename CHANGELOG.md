@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.4] - Unreleased
+
+### Fixed
+
+- Fixed the bridge failing to compile on Unity 2021.3 and 2022.3 LTS since 0.6.3 with
+  `'AssetDatabase' does not contain a definition for 'AssetPathExists'`. That API only exists from
+  2023.1; asset existence checks now go through a compat helper that falls back to a
+  GUID lookup restricted to existing assets on older editors. Reported by a user upgrading a
+  2022.3 project.
+
 ## [0.6.3] - 2026-09-07
 
 ### Added

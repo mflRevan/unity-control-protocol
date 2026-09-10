@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.4] - Unreleased
+
+### Fixed
+
+- Fixed compilation on Unity 2021.3 and 2022.3: `AssetDatabase.AssetPathExists` (2023.1+) is now
+  wrapped by `AssetDatabaseCompat.AssetPathExists`, which uses
+  `AssetPathToGUID(path, AssetPathToGUIDOptions.OnlyExistingAssets)` on older editors.
+
 ## [0.6.3] - 2026-09-07
 
 ### Added

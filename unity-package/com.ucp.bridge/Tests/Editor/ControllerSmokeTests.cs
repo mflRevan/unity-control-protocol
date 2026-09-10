@@ -394,7 +394,7 @@ namespace UCP.Bridge.Tests
             }
             finally
             {
-                if (AssetDatabase.AssetPathExists(RegexAssetPath))
+                if (AssetDatabaseCompat.AssetPathExists(RegexAssetPath))
                 {
                     AssetDatabase.DeleteAsset(RegexAssetPath);
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
