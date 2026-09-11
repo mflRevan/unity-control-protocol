@@ -181,6 +181,13 @@ fn preferred_dialog_button_label(
 
 /// Like `preferred_dialog_button_label` but without the generic per-policy fallback: only a
 /// dialog the CLI recognises by title gets an answer.
+/// Unity's progress window ("Hold on...") is not a dialog: it reports work in flight and its only
+/// button aborts that work. Both the stall check and the startup policy must leave it alone.
+fn is_progress_window(title: &str) -> bool {
+    let normalized = normalize_dialog_label(title);
+    normalized.starts_with("holdon") || normalized.starts_with("progress")
+}
+
 fn known_dialog_button_label(
     title: &str,
     labels: &[String],
@@ -195,6 +202,9 @@ fn dialog_button_label(
     policy: config::StartupDialogPolicy,
     allow_generic: bool,
 ) -> Option<String> {
+    if is_progress_window(title) {
+        return None;
+    }
     let normalized_title = normalize_dialog_label(title);
     let title_preferences: Option<&[&str]> = if normalized_title
         .contains("openingprojectinnonmatchingeditorinstallation")
@@ -220,7 +230,12 @@ fn dialog_button_label(
             config::StartupDialogPolicy::Cancel => Some(&["quit", "cancel", "close", "no"]),
             config::StartupDialogPolicy::Manual => None,
         }
-    } else if normalized_title.contains("projectupgraderequired") {
+    } else if normalized_title.contains("projectupgraderequired")
+        || normalized_title.contains("projectdowngraderequired")
+    {
+        // "Project Upgrade Required" (older project, newer editor) and "Project Downgrade
+        // Required" (the reverse, shown by 6000.3+ instead of the non-matching-editor dialog).
+        // Both are answered the same way: proceed, since the caller chose this editor.
         match policy {
             config::StartupDialogPolicy::Auto
             | config::StartupDialogPolicy::Ignore
@@ -714,6 +729,12 @@ fn enumerate_process_dialogs(pid: u32) -> Vec<DialogInfo> {
             // Unity's own tool windows are owned popups too; only button-bearing ones are dialogs.
             continue;
         }
+        if is_progress_window(&title) {
+            // "Hold on..." is Unity's progress bar (import, compile, play-mode entry). It carries a
+            // cancel-style button ("Skip Transcoding", "Cancel") that must never be pressed on the
+            // editor's behalf, and it is not a modal waiting for an answer.
+            continue;
+        }
         dialogs.push(DialogInfo {
             title,
             button_handles: buttons.iter().map(|(h, _)| *h as usize).collect(),
@@ -999,6 +1020,62 @@ mod tests {
             ),
             Some("Confirm".to_string())
         );
+    }
+
+    #[test]
+    fn continues_through_project_downgrade_required() {
+        // Unity 6000.3.1f1 opening a project last saved by 6000.5: buttons in Win32 order.
+        let labels = labels(&["Continue", "Quit"]);
+        for policy in [
+            StartupDialogPolicy::Auto,
+            StartupDialogPolicy::Ignore,
+            StartupDialogPolicy::Recover,
+        ] {
+            assert_eq!(
+                preferred_dialog_button_label("Project Downgrade Required", &labels, policy)
+                    .as_deref(),
+                Some("Continue"),
+                "{policy}: a downgrade the caller asked for must proceed"
+            );
+        }
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Project Downgrade Required",
+                &labels,
+                StartupDialogPolicy::Cancel
+            )
+            .as_deref(),
+            Some("Quit")
+        );
+        assert_eq!(
+            preferred_dialog_button_label(
+                "Project Downgrade Required",
+                &labels,
+                StartupDialogPolicy::Manual
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn never_presses_the_progress_windows_button() {
+        // Unity 6000.6 entering play mode: the "Hold on..." progress bar exposes "Skip Transcoding".
+        let labels = labels(&["Skip Transcoding"]);
+        for policy in [
+            StartupDialogPolicy::Auto,
+            StartupDialogPolicy::Ignore,
+            StartupDialogPolicy::Recover,
+            StartupDialogPolicy::SafeMode,
+            StartupDialogPolicy::Cancel,
+        ] {
+            assert_eq!(
+                preferred_dialog_button_label("Hold on...", &labels, policy),
+                None,
+                "{policy}: a progress window is work in flight, not a question"
+            );
+        }
+        assert!(super::is_progress_window("Hold on..."));
+        assert!(!super::is_progress_window("Project Downgrade Required"));
     }
 
     #[test]

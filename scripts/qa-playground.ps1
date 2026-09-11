@@ -228,6 +228,7 @@ function Wait-BridgeReady {
 	)
 
 	$lastDetail = ''
+	$repeats = 0
 	for ($i = 0; $i -lt $MaxAttempts; $i++) {
 		$probe = Invoke-UcpJson -UcpArgs @('connect') -AllowFailure
 		# `connect` reports whether Unity's main thread is actually serving; a bridge whose socket
@@ -240,8 +241,21 @@ function Wait-BridgeReady {
 				Detail = if ($probe.Raw) { $probe.Raw } else { 'connected' }
 			}
 		}
-		$lastDetail = if ($probe.Raw) { $probe.Raw } else { 'no output' }
+		$detail = if ($probe.Raw) { $probe.Raw } else { 'no output' }
+		$repeats = if ($detail -eq $lastDetail) { $repeats + 1 } else { 1 }
+		$lastDetail = $detail
 		Write-Host "[WAIT] $Reason attempt $($i + 1)/$MaxAttempts :: $lastDetail" -ForegroundColor Yellow
+		if ($repeats -ge 3) {
+			# The editor is not progressing; a modal the dialog policy does not recognise is the
+			# usual cause. Name it and stop instead of poking the same prompt for an hour.
+			$dialogs = Invoke-UcpJson -UcpArgs @('editor', 'dialog') -AllowFailure
+			$blocking = if ($dialogs.Raw) { $dialogs.Raw } else { 'no dialog information' }
+			return [pscustomobject]@{
+				Ready = $false
+				Attempts = $i + 1
+				Detail = "same failure $repeats times in a row, giving up :: $lastDetail :: dialogs: $blocking"
+			}
+		}
 		Start-Sleep -Seconds $DelaySeconds
 	}
 
@@ -261,6 +275,10 @@ function Run-Step {
 		[switch]$AllowFailure
 	)
 
+	if ($script:fatalFailure) {
+		Write-Host "[SKIP] $Name (run already failed)" -ForegroundColor DarkGray
+		return $null
+	}
 	try {
 		$currentStep = $Name
 		Write-QaSummary
@@ -269,10 +287,8 @@ function Run-Step {
 		$assertResult = & $Assert $result
 		Add-Result -Name $Name -Passed:$assertResult.Passed -Detail $assertResult.Detail
 		if (-not $assertResult.Passed) {
-			$fatalFailure = $true
-			$fatalDiagnostics = Get-DiagnosticPayload
-			Close-UnityEditorNow
-			throw "Stopping QA after failure in step '$Name'"
+			Enter-FatalFailure -Step $Name
+			return $null
 		}
 		return $result
 	}
@@ -280,13 +296,22 @@ function Run-Step {
 		if (-not ($results | Where-Object { $_.Name -eq $Name -and -not $_.Passed })) {
 			Add-Result -Name $Name -Passed:$false -Detail $_.Exception.Message
 		}
-		if (-not $fatalFailure) {
-			$fatalFailure = $true
-			$fatalDiagnostics = Get-DiagnosticPayload
-			Close-UnityEditorNow
-		}
+		Enter-FatalFailure -Step $Name
 		return $null
 	}
+}
+
+# One failure ends the run: capture diagnostics, close the editor once, and let every later
+# Run-Step skip. The flag lives in script scope on purpose; a plain assignment inside a function
+# would create a local copy, the run would continue against a closed editor, and each `connect`
+# would relaunch it (that is exactly how a failing step turned into an editor relaunch loop).
+function Enter-FatalFailure {
+	param([string]$Step)
+	if ($script:fatalFailure) { return }
+	$script:fatalFailure = $true
+	$script:fatalDiagnostics = Get-DiagnosticPayload
+	Write-Host "[STOP] QA stops after failure in step '$Step'; remaining steps are skipped" -ForegroundColor Red
+	Close-UnityEditorNow
 }
 
 Write-Host "Running extensive UCP QA against: $Project" -ForegroundColor Cyan

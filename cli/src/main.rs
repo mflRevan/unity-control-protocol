@@ -94,8 +94,31 @@ impl Cli {
     }
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+/// The command futures are large state machines (every bridge wait, dialog check, and retry
+/// loop is inlined into them), and a debug build easily exceeds the 1 MB main-thread stack
+/// Windows gives a process. Run the CLI on a thread with a generous stack instead of trusting
+/// the default; the cost is one thread spawn.
+fn main() -> anyhow::Result<()> {
+    const STACK_BYTES: usize = 64 * 1024 * 1024;
+    let handle = std::thread::Builder::new()
+        .name("ucp-main".to_string())
+        .stack_size(STACK_BYTES)
+        .spawn(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .thread_stack_size(STACK_BYTES)
+                .build()
+                .expect("tokio runtime")
+                .block_on(async_main())
+        })
+        .expect("spawn the CLI thread");
+    match handle.join() {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
+}
+
+async fn async_main() -> anyhow::Result<()> {
     // Ensure UTF-8 output on Windows consoles
     #[cfg(windows)]
     unsafe {
@@ -134,6 +157,8 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
         .without_time()
+        // Diagnostics never belong on stdout: `--json` callers parse it.
+        .with_writer(std::io::stderr)
         .init();
 
     let timeout = cli.effective_timeout();

@@ -7,7 +7,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
@@ -187,7 +187,13 @@ pub async fn start_editor(
         .arg("-projectPath")
         .arg(project)
         .arg("-logFile")
-        .arg(&log_path);
+        .arg(&log_path)
+        // The editor must not inherit our standard handles: Unity 6000.6 prints its compiler
+        // pre-warm lines to stdout before -logFile takes over, which would land inside the
+        // JSON a caller is parsing, and an inherited stdin can keep a pipe open forever.
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
 
     #[cfg(windows)]
     {

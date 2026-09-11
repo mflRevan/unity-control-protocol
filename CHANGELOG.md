@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.6.4] - Unreleased
+## [0.6.4] - 2026-09-11
 
 ### Added
 
@@ -26,6 +26,13 @@
   `ucp screenshot`, `ucp view isolate`, `ucp ui screenshot`, and `ucp record capture`.
 
 ### Changed
+- The QA playground and the release preflight fail fast now. A failing step used to set a
+  flag that never left its function, so the harness kept running against the editor it had just
+  closed and every `connect` relaunched it; the bridge-ready wait retried an unanswered dialog up
+  to ninety times. Now one failure ends the run with diagnostics, a wait that sees the same
+  answer three times stops and names the dialog, and `validate-release.ps1` refuses to start
+  while another harness or an editor is on the QA project. The CLI names the blocking dialog
+  when a bridge wait gives up.
 
 - README rewritten as a proper project front page: what UCP is against Unity's own CLI, a
   sixty-second setup, the command surface by area, the agent story (state line, dialogs, vision
@@ -46,6 +53,29 @@
 - `ucp view` (capture, isolate, orbit) is documented under Screenshots, Recordings and Logs.
 
 ### Fixed
+- The CLI runs its commands on a thread with a 64 MB stack. The command futures are large state
+  machines, and a debug build overflowed the 1 MB main-thread stack Windows gives a process, which
+  is how the QA harness (a debug build) crashed on plain `scene` commands.
+- `ucp play` issued right after `ucp compile --no-wait` could be discarded by the recompile that
+  had not started yet: the bridge still reported `compiling: false` for a few frames, the play
+  request went through, and the reload that followed dropped the transition (Unity 6000.6 stays
+  in edit mode; the CLI then polled until its timeout). The bridge now treats a requested compile
+  as compiling until Unity picks it up, `play` answers `compiling` instead of toggling while one
+  is pending, and the CLI waits for the reload and re-issues the request, a bounded number of
+  times, when a reload swallowed it.
+- `-v` diagnostics were written to stdout and broke `--json` consumers; they go to stderr now.
+- Unity's "Hold on..." progress window is no longer treated as a modal dialog. On Unity 6000.6
+  it shows a "Skip Transcoding" button while play mode starts, and the startup dialog policy
+  pressed it as a generic "skip", aborting the transition and failing `ucp play`. Progress
+  windows are now excluded from dialog detection and from `ucp editor dialog`.
+- A Unity editor launched by the CLI inherited the CLI's standard handles. Unity 6000.6 prints
+  its compiler pre-warm lines to stdout before the log file takes over, so those lines landed in
+  front of `--json` output and broke callers parsing it. The editor now starts with detached
+  handles on every platform.
+- The "Project Downgrade Required" dialog that Unity 6000.3+ shows when a project last saved by a
+  newer editor is opened in an older one is now recognised and answered like the upgrade dialog
+  (Continue under auto, ignore, and recover; Quit under cancel). Previously the editor sat behind
+  it until the launch timed out, and the retry loop relaunched it every couple of minutes.
 - Mutating commands and `ucp stop` printed `Buffered logs: 0 entries across 0 categories` after
   every call. The console summary now appears only when the wait turned up errors or exceptions;
   the `[editor]` state line already carries the counts.

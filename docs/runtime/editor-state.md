@@ -83,11 +83,14 @@ Dialogs seen in practice, with the answer that keeps an unattended editor useful
 | `Packages with Errors` | Open Package Manager / Dismiss Forever / Dismiss | Dismiss |
 | `Opening Project in Non-Matching Editor Installation` | Continue / Quit | Continue |
 | `Project Upgrade Required` | Confirm / Cancel | Confirm |
+| `Project Downgrade Required` | Continue / Quit | Continue |
 | `Opening file failed` (asset database lost its `Library/` underneath the editor) | Try Again / Force Quit / Cancel | none; the editor is unrecoverable, `ucp editor dialog --answer "Force Quit"` and reopen |
 | `Fatal Error!` (follows Force Quit and crashes) | Quit | none; press Quit, the process exits |
 | `Script Updating Consent` (API updater) | Yes for these and later / No / Yes just these | none; pass `-accept-apiupdate` or answer it |
 | `Input System native platform backend not enabled` | Enable & Restart / Don't Enable | none |
 | a script's own `EditorUtility.DisplayDialog` | anything | none; fail fast and name it |
+
+Unity's progress window (`Hold on...`, shown during imports, compiles, and play-mode entry) is not a dialog: it is never listed or answered, and its cancel-style button is never pressed.
 
 Answer a dialog deliberately with `ucp editor dialog`:
 

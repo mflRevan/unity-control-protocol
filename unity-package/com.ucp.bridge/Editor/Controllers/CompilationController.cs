@@ -42,6 +42,7 @@ namespace UCP.Bridge
                 ["messages"] = new List<object>()
             }));
 
+            BridgeServer.NoteCompileRequested();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             CompilationPipeline.RequestScriptCompilation();
             TrySyncSolution();
@@ -93,6 +94,9 @@ namespace UCP.Bridge
 
         private static object HandleRefresh(string paramsJson)
         {
+            // A refresh that finds changed scripts compiles them on the next update, exactly
+            // like an explicit compile request.
+            BridgeServer.NoteCompileRequested();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             return new { status = "ok", message = "Asset database refreshed" };
         }

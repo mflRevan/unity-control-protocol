@@ -26,7 +26,7 @@ namespace UCP.Bridge
         private const int DefaultPort = 21342;
         private const int MaxPort = 21352;
         private const int MaxConnections = 4;
-        private const string ProtocolVersion = "0.6.3";
+        private const string ProtocolVersion = "0.6.4";
 
         private static TcpListener s_listener;
         private static CancellationTokenSource s_cts;
@@ -52,6 +52,56 @@ namespace UCP.Bridge
         // EditorApplication.isCompiling as of the last pump, so the off-thread handshake can warn
         // a client that a domain reload is imminent instead of letting its request race it.
         private static int s_compiling;
+        // Set by `compile` / `refresh-assets` when they ask Unity for a recompile. Unity starts
+        // that compile on a later update, so for a few frames EditorApplication.isCompiling is
+        // still false; a request accepted in that window (notably `play`) is discarded by the
+        // reload that follows. Treat the request as "compiling" until Unity picks it up, with a
+        // bounded grace so a request that produced no compile cannot wedge the flag.
+        private static long s_compileRequestedTicks;
+        private const long CompileRequestGraceTicks = TimeSpan.TicksPerSecond * 10;
+
+        internal static void NoteCompileRequested()
+        {
+            System.Threading.Volatile.Write(ref s_compileRequestedTicks, DateTime.UtcNow.Ticks);
+            System.Threading.Volatile.Write(ref s_compiling, 1);
+        }
+
+        internal static void ClearCompileRequestForTests()
+        {
+            System.Threading.Volatile.Write(ref s_compileRequestedTicks, 0);
+            System.Threading.Volatile.Write(ref s_compiling, EditorApplication.isCompiling ? 1 : 0);
+        }
+
+        /// <summary>Unity is compiling, updating the asset database, or about to compile on request.</summary>
+        internal static bool IsCompilePending
+        {
+            get
+            {
+                if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+                    return true;
+                var requested = System.Threading.Volatile.Read(ref s_compileRequestedTicks);
+                return requested != 0 && DateTime.UtcNow.Ticks - requested < CompileRequestGraceTicks;
+            }
+        }
+
+        private static bool SampleCompiling()
+        {
+            if (EditorApplication.isCompiling)
+            {
+                // The real compile has started; from here the live flag is authoritative.
+                System.Threading.Volatile.Write(ref s_compileRequestedTicks, 0);
+                return true;
+            }
+            if (EditorApplication.isUpdating)
+                return true;
+            var requested = System.Threading.Volatile.Read(ref s_compileRequestedTicks);
+            if (requested == 0)
+                return false;
+            if (DateTime.UtcNow.Ticks - requested < CompileRequestGraceTicks)
+                return true;
+            System.Threading.Volatile.Write(ref s_compileRequestedTicks, 0);
+            return false;
+        }
         private static bool s_summaryFailureLogged;
 
         // Command router
@@ -544,7 +594,7 @@ namespace UCP.Bridge
         private static void PumpMainThread()
         {
             System.Threading.Volatile.Write(ref s_lastMainThreadTick, DateTime.UtcNow.Ticks);
-            System.Threading.Volatile.Write(ref s_compiling, EditorApplication.isCompiling ? 1 : 0);
+            System.Threading.Volatile.Write(ref s_compiling, SampleCompiling() ? 1 : 0);
             int processed = 0;
             while (s_mainThreadQueue.TryDequeue(out var action) && processed < 50)
             {

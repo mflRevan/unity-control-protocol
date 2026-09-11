@@ -80,6 +80,17 @@ pub async fn wait_for_bridge(
                 WaitMode::FirstAvailable => "Bridge did not become available",
                 WaitMode::RestartOptional => "Bridge did not stabilize",
             };
+            // A dialog the policy did not answer is the usual reason; name it so a caller (or a
+            // harness) can stop retrying instead of relaunching the editor into the same prompt.
+            let blocking = discovery::list_unity_dialogs(project);
+            if let Some(dialog) = blocking.first() {
+                crate::editor_state::note_modal(&dialog.title, &dialog.buttons);
+                anyhow::bail!(
+                    "{expectation} after waiting {max_wait}s: Unity is blocked by the dialog \"{}\" [{}].                      Answer it with `ucp editor dialog --answer \"<button>\"` (or in the editor).",
+                    dialog.title,
+                    dialog.buttons.join(" | ")
+                );
+            }
             anyhow::bail!("{expectation} after waiting {max_wait}s");
         }
 

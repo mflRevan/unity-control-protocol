@@ -59,6 +59,12 @@ namespace UCP.Bridge
         {
             if (EditorApplication.isPlaying)
                 return new { status = "already_playing" };
+            if (BridgeServer.IsCompilePending)
+            {
+                // Toggling play while a recompile is pending loses the request in the reload that
+                // follows (6000.6 stays in edit mode). Tell the CLI so it waits and asks again.
+                return new { status = "compiling" };
+            }
 
             var saveDirtyScenes = GetBoolParam(paramsJson, "saveDirtyScenes", true);
             var discardUntitled = GetBoolParam(paramsJson, "discardUntitled", true);

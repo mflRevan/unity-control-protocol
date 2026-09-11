@@ -310,6 +310,11 @@ Push-Location website; npm run sync-content && npm run lint && npm run build; Po
 .\scripts\validate-release.ps1 -Version <version>
 ```
 
+`validate-release.ps1` runs that matrix itself over every slot, so it owns the QA project for
+the whole run (one to two hours): it refuses to start while another harness or an editor is on
+that project, and nothing else may open or wipe the project meanwhile. One failing step ends a
+slot with diagnostics; the harness never relaunches an editor to keep going.
+
 #### Unity Compatibility Matrix (`scripts/unity-version-matrix.ps1`)
 
 The matrix runner resolves each requested slot (e.g. `6000.2`) against locally installed Unity editors, preferring the exact minor version, then falling back to the nearest installed same-major editor.
@@ -370,6 +375,7 @@ Recognized dialog titles:
 - "Opening Project in Non-Matching Editor Installation" → Continue
 - "Enter Safe Mode?" → Ignore (policy: ignore) / Enter Safe Mode (policy: safe-mode)
 - "Project Upgrade Required" → Confirm
+- "Project Downgrade Required" (6000.3+, newer project opened in an older editor) → Continue
 - "Auto Graphics API Notice" → OK
 
 Unrecognized dialogs fall through to a generic button preference list that includes: ignore, continue, confirm, skip, ok, yes.

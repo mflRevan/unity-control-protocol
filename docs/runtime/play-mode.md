@@ -20,6 +20,13 @@ For unattended editor startup flows, pair lifecycle commands with `--dialog-poli
 ucp play
 ```
 
+`ucp play` confirms the transition against `play/status` rather than trusting the request. If a
+script recompile is pending (for example right after `ucp compile --no-wait`), the bridge answers
+`compiling` and the CLI waits for the reload before asking again; if a reload discards the request
+outright, which Unity 6000.6 does when the two collide, the CLI re-issues it up to three times and
+then reports the failure. `compiling` and `compileErrors` on the `[editor]` state line tell you which
+case you hit.
+
 ### `ucp stop`
 
 Exit play mode and return to edit mode.
