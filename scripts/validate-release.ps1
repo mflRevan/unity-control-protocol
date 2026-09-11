@@ -70,6 +70,7 @@ try {
 
     if (-not [string]::IsNullOrWhiteSpace($Version)) {
         Invoke-CheckedCommand -Name "sync-version check" -Script { node scripts/sync-version.mjs --check $Version }
+        Invoke-CheckedCommand -Name "sync-skills check" -Script { node scripts/sync-skills.mjs --check }
     }
 
     if (-not $SkipUnityMatrix) {

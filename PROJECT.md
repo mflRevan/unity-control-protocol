@@ -76,7 +76,11 @@ Some parts of the repository are foundational and should stay aligned:
 - `scripts/sync-version.mjs` exists to propagate that metadata consistently.
 - `scripts/validate-release.ps1` is the shared validation entrypoint for local release preflight and GitHub Actions gating.
 - `scripts/unity-version-matrix.ps1` is the canonical Unity compatibility harness for Unity 6 slot coverage (`6000.0` through `6000.6`) with explicit fallback and skip reporting.
-- `skills/unity-control-protocol/` is the canonical agent skill source used by docs and the Claude Code plugin wrapper.
+- `skills/*/SKILL.md` is the hand-written ground truth for every agent skill: the omni skill plus one
+  focused skill per command surface. `scripts/sync-skills.mjs` validates their Agent Skills
+  frontmatter, stamps `metadata.version`, mirrors the surface skills into the `ucp-surfaces`
+  Claude Code plugin, writes that plugin's manifest version, and emits `skills/index.json`; the
+  website serves them raw and renders them from the same files. Never edit the plugin mirror.
 - `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
 - repo-level docs should reflect the implemented system, not an aspirational redesign.

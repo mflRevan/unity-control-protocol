@@ -11,7 +11,7 @@
     {
       "name": "ucp",
       "source": "./",
-      "description": "Unity Editor automation via the Unity Control Protocol base skill.",
+      "description": "Unity Editor automation for agents: the single unity-control-protocol omni skill covering every ucp command surface.",
       "version": "0.6.3",
       "author": {
         "name": "mflRevan"
@@ -36,7 +36,7 @@
     {
       "name": "ucp-surfaces",
       "source": "./plugins/ucp-surfaces",
-      "description": "Per-command-surface Unity Control Protocol micro-skills — install when you want focused, surface-specific skills instead of the single omni skill.",
+      "description": "Eight focused Unity Control Protocol skills, one per command surface (editor lifecycle, scene authoring, assets, UI Toolkit, visual feedback, runtime debugging, project config, version control). Install instead of, or next to, the omni skill.",
       "version": "0.6.3",
       "author": {
         "name": "mflRevan"

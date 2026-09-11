@@ -2,8 +2,26 @@
 
 ## [0.6.4] - Unreleased
 
+### Added
+
+- Eight hand-written, surface-scoped agent skills under `skills/` next to the omni skill:
+  `ucp-editor-lifecycle`, `ucp-scene-authoring`, `ucp-assets`, `ucp-ui-toolkit`,
+  `ucp-visual-feedback`, `ucp-runtime-debugging`, `ucp-project-config`, and
+  `ucp-version-control`. Each carries real commands and flags verified against `--help`, the
+  workflows an agent actually runs, and the pitfalls the matrix has hit, and each defers to the
+  omni skill for cross-surface work. They replace the sixteen table-generated micro-skills in
+  the `ucp-surfaces` Claude Code plugin. `skills/index.json` is a machine-readable catalog, and
+  `scripts/sync-skills.mjs` (also a release gate) keeps the plugin mirror, its manifest, and the
+  catalog in lockstep with the source files.
+- Skill frontmatter now follows the Agent Skills specification exactly (`homepage` moved under
+  `metadata`), so `npx skills add mflRevan/unity-control-protocol` and
+  `gh skill install` work unchanged for Codex, Cursor, Copilot, Gemini CLI, opencode, and Amp.
+
 ### Fixed
 
+- Fixed the `ucp-surfaces` Claude Code plugin being pinned at 0.5.2: its `plugin.json` version
+  was never part of the release sync, and Claude Code resolves that value before the marketplace
+  entry, so users of the plugin never received updates. The skill sync stamps it now.
 - Fixed the bridge failing to compile on Unity 2021.3 and 2022.3 LTS since 0.6.3 with
   `'AssetDatabase' does not contain a definition for 'AssetPathExists'`. That API only exists from
   2023.1; asset existence checks now go through a compat helper that falls back to a

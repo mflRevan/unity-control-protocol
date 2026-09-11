@@ -7,11 +7,11 @@ description: >-
   over a WebSocket/JSON-RPC 2.0
   bridge. Use when the user asks to inspect, create, modify, or automate anything
   inside a Unity project without opening the Editor UI.
-homepage: https://github.com/mflRevan/unity-control-protocol
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
   version: '0.6.3'
+  homepage: https://github.com/mflRevan/unity-control-protocol
 ---
 
 # Unity Control Protocol (UCP)

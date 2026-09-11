@@ -105,14 +105,19 @@ const replacements = [
     (content) => replaceOne(content, /Protocol: v[\d.]+/, `Protocol: v${protocolVersion}`),
     { optionalFile: true },
   ],
+  // Every skill carries `  version: '...'` under metadata: the ground truth under skills/ and
+  // the mirror scripts/sync-skills.mjs writes into the ucp-surfaces plugin.
+  ...skillReplacements(version),
   [
-    'skills/unity-control-protocol/SKILL.md',
-    (content) => replaceOne(content, /  version: '.*'/, `  version: '${version}'`),
+    'plugins/ucp-surfaces/.claude-plugin/plugin.json',
+    (content) => replaceOne(content, /"version": ".*"/, `"version": "${version}"`),
+    { optionalFile: true },
   ],
-  // Per-command-surface micro-skills (the ucp-surfaces plugin). Each generated
-  // SKILL.md carries the same uniform `  version: '...'` line under metadata,
-  // so the exactly-one-match invariant of replaceOne holds for every file.
-  ...microSkillReplacements(version),
+  [
+    'skills/index.json',
+    (content) => replaceOne(content, /"version": ".*",\n  "generatedFrom"/, `"version": "${version}",\n  "generatedFrom"`),
+    { optionalFile: true },
+  ],
   ['version.json', () => `${JSON.stringify(metadata, null, 2)}\n`],
 ];
 
@@ -146,20 +151,21 @@ if (isCheck) {
   console.log(`Synced repo metadata to ${version} / protocol ${protocolVersion}.`);
 }
 
-// Build a replacement entry for every plugins/ucp-surfaces/skills/<name>/SKILL.md
-// that exists on disk, stamping its `  version: '...'` metadata line. Returns an
-// empty list when the plugin folder is absent so the script still works in
-// checkouts that predate the ucp-surfaces plugin.
-function microSkillReplacements(version) {
-  const skillsDir = path.join(root, 'plugins', 'ucp-surfaces', 'skills');
-  if (!fs.existsSync(skillsDir)) {
-    return [];
+// One replacement per SKILL.md under skills/ (source of truth) and under the ucp-surfaces
+// plugin mirror, stamping the `  version: '...'` metadata line.
+function skillReplacements(version) {
+  const roots = [path.join('skills'), path.join('plugins', 'ucp-surfaces', 'skills')];
+  const files = [];
+  for (const relativeRoot of roots) {
+    const dir = path.join(root, relativeRoot);
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const relativePath = path.join(relativeRoot, entry.name, 'SKILL.md');
+      if (fs.existsSync(path.join(root, relativePath))) files.push(relativePath);
+    }
   }
-  return fs
-    .readdirSync(skillsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join('plugins', 'ucp-surfaces', 'skills', entry.name, 'SKILL.md'))
-    .filter((relativePath) => fs.existsSync(path.join(root, relativePath)))
+  return files
     .sort()
     .map((relativePath) => [
       relativePath,
