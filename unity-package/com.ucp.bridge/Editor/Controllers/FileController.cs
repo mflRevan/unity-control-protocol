@@ -70,7 +70,7 @@ namespace UCP.Bridge
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            File.WriteAllText(fullPath, contentObj.ToString());
+            WriteText(fullPath, contentObj.ToString());
             var reimport = AssetImportSupport.ReimportOrDescribe(pathObj.ToString(), noReimport);
 
             return new Dictionary<string, object>
@@ -80,6 +80,27 @@ namespace UCP.Bridge
                 ["size"] = contentObj.ToString().Length,
                 ["reimport"] = reimport
             };
+        }
+
+        /// <summary>
+        /// Overwrites a file in place. <see cref="File.WriteAllText(string, string)"/> recreates the
+        /// file, which Windows refuses for hidden files ("access denied"), and a project in the
+        /// "Hidden Meta Files" version-control mode keeps every .meta hidden. Truncating the
+        /// existing file keeps its attributes and works in both modes.
+        /// </summary>
+        internal static void WriteText(string fullPath, string content)
+        {
+            if (!File.Exists(fullPath))
+            {
+                File.WriteAllText(fullPath, content);
+                return;
+            }
+
+            using (var stream = new FileStream(fullPath, FileMode.Truncate, FileAccess.Write, FileShare.Read))
+            using (var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false)))
+            {
+                writer.Write(content);
+            }
         }
 
         private static object HandlePatch(string paramsJson)
@@ -124,7 +145,7 @@ namespace UCP.Bridge
                     throw new Exception("Patch target not found in file");
 
                 var patched = original.Replace(find, replace);
-                File.WriteAllText(fullPath, patched);
+                WriteText(fullPath, patched);
                 var reimport = AssetImportSupport.ReimportOrDescribe(pathObj.ToString(), noReimport);
 
                 return new Dictionary<string, object>

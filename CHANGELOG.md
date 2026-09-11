@@ -53,6 +53,9 @@
 - `ucp view` (capture, isolate, orbit) is documented under Screenshots, Recordings and Logs.
 
 ### Fixed
+- `files write` and `files patch` failed with "access denied" on hidden files, which is every
+  `.meta` in a project using the "Hidden Meta Files" version-control mode. Existing files are
+  now truncated in place, so their attributes survive and the write succeeds in both modes.
 - The CLI runs its commands on a thread with a 64 MB stack. The command futures are large state
   machines, and a debug build overflowed the 1 MB main-thread stack Windows gives a process, which
   is how the QA harness (a debug build) crashed on plain `scene` commands.
