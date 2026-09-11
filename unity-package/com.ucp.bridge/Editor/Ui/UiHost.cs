@@ -244,7 +244,7 @@ namespace UCP.Bridge
 
         internal UiCaptureSurface(int width, int height)
         {
-            _texture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)
+            _texture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear)
             {
                 name = "UCP UI Capture",
                 antiAliasing = 1,
