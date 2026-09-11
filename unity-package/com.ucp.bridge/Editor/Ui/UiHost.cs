@@ -244,6 +244,10 @@ namespace UCP.Bridge
 
         internal UiCaptureSurface(int width, int height)
         {
+            // The harness is an editor window, and editor windows render in gamma space whatever the
+            // project's color space is. The capture must copy those bytes through untouched, so the
+            // surface is declared Linear (no sRGB conversion on write or readback). Declaring it sRGB
+            // double-encoded the pixels on Linux (washed-out captures) while DirectX ignored the flag.
             _texture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear)
             {
                 name = "UCP UI Capture",

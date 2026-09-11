@@ -18,6 +18,7 @@
   `gh skill install` work unchanged for Codex, Cursor, Copilot, Gemini CLI, opencode, and Amp.
 
 ### Fixed
+- `ui screenshot` captures were washed out on Linux: the capture surface declared sRGB read/write, which double-encoded the gamma-space editor window on Vulkan and OpenGL while DirectX ignored the flag. The surface is now Linear (a byte-for-byte copy) and a pixel-exact edit-mode test guards it. Thanks to @quentinleon (#5).
 
 - Fixed the `ucp-surfaces` Claude Code plugin being pinned at 0.5.2: its `plugin.json` version
   was never part of the release sync, and Claude Code resolves that value before the marketplace
