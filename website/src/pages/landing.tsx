@@ -121,9 +121,9 @@ export function Landing() {
   return (
     <PageTransition>
       <Hero />
-      <Showcase />
       <Surfaces />
       <Agents />
+      <Showcase />
       <Compare />
       <Architecture />
       <QuickStart />
@@ -265,7 +265,7 @@ function Showcase() {
 
 function Surfaces() {
   return (
-    <section className="border-t border-border/70">
+    <section className="border-t border-border/70 bg-surface">
       <div className="container-x py-16 md:py-24">
         <SectionHeading
           eyebrow="Command surface"
@@ -304,7 +304,7 @@ function Agents() {
 [OK] Set speed on Player
 [editor] play mode (paused) · scene Demo (dirty) · console 2 errors, 4 warnings`;
   return (
-    <section className="border-t border-border/70 bg-surface">
+    <section className="border-t border-border/70">
       <div className="container-x grid gap-12 py-16 md:py-24 lg:grid-cols-2 lg:gap-16">
         <div>
           <SectionHeading

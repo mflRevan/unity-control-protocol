@@ -25,7 +25,32 @@
   Fantasy Kingdom sample moved to HDRP through `ucp exec` scripts) and was captured with
   `ucp screenshot`, `ucp view isolate`, `ucp ui screenshot`, and `ucp record capture`.
 
+### Changed
+
+- README rewritten as a proper project front page: what UCP is against Unity's own CLI, a
+  sixty-second setup, the command surface by area, the agent story (state line, dialogs, vision
+  captures, skills install per harness, `llms.txt` endpoints), example workflows, how it works,
+  compatibility, and community links. Every console sample in it is real CLI output.
+- `docs/agents/skills.md` rewritten around the Agent Skills specification: the skill table with
+  raw URLs, install paths for Claude Code, skills.sh (`npx skills add`), GitHub CLI
+  (`gh skill install`), and manual `curl`, versioning rules, and the endpoints agents read.
+- The website content pipeline (`website/scripts/sync-content.mjs`) is the single source for
+  navigation and every generated endpoint; it mirrors `skills/` and the catalog, writes
+  `llms-full.txt` and `index.md`, rewrites in-site links inside raw mirrors to their Markdown
+  twins, and the `.generated` folder is no longer committed. Headers for `.md`, `.txt`, and the
+  catalog JSON carry explicit content types and CORS so agents can fetch them from anywhere.
+- The Claude Code `ucp-surfaces` plugin now ships the eight hand-written surface skills instead
+  of the sixteen generated micro-skills; `scripts/generate-micro-skills.mjs` is gone.
+- The demo project used for media and cinematic captures is Unity's Fantasy Kingdom sample on
+  HDRP, converted through `ucp exec` scripts; documented in `PROJECT.md`.
+- `ucp view` (capture, isolate, orbit) is documented under Screenshots, Recordings and Logs.
+
 ### Fixed
+- Mutating commands and `ucp stop` printed `Buffered logs: 0 entries across 0 categories` after
+  every call. The console summary now appears only when the wait turned up errors or exceptions;
+  the `[editor]` state line already carries the counts.
+- `ucp transform look-at --help` and the omni skill example named a `--target X Y Z` flag that does
+  not exist; the real flag is `--at X Y Z` (or `--target-id`).
 - `view isolate`, `view capture`, and `view orbit` returned black images under HDRP: a temporary
   camera has no exposure history, so its first frame renders black. Scriptable pipelines now get
   warm-up renders before the frame that is read back. HDRP keeps the sky behind isolated objects
