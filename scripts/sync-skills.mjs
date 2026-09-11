@@ -138,7 +138,9 @@ for (const name of entries) {
 
 function writeIfChanged(file, content) {
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
-  if (current === content) return false;
+  // Compare modulo line endings: a Windows checkout with autocrlf rewrites the mirrors to CRLF,
+  // and that must not read as "stale" in the release gate.
+  if (current !== null && normalizeEol(current) === normalizeEol(content)) return false;
   if (isCheck) {
     stale.push(path.relative(root, file));
     return false;
@@ -188,6 +190,10 @@ const catalog = {
   skills: skills.map(({ markdown, ...rest }) => rest),
 };
 writeIfChanged(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
+
+function normalizeEol(text) {
+  return text.replace(/\r\n/g, '\n');
+}
 
 // ------------------------------------------------------------------- report
 
