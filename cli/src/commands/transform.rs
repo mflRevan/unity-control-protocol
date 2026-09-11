@@ -61,7 +61,7 @@ pub enum TransformAction {
         #[arg(long)]
         save: bool,
     },
-    /// Orient an object to face a point or another object. Provide `--target X Y Z` for a world
+    /// Orient an object to face a point or another object. Provide `--at X Y Z` for a world
     /// point, or `--target-id` for another object.
     LookAt {
         #[command(flatten)]

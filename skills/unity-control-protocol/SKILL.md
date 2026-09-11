@@ -142,7 +142,7 @@ ucp object create Crate --primitive Cube
 ucp transform move --id 1234 --to 3 0 0
 ucp transform rotate --id 1234 --euler 0 45 0
 ucp transform scale --id 1234 --uniform 2
-ucp transform look-at --id 1234 --target 0 0 0       # or --target-id <id>
+ucp transform look-at --id 1234 --at 0 0 0           # or --target-id <id>
 
 # Place objects on surfaces and reason about geometry.
 ucp spatial ground --id 1234                          # drop onto the surface below

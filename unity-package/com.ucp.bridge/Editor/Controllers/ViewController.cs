@@ -216,7 +216,7 @@ namespace UCP.Bridge
                 cam.clearFlags = CameraClearFlags.SolidColor;
                 cam.backgroundColor = transparent ? new Color(bg.r, bg.g, bg.b, 0f) : bg;
                 cam.targetTexture = rt;
-                cam.Render();
+                RenderWithWarmup(cam);
 
                 RenderTexture.active = rt;
                 var tex = new Texture2D(w, h, transparent ? TextureFormat.RGBA32 : TextureFormat.RGB24, false);
@@ -231,6 +231,22 @@ namespace UCP.Bridge
                 UnityEngine.Object.DestroyImmediate(rt);
                 UnityEngine.Object.DestroyImmediate(camGo);
             }
+        }
+
+        /// <summary>
+        /// Renders the camera into its target texture. Scriptable pipelines keep per-camera history
+        /// (HDRP's automatic exposure, temporal effects); a camera that has never rendered starts
+        /// from an empty history and its first frame comes out black. A few warm-up renders let
+        /// that state settle before the frame that is read back. Built-in needs a single render.
+        /// HDRP also ignores <see cref="Camera.clearFlags"/>, so isolated renders keep the sky
+        /// behind the object there; clearing to a solid color would skew the exposure instead.
+        /// </summary>
+        private static void RenderWithWarmup(Camera cam)
+        {
+            var warmup = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null ? 3 : 0;
+            for (var i = 0; i < warmup; i++)
+                cam.Render();
+            cam.Render();
         }
 
         private static byte[] Render(Vector3 pos, Quaternion rot, float fov, int w, int h,
@@ -249,7 +265,7 @@ namespace UCP.Bridge
             try
             {
                 cam.targetTexture = rt;
-                cam.Render();
+                RenderWithWarmup(cam);
                 RenderTexture.active = rt;
                 var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
                 tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);

@@ -793,9 +793,13 @@ pub async fn await_unity_lifecycle(
 
     let log_status = fetch_lifecycle_log_status(project).await;
 
+    // Surface the console only when the wait turned up errors or exceptions; the editor state
+    // line already carries the counts, and "0 entries" after every mutation is noise.
     if !ctx.json {
         if let Some(status) = &log_status {
-            crate::commands::logs::print_status(status, ctx);
+            if log_status_has_failures(status) {
+                crate::commands::logs::print_status(status, ctx);
+            }
         }
     }
 
@@ -804,6 +808,18 @@ pub async fn await_unity_lifecycle(
         editor_status: Some(settle.status),
         log_status,
     })
+}
+
+pub(crate) fn log_status_has_failures(status: &serde_json::Value) -> bool {
+    status
+        .get("byLevel")
+        .and_then(serde_json::Value::as_object)
+        .map(|levels| {
+            ["error", "exception"]
+                .iter()
+                .any(|level| levels.get(*level).and_then(serde_json::Value::as_u64).unwrap_or(0) > 0)
+        })
+        .unwrap_or(false)
 }
 
 async fn fetch_lifecycle_log_status(project: &std::path::Path) -> Option<serde_json::Value> {

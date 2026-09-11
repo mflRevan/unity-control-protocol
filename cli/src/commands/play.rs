@@ -61,7 +61,9 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
         }
         if method == "stop" {
             if let Some(log_status) = result.get("logStatus") {
-                crate::commands::logs::print_status(log_status, ctx);
+                if super::log_status_has_failures(log_status) {
+                    crate::commands::logs::print_status(log_status, ctx);
+                }
             }
         }
     }
