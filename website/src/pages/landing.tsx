@@ -77,8 +77,8 @@ interface ShowcaseItem {
 const showcase: ShowcaseItem[] = [
   {
     kind: 'video',
-    src: '/media/kingdom-flythrough.webm',
-    poster: '/media/kingdom-flythrough.jpg',
+    src: '/media/kingdom-flythrough-c5834d0d.webm',
+    poster: '/media/kingdom-flythrough-cc4f91ad.jpg',
     width: 1280,
     height: 648,
     span: 'full',
@@ -88,7 +88,7 @@ const showcase: ShowcaseItem[] = [
   },
   {
     kind: 'image',
-    src: '/media/kingdom-overview.webp',
+    src: '/media/kingdom-overview-663ec05c.webp',
     width: 1600,
     height: 900,
     span: 'half',
@@ -98,7 +98,7 @@ const showcase: ShowcaseItem[] = [
   },
   {
     kind: 'image',
-    src: '/media/ui-treasury.webp',
+    src: '/media/ui-treasury-66173295.webp',
     width: 780,
     height: 460,
     span: 'half',
@@ -109,7 +109,7 @@ const showcase: ShowcaseItem[] = [
   },
   {
     kind: 'image',
-    src: '/media/isolate.webp',
+    src: '/media/isolate-e3b76427.webp',
     width: 2720,
     height: 900,
     span: 'full',
