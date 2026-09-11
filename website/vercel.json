@@ -10,11 +10,28 @@
     {
       "source": "/(.*)\\.md",
       "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/markdown; charset=utf-8"
-        }
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "X-Robots-Tag", "value": "all" }
       ]
+    },
+    {
+      "source": "/(llms|llms-full|robots)\\.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/skills/index\\.json",
+      "headers": [
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/media/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }]
     }
   ]
 }

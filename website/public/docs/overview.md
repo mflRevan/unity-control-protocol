@@ -54,7 +54,7 @@ ucp connect
 ucp bridge status
 ```
 
-Start with the [Project Setup & Bridge](/docs/overview/project-setup) and [Editor Lifecycle](/docs/overview/editor-lifecycle) pages whenever bridge state or editor startup behavior is unknown.
+Start with the [Project Setup & Bridge](https://unityctl.dev/docs/overview/project-setup.md) and [Editor Lifecycle](https://unityctl.dev/docs/overview/editor-lifecycle.md) pages whenever bridge state or editor startup behavior is unknown.
 
 ### Normal day-to-day authoring
 
@@ -83,8 +83,8 @@ Prefer `--json`, fully qualified test filters, and bounded queries such as `ucp 
 
 | Section | Focus |
 | ------- | ----- |
-| [Overview](/docs/overview) | CLI lifecycle, setup, bridge injection, and editor process behavior |
-| [Authoring](/docs/authoring/scenes) | Scenes, objects, prefabs, assets, references, files, and scripting |
-| [Runtime & Diagnostics](/docs/runtime/play-mode) | Play mode, logs, screenshots, testing, and profiler workflows |
-| [Project Operations](/docs/project/packages) | Packages, settings, build pipeline, and version-control guidance |
-| [Agent Skills](/docs/agents/skills) | How the UCP skill is packaged and consumed by agent tooling |
+| [Overview](https://unityctl.dev/docs/overview.md) | CLI lifecycle, setup, bridge injection, and editor process behavior |
+| [Authoring](https://unityctl.dev/docs/authoring/scenes.md) | Scenes, objects, prefabs, assets, references, files, and scripting |
+| [Runtime & Diagnostics](https://unityctl.dev/docs/runtime/play-mode.md) | Play mode, logs, screenshots, testing, and profiler workflows |
+| [Project Operations](https://unityctl.dev/docs/project/packages.md) | Packages, settings, build pipeline, and version-control guidance |
+| [Agent Skills](https://unityctl.dev/docs/agents/skills.md) | How the UCP skill is packaged and consumed by agent tooling |

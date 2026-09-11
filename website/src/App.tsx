@@ -1,36 +1,35 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
-import { Navbar } from '@/components/navbar';
-import { Footer } from '@/components/footer';
-import { LandingPage } from '@/pages/landing';
-import { DocsLayout } from '@/pages/docs-layout';
-import { MarkdownDoc } from '@/components/markdown-page';
-import { SkillsPage } from '@/pages/docs/skills';
+import { lazy, Suspense } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { SiteShell } from '@/components/site-shell';
+import { NotFound } from '@/pages/not-found';
 
-function ScrollToTop() {
-  const { pathname } = useLocation();
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
-  return null;
+const Landing = lazy(() => import('@/pages/landing').then((m) => ({ default: m.Landing })));
+const DocsLayout = lazy(() => import('@/pages/docs-layout').then((m) => ({ default: m.DocsLayout })));
+const DocPage = lazy(() => import('@/pages/doc-page').then((m) => ({ default: m.DocPage })));
+const SkillsIndex = lazy(() => import('@/pages/skills-index').then((m) => ({ default: m.SkillsIndex })));
+const SkillPage = lazy(() => import('@/pages/skill-page').then((m) => ({ default: m.SkillPage })));
+
+function Loading() {
+  return <div className="min-h-[50svh]" aria-busy="true" />;
 }
 
-function App() {
+export default function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <ScrollToTop />
-      <Navbar />
+    <Suspense fallback={<Loading />}>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/docs" element={<DocsLayout />}>
-          <Route index element={<MarkdownDoc docKey="" />} />
-          <Route path="agents/skills" element={<SkillsPage />} />
-          <Route path="*" element={<MarkdownDoc />} />
+        <Route element={<SiteShell />}>
+          <Route index element={<Landing />} />
+          <Route path="docs" element={<DocsLayout />}>
+            <Route index element={<DocPage />} />
+            <Route path="*" element={<DocPage />} />
+          </Route>
+          {/* The old skills page moved out of the docs tree. */}
+          <Route path="docs/agents/skills" element={<Navigate to="/skills" replace />} />
+          <Route path="skills" element={<SkillsIndex />} />
+          <Route path="skills/:name" element={<SkillPage />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
-      <Footer />
-    </div>
+    </Suspense>
   );
 }
-
-export default App;

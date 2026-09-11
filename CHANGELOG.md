@@ -17,7 +17,20 @@
   `metadata`), so `npx skills add mflRevan/unity-control-protocol` and
   `gh skill install` work unchanged for Codex, Cursor, Copilot, Gemini CLI, opencode, and Amp.
 
+- The website (unityctl.dev) was rebuilt for humans and agents. Docs and skills render from the
+  same Markdown files agents fetch: `/docs/<page>.md`, `/skills/<name>.md` (frontmatter included,
+  a valid install), `/skills/index.json` and `/skills/index.md`, `/llms.txt`, `/llms-full.txt`,
+  and `/index.md`. Every page links its Markdown twin, copies as Markdown, and the docs no longer
+  ship inside the JavaScript bundle. Demonstration media comes from the demo project (Unity's
+  Fantasy Kingdom sample moved to HDRP through `ucp exec` scripts) and was captured with
+  `ucp screenshot`, `ucp view isolate`, `ucp ui screenshot`, and `ucp record capture`.
+
 ### Fixed
+- `view isolate`, `view capture`, and `view orbit` returned black images under HDRP: a temporary
+  camera has no exposure history, so its first frame renders black. Scriptable pipelines now get
+  warm-up renders before the frame that is read back. HDRP keeps the sky behind isolated objects
+  since it ignores the camera clear color, and clearing to a solid color there would skew the
+  exposure instead.
 - `ui screenshot` captures were washed out on Linux: the capture surface declared sRGB read/write, which double-encoded the gamma-space editor window on Vulkan and OpenGL while DirectX ignored the flag. The surface is now Linear (a byte-for-byte copy) and a pixel-exact edit-mode test guards it. Thanks to @quentinleon (#5).
 
 - Fixed the `ucp-surfaces` Claude Code plugin being pinned at 0.5.2: its `plugin.json` version

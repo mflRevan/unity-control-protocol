@@ -1,102 +1,94 @@
 # Agent Skills
 
-UCP ships with [Agent Skills](https://agentskills.io)-compatible skill files that allow AI coding agents to understand and use the full UCP toolset automatically.
+UCP is built for agents. The command surface is the API, and the skills are the manual an agent
+loads when a task touches Unity. They follow the [Agent Skills specification](https://agentskills.io/specification):
+a directory named after the skill with a `SKILL.md` whose frontmatter carries `name`,
+`description`, `compatibility`, and `metadata`, and whose body is the instructions. Any harness
+that implements the spec (Claude Code, Codex, Cursor, Copilot, Gemini CLI, opencode, Amp, and
+others) can consume them unchanged.
 
-## What are Agent Skills?
+The skills are hand-written ground truth under `skills/` in the repository. Everything else, the
+Claude Code plugins, the pages on this site, and the raw Markdown endpoints, is generated from
+those files, so what an agent reads is exactly what is maintained.
 
-Agent Skills is a standardized format for packaging tool-specific instructions that AI agents can discover and load on demand. When an agent encounters a task involving Unity - such as modifying a scene, tweaking a material, or running a build - it activates the UCP skill and gains detailed knowledge of every available command, flag, and workflow.
+## The skills
 
-## Where are Agent Skills used?
+| skill | covers | raw Markdown |
+|---|---|---|
+| `unity-control-protocol` | the whole surface in one skill; the recommended default | [unity-control-protocol.md](https://unityctl.dev/skills/unity-control-protocol.md) |
+| `ucp-editor-lifecycle` | install, open, adopt, close, `[editor]` state line, compile, play/stop/pause, modal dialogs | [ucp-editor-lifecycle.md](https://unityctl.dev/skills/ucp-editor-lifecycle.md) |
+| `ucp-scene-authoring` | `scene`, `object`, `transform`, `spatial`, `prefab`: hierarchy, primitives, properties, placement | [ucp-scene-authoring.md](https://unityctl.dev/skills/ucp-scene-authoring.md) |
+| `ucp-assets` | `asset`, `files`, `material`, `references`, `shader`, `script`: assets on disk without breaking GUIDs | [ucp-assets.md](https://unityctl.dev/skills/ucp-assets.md) |
+| `ucp-ui-toolkit` | `ui`: lint, inspect, populate, screenshot, and check UXML/USS (Unity 6+) | [ucp-ui-toolkit.md](https://unityctl.dev/skills/ucp-ui-toolkit.md) |
+| `ucp-visual-feedback` | `screenshot`, `view`, `record`: seeing the scene, composed renders, clips with `--slowdown` | [ucp-visual-feedback.md](https://unityctl.dev/skills/ucp-visual-feedback.md) |
+| `ucp-runtime-debugging` | `logs`, `run-tests`, `exec`, `profiler`, `profile`, `frame`: playtest loops and triage | [ucp-runtime-debugging.md](https://unityctl.dev/skills/ucp-runtime-debugging.md) |
+| `ucp-project-config` | `packages`, `settings`, `build`: dependencies, project settings, builds | [ucp-project-config.md](https://unityctl.dev/skills/ucp-project-config.md) |
+| `ucp-version-control` | `vcs`: Unity VCS / Plastic fallback when `cm` is unavailable | [ucp-version-control.md](https://unityctl.dev/skills/ucp-version-control.md) |
 
-Agent Skills are supported by a growing number of AI coding tools:
+Which to install: the omni skill for general use, since one activation carries the cross-surface
+workflows a real task needs. The surface skills when you want narrow, predictable activations
+or compose UCP with many other skills; each names its commands in its description so the agent
+loads only what the task needs, and each defers to the omni skill for anything broader. Both sets
+coexist without fighting over routing.
 
-- **Claude Code** - Install the dedicated UCP plugin from the repository marketplace, or test it locally with `claude --plugin-dir`
-- **Cursor / Windsurf / Copilot** - Agents in VS Code-based editors can load skills from the workspace
-- **Custom agent frameworks** - Any agent that follows the Agent Skills specification can consume `SKILL.md` files
+A machine-readable catalog lives at [skills/index.json](https://unityctl.dev/skills/index.json)
+(name, description, compatibility, commands, raw URL, version).
 
-## How to install
+## Install
 
-There are two main distribution paths, depending on the tool you are using.
-
-### 1. Manual workspace install
-
-Use this when your agent tooling expects raw `skills/` folders in the workspace.
-
-Copy the `skills/unity-control-protocol/` directory into your Unity project (or any workspace where you want agents to have UCP access):
-
-```bash
-# From the UCP repository
-cp -r skills/unity-control-protocol/ /path/to/your-project/skills/
-
-# Or download just the SKILL.md
-curl -o skills/unity-control-protocol/SKILL.md \
-  https://raw.githubusercontent.com/mflRevan/unity-control-protocol/main/skills/unity-control-protocol/SKILL.md
-```
-
-The agent will automatically discover and load the skill when it encounters Unity-related tasks.
-
-### 2. Claude Code marketplace install
-
-Claude Code uses plugins rather than raw workspace skills as the primary marketplace abstraction. The repository marketplace ships **two** plugins, and you choose based on how you want skills to surface to the agent.
-
-First, add the marketplace once:
+### Claude Code
 
 ```text
 /plugin marketplace add mflRevan/unity-control-protocol
+/plugin install ucp@unity-control-protocol            # omni skill
+/plugin install ucp-surfaces@unity-control-protocol   # the eight surface skills
 ```
 
-For local plugin testing of either plugin:
+The skills surface as `/ucp:unity-control-protocol` and `/ucp-surfaces:ucp-<surface>`. To try a
+checkout without installing: `claude --plugin-dir /path/to/unity-control-protocol`. Third-party
+marketplaces do not auto-update by default; enable it in `/plugin` or run `/plugin update`.
+
+### Any harness that reads `.agents/skills` (Codex, Cursor, Copilot, Gemini CLI, opencode, Amp)
 
 ```bash
-claude --plugin-dir .
+npx skills add mflRevan/unity-control-protocol                  # pick skills interactively
+npx skills add mflRevan/unity-control-protocol --skill unity-control-protocol -y
+npx skills update                                                # re-resolve against the repo
 ```
 
-#### Option A — the omni skill (`ucp`)
+[skills.sh](https://www.skills.sh) discovers the `skills/` directory and the marketplace manifest,
+installs into the right directory for each agent (`.agents/skills`, `.claude/skills`,
+`.cursor/skills`, ...), and records what it installed in `skills-lock.json`.
 
-Install the single, broad Unity automation skill that covers every command surface in one place:
+GitHub CLI (2.90+) works the same way:
 
-```text
-/plugin install ucp@unity-control-protocol
+```bash
+gh skill install mflRevan/unity-control-protocol unity-control-protocol --agent codex --scope user
+gh skill update
 ```
 
-That install exposes one skill:
+### Manual
 
-- `/ucp:unity-control-protocol`
+Every skill is served raw, frontmatter included, so a plain download is a valid install:
 
-#### Option B — per-surface micro-skills (`ucp-surfaces`)
-
-Install focused, surface-specific skills — one per `ucp` command group — instead of the single omni skill:
-
-```text
-/plugin install ucp-surfaces@unity-control-protocol
+```bash
+mkdir -p .agents/skills/unity-control-protocol
+curl -fsSL https://unityctl.dev/skills/unity-control-protocol.md -o .agents/skills/unity-control-protocol/SKILL.md
 ```
 
-That install exposes sixteen focused skills, each invoked as `/ucp-surfaces:ucp-<surface>`:
+`.agents/skills/` is the project-level path every spec-compliant harness reads. Claude Code reads
+`.claude/skills/` instead; user-level installs go under `~/.agents/skills/` or `~/.claude/skills/`.
 
-- `/ucp-surfaces:ucp-objects` — `ucp object` (create incl. `--primitive`, components, properties, reparent, instantiate)
-- `/ucp-surfaces:ucp-scene` — `ucp scene` + `ucp editor` lifecycle + `ucp play|stop|pause|compile|screenshot`
-- `/ucp-surfaces:ucp-transform` — `ucp transform` (move/rotate/scale/look-at/get)
-- `/ucp-surfaces:ucp-spatial` — `ucp spatial` (raycast/overlap/bounds/ground/nearest)
-- `/ucp-surfaces:ucp-view` — `ucp view` (capture/isolate/orbit) + `ucp screenshot` + `ucp record`
-- `/ucp-surfaces:ucp-assets` — `ucp asset` + `ucp files` + `ucp shader errors`
-- `/ucp-surfaces:ucp-ui` — `ucp ui` (list/lint/inspect/screenshot/check) for UI Toolkit
-- `/ucp-surfaces:ucp-materials` — `ucp material` (create/get/set properties, keywords, shader)
-- `/ucp-surfaces:ucp-prefabs` — `ucp prefab` (status/apply/revert/unpack/create/overrides)
-- `/ucp-surfaces:ucp-build` — `ucp build` (targets/scenes/defines/start)
-- `/ucp-surfaces:ucp-packages` — `ucp packages` (search/add/remove/registries/`.unitypackage`)
-- `/ucp-surfaces:ucp-settings` — `ucp settings` (player/quality/physics/lighting/tags-layers)
-- `/ucp-surfaces:ucp-profiler` — `ucp profiler` + `ucp profile` + `ucp frame capture`
-- `/ucp-surfaces:ucp-references` — `ucp references` (find/index/check/find-strings, read-only)
-- `/ucp-surfaces:ucp-tests` — `ucp run-tests` + `ucp exec` + `ucp script doctor`
-- `/ucp-surfaces:ucp-vcs` — `ucp vcs` (Plastic/Unity VCS fallback; prefer `cm`)
+## Versioning
 
-#### Which one should I pick?
+Each skill's `metadata.version` matches the CLI release it documents, and the release flow stamps
+it. Skills describe the command surface of that release; an older CLI may lack a flag a newer
+skill mentions. `ucp --version` and `ucp <command> --help` are always authoritative, and every
+skill says so.
 
-- **Pick the omni skill (`ucp`)** for general use. One skill carries the full cross-surface workflow guidance, so a single activation covers multi-step tasks that span scenes, objects, assets, builds, and tests at once. This is the recommended default.
-- **Pick the micro-skills (`ucp-surfaces`)** when you want tighter routing and a smaller per-skill context. Each micro-skill names its concrete subcommands in its description, so the agent loads only the surface relevant to the task (e.g. just `ucp-transform` for a positioning task) instead of the whole omni skill. This is useful when you want predictable, narrow activations or are composing UCP with many other skills.
+## For agents reading this site directly
 
-The two plugins are independent — install either or both. The micro-skill descriptions explicitly defer to the omni skill for broad, multi-surface automation, so they coexist without fighting over routing.
-
-## Primary skill preview
-
-Below is the full content of the primary UCP Agent Skill. This is exactly what an AI agent sees when it activates the skill.
+- `https://unityctl.dev/llms.txt` lists every page and skill with a one-line summary.
+- `https://unityctl.dev/llms-full.txt` is the entire documentation and every skill in one file.
+- `https://unityctl.dev/docs/<page>.md` and `https://unityctl.dev/skills/<skill>.md` are the raw
+  Markdown sources of the human pages; append `.md` to any docs URL.

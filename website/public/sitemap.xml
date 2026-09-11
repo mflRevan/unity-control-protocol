@@ -4,6 +4,9 @@
     <loc>https://unityctl.dev/</loc>
   </url>
   <url>
+    <loc>https://unityctl.dev/skills</loc>
+  </url>
+  <url>
     <loc>https://unityctl.dev/docs</loc>
   </url>
   <url>
@@ -77,5 +80,32 @@
   </url>
   <url>
     <loc>https://unityctl.dev/docs/agents/skills</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-assets</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-editor-lifecycle</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-project-config</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-runtime-debugging</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-scene-authoring</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-ui-toolkit</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-version-control</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/ucp-visual-feedback</loc>
+  </url>
+  <url>
+    <loc>https://unityctl.dev/skills/unity-control-protocol</loc>
   </url>
 </urlset>

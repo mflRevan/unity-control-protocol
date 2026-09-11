@@ -1,46 +1,68 @@
 # Unity Control Protocol (UCP)
 
-> A cross-platform CLI and Unity Editor bridge for programmatic control of Unity projects over a WebSocket/JSON-RPC 2.0 connection.
+> A Rust CLI and an in-editor bridge that expose the Unity Editor as commands: scenes, objects, assets, materials, prefabs, UI Toolkit, play mode, tests, profiler, builds, screenshots and video. Built for humans and AI agents.
 
-## Getting Started
+Version 0.6.3. Install the CLI with `npm install -g @mflrevan/ucp`, then `ucp install` inside a Unity project and `ucp open`.
+Every page below is also served as raw Markdown; the full documentation in one file is https://unityctl.dev/llms-full.txt.
+
+## Getting started
 
 - [Introduction](https://unityctl.dev/docs/index.md): Welcome to the Unity Control Protocol documentation. UCP is a cross-platform CLI + Unity Editor bridge that enables programmatic control of the Unity Editor over WebSocket.
 - [Installation](https://unityctl.dev/docs/installation.md): Download the latest release for your platform from GitHub Releases.
-- [Quick Start](https://unityctl.dev/docs/quickstart.md): Get from zero to full Unity automation in under a minute.
+- [Quick start](https://unityctl.dev/docs/quickstart.md): Get from zero to full Unity automation in under a minute.
 
 ## Overview
 
-- [CLI Overview](https://unityctl.dev/docs/overview.md): This page covers the stable cross-cutting behavior of UCP itself: global flags, output modes, editor/bridge lifecycle, and recommended workflows. Detailed command surfaces now live under workflow-oriented sections instead of one flat command bucket.
-- [Project Setup & Bridge](https://unityctl.dev/docs/overview/project-setup.md): This section covers installing the bridge, establishing connectivity, and diagnosing project-level setup issues before you start authoring or runtime workflows.
-- [Editor Lifecycle](https://unityctl.dev/docs/overview/editor-lifecycle.md): UCP now manages the Unity Editor process directly instead of assuming Unity is already open. Any bridge-backed command can auto-start the editor when a project is detected and a Unity executable is available.
+- [CLI overview](https://unityctl.dev/docs/overview.md): This page covers the stable cross-cutting behavior of UCP itself: global flags, output modes, editor/bridge lifecycle, and recommended workflows. Detailed command surfaces now live under workflow-oriented sections instead of one flat command bucket.
+- [Project setup and bridge](https://unityctl.dev/docs/overview/project-setup.md): This section covers installing the bridge, establishing connectivity, and diagnosing project-level setup issues before you start authoring or runtime workflows.
+- [Editor lifecycle](https://unityctl.dev/docs/overview/editor-lifecycle.md): UCP now manages the Unity Editor process directly instead of assuming Unity is already open. Any bridge-backed command can auto-start the editor when a project is detected and a Unity executable is available.
 
 ## Authoring
 
 - [Scenes](https://unityctl.dev/docs/authoring/scenes.md): Manage scenes and capture hierarchy snapshots.
-- [Objects & Components](https://unityctl.dev/docs/authoring/objects.md): Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an --id flag with the instance ID of the target GameObject (use ucp scene snapshot to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
+- [Objects and components](https://unityctl.dev/docs/authoring/objects.md): Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an --id flag with the instance ID of the target GameObject (use ucp scene snapshot to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
 - [Prefabs](https://unityctl.dev/docs/authoring/prefabs.md): Inspect and manage prefab instances and overrides in the scene.
 - [Assets](https://unityctl.dev/docs/authoring/assets.md): Search, inspect, and manage project assets. Works with materials, textures, ScriptableObjects, and any asset type Unity recognizes.
 - [UI Toolkit](https://unityctl.dev/docs/authoring/ui-toolkit.md): ucp ui gives agents a tight authoring loop for UI Toolkit UXML and USS: discover targets, lint with Unity's importers, inspect a live resolved tree, capture a PNG, or run the full check in one command.
 - [Materials](https://unityctl.dev/docs/authoring/materials.md): Inspect and modify material properties, shader keywords, and shaders.
-- [Reference Search](https://unityctl.dev/docs/authoring/references.md): Find all references to any asset, prefab, material, script, or object across the entire Unity project. The Rust-native engine parses Unity's text-serialized YAML directly from disk with parallel scanning — no running Unity editor required.
+- [Reference search](https://unityctl.dev/docs/authoring/references.md): Find all references to any asset, prefab, material, script, or object across the entire Unity project. The Rust-native engine parses Unity's text-serialized YAML directly from disk with parallel scanning — no running Unity editor required.
 - [Files](https://unityctl.dev/docs/authoring/files.md): Read, write, and patch project files. All file paths are relative to the project root and sandboxed within the project directory for safety.
 - [Scripting](https://unityctl.dev/docs/authoring/scripting.md): Execute custom C# scripts in the Unity Editor remotely. UCP provides a Playwright-like scripting system where you define IUCPScript classes in your project and run them from the CLI with parameters.
 
-## Runtime & Diagnostics
+## Runtime and diagnostics
 
-- [Play Mode & Compilation](https://unityctl.dev/docs/runtime/play-mode.md): Control Unity's play mode state from the command line.
-- [Screenshots, Recordings & Logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
-- [Editor State & Dialogs](https://unityctl.dev/docs/runtime/editor-state.md): Every command that talks to the bridge ends with one dim line describing the state it left the
+- [Play mode and compilation](https://unityctl.dev/docs/runtime/play-mode.md): Control Unity's play mode state from the command line.
+- [Screenshots, recordings and logs](https://unityctl.dev/docs/runtime/logs-and-media.md): Capture visual output and inspect Unity console logs.
+- [Editor state and dialogs](https://unityctl.dev/docs/runtime/editor-state.md): Every command that talks to the bridge ends with one dim line describing the state it left the
 - [Testing](https://unityctl.dev/docs/runtime/testing.md): Run Unity Test Framework tests from the command line.
 - [Profiler](https://unityctl.dev/docs/runtime/profiler.md): Capture, inspect, and summarize Unity Profiler data through the bridge.
 
-## Project Operations
+## Project operations
 
 - [Packages](https://unityctl.dev/docs/project/packages.md): Browse Unity packages, manage manifest dependencies and scoped registries, and inspect or selectively import .unitypackage archives.
 - [Settings](https://unityctl.dev/docs/project/settings.md): Read and modify Unity project settings: PlayerSettings, QualitySettings, Physics, Lighting, Tags, and Layers.
-- [Build Pipeline](https://unityctl.dev/docs/project/build.md): Configure build targets, scene lists, scripting defines, and trigger builds from the CLI.
-- [Version Control](https://unityctl.dev/docs/project/version-control.md): Bridge-backed fallback commands for Unity Version Control (Plastic SCM / UVCS).
+- [Build pipeline](https://unityctl.dev/docs/project/build.md): Configure build targets, scene lists, scripting defines, and trigger builds from the CLI.
+- [Version control](https://unityctl.dev/docs/project/version-control.md): Bridge-backed fallback commands for Unity Version Control (Plastic SCM / UVCS).
 
 ## Agents
 
-- [Skills](https://unityctl.dev/docs/agents/skills.md): UCP ships with Agent Skills-compatible skill files that allow AI coding agents to understand and use the full UCP toolset automatically.
+- [Skills](https://unityctl.dev/docs/agents/skills.md): UCP is built for agents. The command surface is the API, and the skills are the manual an agent
+
+## Skills
+
+- [Skill catalog](https://unityctl.dev/skills/index.md): every skill with install commands (JSON: https://unityctl.dev/skills/index.json)
+- [ucp-assets](https://unityctl.dev/skills/ucp-assets.md): Work with a Unity project's assets and files through the editor with `ucp asset`, `ucp files`, `ucp material`, `ucp references`, `ucp shader`, and `ucp script`: search and inspect assets, read and write ScriptableObject…
+- [ucp-editor-lifecycle](https://unityctl.dev/skills/ucp-editor-lifecycle.md): Bring a Unity project under control with the `ucp` CLI: install the bridge, open or adopt the editor, read the `[editor]` state line every command prints, recompile, enter and leave play mode, and recover from modal dia…
+- [ucp-project-config](https://unityctl.dev/skills/ucp-project-config.md): Configure a Unity project from the terminal with `ucp packages`, `ucp settings`, and `ucp build`: search, add, and remove UPM packages, manage scoped registries and manifest dependencies, inspect and selectively import…
+- [ucp-runtime-debugging](https://unityctl.dev/skills/ucp-runtime-debugging.md): Find out what the running Unity project is doing and why with `ucp logs`, `ucp run-tests`, `ucp exec`, `ucp profiler`, `ucp profile`, and `ucp frame capture`: read and follow console logs with filters, run edit-mode or…
+- [ucp-scene-authoring](https://unityctl.dev/skills/ucp-scene-authoring.md): Build and inspect scene content in the live Unity Editor with `ucp scene`, `ucp object`, `ucp transform`, `ucp spatial`, and `ucp prefab`: snapshot and query the hierarchy, create visible primitives, add components, set…
+- [ucp-ui-toolkit](https://unityctl.dev/skills/ucp-ui-toolkit.md): Author and verify Unity UI Toolkit interfaces (UXML, USS, TSS) with `ucp ui`: discover documents and scenarios, lint with Unity's own importers, instantiate a document in an isolated editor panel, inspect its resolved l…
+- [ucp-version-control](https://unityctl.dev/skills/ucp-version-control.md): Lightweight Unity Version Control (Plastic SCM) operations through the editor with `ucp vcs`: provider status, pending changes, checkout, revert, commit, diff, incoming, update, lock, unlock, history, and conflict resol…
+- [ucp-visual-feedback](https://unityctl.dev/skills/ucp-visual-feedback.md): See what the Unity scene looks like and how it moves, from the terminal: `ucp screenshot` for the Game or Scene view, `ucp view capture|isolate|orbit` for framed, isolated, and multi-angle renders a vision model can rea…
+- [unity-control-protocol](https://unityctl.dev/skills/unity-control-protocol.md): Programmatic control of the Unity Editor from the terminal via the `ucp` CLI. Automate scenes, GameObjects, components, assets, materials, prefabs, build pipelines, UI Toolkit UXML/USS, settings, tests, packages, select…
+
+## Optional
+
+- [README](https://github.com/mflRevan/unity-control-protocol#readme)
+- [Changelog](https://github.com/mflRevan/unity-control-protocol/blob/main/CHANGELOG.md)
+- [Releases](https://github.com/mflRevan/unity-control-protocol/releases)

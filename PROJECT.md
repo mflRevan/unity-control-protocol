@@ -81,6 +81,12 @@ Some parts of the repository are foundational and should stay aligned:
   frontmatter, stamps `metadata.version`, mirrors the surface skills into the `ucp-surfaces`
   Claude Code plugin, writes that plugin's manifest version, and emits `skills/index.json`; the
   website serves them raw and renders them from the same files. Never edit the plugin mirror.
+- `website/scripts/sync-content.mjs` derives the whole website from `docs/`, `skills/`, and
+  `version.json`: the navigation table inside it is the single list of documentation pages, and
+  it writes the SPA manifest (`website/.generated/content.json`, untracked) plus the agent
+  surface under `website/public` (`docs/<route>.md`, `skills/<name>.md`, `skills/index.json`,
+  `skills/index.md`, `llms.txt`, `llms-full.txt`, `index.md`, `sitemap.xml`). Adding a doc page
+  means adding one row there; the SPA fetches the same raw files agents read.
 - `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` define the Claude Code marketplace-facing wrapper for the base skill.
 - the CLI and bridge must remain aligned on protocol version and compatibility expectations.
 - repo-level docs should reflect the implemented system, not an aspirational redesign.
@@ -243,6 +249,33 @@ guarded by `UNITY_6000_0_OR_NEWER`; older editors get an explicit unsupported er
 compile failure. Scenario schema changes are protocol changes: reject unknown fields, keep the
 `set` allowlist small, and report every error with a fixture location.
 
+### Website (`website/`)
+
+React 19, Vite 7, Tailwind v4, shadcn primitives, framer-motion, react-router 7, react-markdown
+with shiki highlighting loaded lazily per language. Routes: `/` (landing), `/docs/*` (sidebar,
+in-page table of contents, prev/next, copy-as-Markdown and raw links), `/skills` and
+`/skills/:name` (catalog and per-skill pages with install snippets per harness), 404. Pages fetch
+their Markdown at runtime from `public/`, so the documentation is never bundled into JavaScript;
+`vercel.json` serves `.md`, `.txt`, and `skills/index.json` with agent-friendly content types and
+CORS. Motion respects `prefers-reduced-motion`; both themes are token-driven in `src/index.css`.
+
+Demonstration media in `public/media` is produced by the CLI against the demo project (below),
+never by hand: `ucp screenshot --width 1920 --height 1080`, `ucp view isolate --views
+front,right,top --max-edge 900`, `ucp ui screenshot <scenario> --state <state>`, and
+`ucp record capture` in play mode, then converted to WebP/VP9 with Pillow and ffmpeg.
+
+### Demo Project (`unity-project-dev/ucp-demo`, untracked)
+
+Unity's Fantasy Kingdom 3D sample (Unity 6000.4) moved from URP to HDRP through UCP itself. The
+`Assets/Editor` scripts are `IUCPScript`s driven by `ucp exec run`: `demo-hdrp` (steps
+`pipeline`, `materials`, `scene`, `water`; creates the HDRP asset, converts URP materials with
+baked mask maps, sets physical light units, TAA, volume profile) and `demo-cinematic` (a smooth
+camera path on the main camera for `ucp record`, `preview=<0..1>` for stills). URP-only lit
+shader graphs were given an HDRP target by editing the graph JSON; the URP fog feature, the
+quality controller, and the sample's project verifier were removed. `Assets/UI/Kingdom` holds
+the Treasury UI Toolkit scenario used for the UI demo. `unity-project-dev/ucp-dev` remains the
+QA project for the playground and the version matrix; never point either at a real project.
+
 ### Packaging And Metadata
 
 Release metadata, package metadata, and protocol metadata should continue to move through a small number of known sources rather than through ad hoc edits across the repo.
@@ -262,8 +295,8 @@ cargo test --manifest-path cli\Cargo.toml
 # Version metadata sync check
 node scripts/sync-version.mjs --check <version>
 
-# Website build validation
-Push-Location website; npm run sync-content && npm run build; Pop-Location
+# Website build validation (sync-content regenerates the agent surface from docs/ and skills/)
+Push-Location website; npm run sync-content && npm run lint && npm run build; Pop-Location
 
 # Single-version QA against the dev project (runs all 52 bridge exercise steps)
 .\scripts\qa-playground.ps1 -Project unity-project-dev\ucp-dev -TimeoutSeconds 180

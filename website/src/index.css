@@ -2,287 +2,266 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist/index.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-background: #ffffff;
-  --color-foreground: #09090b;
+  --color-background: #fbfbfc;
+  --color-foreground: #121216;
   --color-card: #ffffff;
-  --color-card-foreground: #09090b;
+  --color-card-foreground: #121216;
   --color-popover: #ffffff;
-  --color-popover-foreground: #09090b;
+  --color-popover-foreground: #121216;
   --color-primary: #6d28d9;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #f4f4f5;
-  --color-secondary-foreground: #18181b;
-  --color-muted: #f4f4f5;
-  --color-muted-foreground: #71717a;
-  --color-accent: #f4f4f5;
-  --color-accent-foreground: #18181b;
-  --color-destructive: #ef4444;
+  --color-secondary: #f1f1f4;
+  --color-secondary-foreground: #1c1c22;
+  --color-muted: #f3f3f6;
+  --color-muted-foreground: #66666f;
+  --color-accent: #efedfb;
+  --color-accent-foreground: #3b1d8f;
+  --color-destructive: #dc2626;
   --color-destructive-foreground: #ffffff;
-  --color-border: #e4e4e7;
-  --color-input: #e4e4e7;
+  --color-border: #e5e5ea;
+  --color-input: #e5e5ea;
   --color-ring: #6d28d9;
+  --color-surface: #f6f6f8;
+  --color-code: #f4f4f7;
+  --color-terminal: #0c0c11;
+  --color-terminal-foreground: #d7d7de;
+  --color-ok: #15803d;
+  --color-warn: #b45309;
+  --color-info: #2563eb;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
-  --font-sans: 'Geist Variable', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'JetBrains Mono', monospace;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --animate-blink: blink 1.1s steps(2, start) infinite;
+  --animate-flow: flow 2.4s linear infinite;
+
+  @keyframes blink {
+    to {
+      visibility: hidden;
+    }
+  }
+  @keyframes flow {
+    from {
+      stroke-dashoffset: 24;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
 }
 
 .dark {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
-  --color-card: #0a0a0c;
-  --color-card-foreground: #fafafa;
-  --color-popover: #09090b;
-  --color-popover-foreground: #fafafa;
+  --color-background: #0b0b0e;
+  --color-foreground: #ececf1;
+  --color-card: #111115;
+  --color-card-foreground: #ececf1;
+  --color-popover: #131318;
+  --color-popover-foreground: #ececf1;
   --color-primary: #a78bfa;
-  --color-primary-foreground: #09090b;
-  --color-secondary: #1c1c22;
-  --color-secondary-foreground: #fafafa;
-  --color-muted: #18181b;
-  --color-muted-foreground: #a1a1aa;
-  --color-accent: #18181b;
-  --color-accent-foreground: #fafafa;
-  --color-destructive: #dc2626;
-  --color-destructive-foreground: #fafafa;
-  --color-border: #27272a;
-  --color-input: #27272a;
+  --color-primary-foreground: #0b0b0e;
+  --color-secondary: #1a1a20;
+  --color-secondary-foreground: #ececf1;
+  --color-muted: #16161b;
+  --color-muted-foreground: #9a9aa8;
+  --color-accent: #1d1930;
+  --color-accent-foreground: #d6c9ff;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #0b0b0e;
+  --color-border: #222228;
+  --color-input: #26262d;
   --color-ring: #a78bfa;
+  --color-surface: #0f0f13;
+  --color-code: #0e0e12;
+  --color-terminal: #0a0a0e;
+  --color-terminal-foreground: #d7d7de;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-info: #60a5fa;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply antialiased bg-background text-foreground;
-    font-family: var(--font-sans);
-    margin: 0;
-  }
   html {
     scroll-behavior: smooth;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv11';
+    margin: 0;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--color-primary) 28%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
-/* Hide scrollbar in terminal preview */
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
+@utility container-x {
+  @apply mx-auto w-full max-w-7xl px-5 sm:px-8;
 }
 
-/* Subtle docs sidebar scrollbar that blends into the surrounding chrome */
-.docs-sidebar-scroll {
+@utility hairline {
+  border-color: color-mix(in oklch, var(--color-border) 80%, transparent);
+}
+
+@utility thin-scroll {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--color-foreground) 16%, transparent) transparent;
+  scrollbar-color: color-mix(in oklch, var(--color-foreground) 18%, transparent) transparent;
 }
 
-.docs-sidebar-scroll::-webkit-scrollbar {
-  width: 8px;
+.thin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-
-.docs-sidebar-scroll::-webkit-scrollbar-track {
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--color-foreground) 16%, transparent);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.docs-sidebar-scroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--color-foreground) 14%, transparent);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
+/* Subtle engineering-paper grid behind the hero. Fades out toward the bottom. */
+.grid-paper {
+  background-image:
+    linear-gradient(to right, color-mix(in oklch, var(--color-foreground) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground) 5%, transparent) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 100%);
 }
 
-.docs-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--color-primary) 24%, var(--color-foreground) 10%, transparent);
-  background-clip: padding-box;
+/* ------------------------------------------------------------------ code */
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark);
+}
+.shiki {
+  background: transparent !important;
 }
 
-/* Animated travelling dot for architecture diagram */
-@keyframes slideRight {
-  0% {
-    left: 0%;
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    left: 100%;
-    opacity: 0;
-  }
-}
+/* ----------------------------------------------------------------- prose */
 
-/* Documentation prose styling */
-.prose-custom {
-  @apply max-w-none;
+.prose {
+  @apply max-w-none text-[15px] leading-7 text-foreground/90;
 }
-.prose-custom h1 {
-  @apply text-3xl font-bold tracking-tight mb-4;
+.prose > :first-child {
+  margin-top: 0;
 }
-.prose-custom h2 {
-  @apply text-xl font-semibold tracking-tight mt-14 mb-5 pt-8 pl-4 relative first:mt-0 first:pt-0;
+.prose h1 {
+  @apply mb-3 text-3xl font-semibold tracking-tight text-foreground;
+  letter-spacing: -0.02em;
 }
-.prose-custom h2:not(:first-child) {
-  border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+.prose h1 + p {
+  @apply text-lg leading-8 text-muted-foreground;
 }
-.prose-custom h2::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0.15em;
-  width: 3px;
-  height: 1em;
-  border-radius: 2px;
-  background: var(--color-primary);
-  opacity: 0.5;
+.prose h2 {
+  @apply mt-12 mb-4 scroll-mt-24 text-xl font-semibold tracking-tight text-foreground;
+  letter-spacing: -0.01em;
 }
-.prose-custom h3 {
-  @apply text-base font-semibold mt-8 mb-3 text-foreground/90;
+.prose h3 {
+  @apply mt-8 mb-3 scroll-mt-24 text-base font-semibold text-foreground;
 }
-.prose-custom h3::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 2px;
-  background: var(--color-primary);
-  opacity: 0.5;
-  vertical-align: middle;
-  margin-right: 0.5em;
-  border-radius: 1px;
+.prose h4 {
+  @apply mt-6 mb-2 scroll-mt-24 text-sm font-semibold text-foreground uppercase tracking-wide;
 }
-.prose-custom p {
-  @apply text-muted-foreground leading-relaxed mb-5;
+.prose :is(h1, h2, h3, h4) a.anchor {
+  @apply ml-2 align-middle text-muted-foreground/0 no-underline transition-colors;
 }
-.prose-custom .lead {
-  @apply text-lg text-muted-foreground mb-8;
+.prose :is(h1, h2, h3, h4):hover a.anchor,
+.prose :is(h1, h2, h3, h4) a.anchor:focus-visible {
+  @apply text-muted-foreground/70;
 }
-.prose-custom ul {
-  @apply mb-6 list-disc space-y-2 pl-6 text-muted-foreground;
+.prose p {
+  @apply my-4 text-foreground/85;
 }
-.prose-custom ol {
-  @apply mb-6 list-decimal space-y-2 pl-6 text-muted-foreground;
+.prose ul {
+  @apply my-4 list-disc space-y-1.5 pl-6;
 }
-.prose-custom li {
-  @apply leading-relaxed;
+.prose ol {
+  @apply my-4 list-decimal space-y-1.5 pl-6;
 }
-.prose-custom li::marker {
-  @apply text-primary/70;
+.prose li::marker {
+  @apply text-muted-foreground;
 }
-.prose-custom li > ul,
-.prose-custom li > ol {
-  @apply mb-2 mt-2;
+.prose li > :is(ul, ol) {
+  @apply my-1.5;
 }
-.prose-custom li p {
-  @apply mb-0 text-inherit;
+.prose li > p {
+  @apply my-1;
 }
-.prose-custom strong {
-  @apply text-foreground font-semibold;
+.prose strong {
+  @apply font-semibold text-foreground;
 }
-.prose-custom code {
-  @apply text-[0.85em] font-mono px-1.5 py-0.5 rounded text-foreground;
-  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-muted));
-  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, transparent);
+.prose a:not(.anchor) {
+  @apply text-primary underline decoration-primary/30 underline-offset-[3px] transition-colors hover:decoration-primary;
 }
-.prose-custom pre code {
-  @apply bg-transparent p-0;
-  border: 0;
+.prose code:not(pre code) {
+  @apply rounded-md border border-border/80 bg-code px-1.5 py-0.5 font-mono text-[0.85em] text-foreground;
 }
-.prose-custom a {
-  @apply text-primary transition-colors duration-200;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
-  text-underline-offset: 3px;
+.prose pre {
+  @apply my-5;
 }
-.prose-custom a:hover {
-  text-decoration-color: var(--color-primary);
+.prose blockquote {
+  @apply my-5 border-l-2 border-primary/50 pl-4 text-muted-foreground;
 }
-.prose-custom blockquote {
-  @apply my-6 text-muted-foreground/80 italic rounded-r-lg;
-  border-left: 3px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
-  padding: 0.875rem 1.25rem;
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+.prose blockquote p {
+  @apply my-2;
 }
-.prose-custom hr {
-  @apply my-10 border-none h-px;
-  background: linear-gradient(to right, transparent, var(--color-border), transparent);
+.prose hr {
+  @apply my-10 border-border;
 }
-.prose-custom table {
-  @apply w-full text-sm mb-8 border-collapse;
+.prose img,
+.prose video {
+  @apply my-6 rounded-lg border border-border;
 }
-.prose-custom thead {
-  @apply border-b-2 border-primary/15;
+.prose .table-wrap {
+  @apply my-6 overflow-x-auto rounded-lg border border-border;
 }
-.prose-custom th {
-  @apply text-left py-3 px-4 font-semibold text-foreground text-sm;
-  background: color-mix(in srgb, var(--color-muted) 50%, transparent);
+.prose table {
+  @apply w-full border-collapse text-sm;
 }
-.prose-custom td {
-  @apply py-2.5 px-4 text-muted-foreground;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);
+.prose th {
+  @apply bg-muted/70 px-3.5 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground;
 }
-.prose-custom tbody tr {
-  @apply transition-colors duration-150;
+.prose td {
+  @apply border-t border-border px-3.5 py-2.5 align-top text-foreground/85;
 }
-.prose-custom tbody tr:hover {
-  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+.prose td code {
+  white-space: nowrap;
 }
-.terminal-prose {
-  @apply max-w-none;
-}
-.terminal-prose h1 {
-  @apply mb-3 text-2xl font-bold tracking-tight text-white;
-}
-.terminal-prose h2 {
-  @apply mb-4 mt-10 border-t border-white/10 pt-6 text-lg font-semibold tracking-tight text-white/92 first:mt-0 first:border-0 first:pt-0;
-}
-.terminal-prose h3 {
-  @apply mb-3 mt-7 text-base font-semibold text-white/85;
-}
-.terminal-prose p,
-.terminal-prose li,
-.terminal-prose td {
-  @apply text-white/68;
-}
-.terminal-prose ul {
-  @apply mb-6 list-disc space-y-2 pl-6 text-white/68;
-}
-.terminal-prose ol {
-  @apply mb-6 list-decimal space-y-2 pl-6 text-white/68;
-}
-.terminal-prose li::marker {
-  @apply text-violet-300/90;
-}
-.terminal-prose li > ul,
-.terminal-prose li > ol {
-  @apply mb-2 mt-2;
-}
-.terminal-prose li p {
-  @apply mb-0 text-inherit;
-}
-.terminal-prose strong,
-.terminal-prose th {
-  @apply text-white/90;
-}
-.terminal-prose code {
-  @apply rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm text-white/90;
-}
-.terminal-prose pre code {
-  @apply bg-transparent p-0 text-inherit;
-}
-.terminal-prose a {
-  @apply text-violet-300 hover:underline;
-}
-.terminal-prose thead {
-  @apply border-b border-white/10;
-}
-.terminal-prose td {
-  @apply border-b border-white/10;
+.prose kbd {
+  @apply rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-xs;
 }

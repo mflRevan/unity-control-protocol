@@ -1,120 +1,75 @@
-import { Github } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { LogoMark } from '@/components/logo';
+import { repo, version } from '@/lib/content';
+
+const columns = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'Documentation', to: '/docs' },
+      { label: 'Quick start', to: '/docs/quickstart' },
+      { label: 'Agent skills', to: '/skills' },
+      { label: 'Changelog', href: `${repo}/blob/main/CHANGELOG.md` },
+    ],
+  },
+  {
+    title: 'For agents',
+    links: [
+      { label: 'llms.txt', href: '/llms.txt' },
+      { label: 'llms-full.txt', href: '/llms-full.txt' },
+      { label: 'skills/index.json', href: '/skills/index.json' },
+      { label: 'This site as Markdown', href: '/index.md' },
+    ],
+  },
+  {
+    title: 'Community',
+    links: [
+      { label: 'GitHub', href: repo },
+      { label: 'npm', href: 'https://www.npmjs.com/package/@mflrevan/ucp' },
+      { label: 'Discord', href: 'https://discord.gg/F4RjhdVTbz' },
+      { label: 'Issues', href: `${repo}/issues` },
+    ],
+  },
+];
 
 export function Footer() {
   return (
-    <footer className="relative z-10 border-t border-border bg-background/95 backdrop-blur-sm">
-      <div className="mx-auto max-w-7xl px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="space-y-3">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/favicon.svg" alt="UCP logo" className="h-5 w-5" />
-              <span className="font-bold">UCP</span>
-            </Link>
-            <p className="text-sm text-muted-foreground">
-              Programmatic control of Unity Editor for AI agents, CI/CD, and automation.
-            </p>
+    <footer className="border-t border-border/70">
+      <div className="container-x grid gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+        <div className="max-w-xs">
+          <div className="inline-flex items-center gap-2.5 font-semibold">
+            <LogoMark />
+            Unity Control Protocol
           </div>
-
-          <div>
-            <h4 className="font-semibold text-sm mb-3">Product</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <Link to="/docs" className="hover:text-foreground transition-colors">
-                  Documentation
-                </Link>
-              </li>
-              <li>
-                <Link to="/docs/overview" className="hover:text-foreground transition-colors">
-                  CLI Overview
-                </Link>
-              </li>
-              <li>
-                <Link to="/docs/installation" className="hover:text-foreground transition-colors">
-                  Installation
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-sm mb-3">Resources</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a
-                  href="https://github.com/mflRevan/unity-control-protocol"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  GitHub
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://github.com/mflRevan/unity-control-protocol/releases"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  Releases
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://www.npmjs.com/package/@mflrevan/ucp"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  npm Package
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-sm mb-3">Community</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <a
-                  href="https://discord.gg/F4RjhdVTbz"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  Discord
-                </a>
-              </li>
-              <li>
-                <a
-                  href="https://github.com/mflRevan/unity-control-protocol/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-foreground transition-colors"
-                >
-                  Issues
-                </a>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="mt-8 pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            &copy; {new Date().getFullYear()} Unity Control Protocol. MIT License.
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            The Unity Editor as a command line, for humans and agents. MIT licensed, runs entirely on your machine.
           </p>
-          <div className="flex items-center gap-3">
-            <a
-              href="https://github.com/mflRevan/unity-control-protocol"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Github className="h-5 w-5" />
-            </a>
-          </div>
+          <p className="mt-4 font-mono text-xs text-muted-foreground">v{version}</p>
         </div>
+        {columns.map((column) => (
+          <div key={column.title}>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{column.title}</h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              {column.links.map((link) => (
+                <li key={link.label}>
+                  {'to' in link && link.to ? (
+                    <Link to={link.to} className="text-foreground/80 transition-colors hover:text-foreground">
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <a
+                      href={link.href}
+                      className="text-foreground/80 transition-colors hover:text-foreground"
+                      {...(link.href?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}
+                    >
+                      {link.label}
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </footer>
   );

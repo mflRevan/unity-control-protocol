@@ -39,6 +39,36 @@ ucp screenshot
 | `--height <px>`        | Height in pixels (default: 1080) |
 | `-o, --output <path>`  | Output file path                 |
 
+### `ucp view`
+
+Composed renders for eyes that are not yours. `ucp screenshot` shows the Game view as the player
+sees it; `ucp view` places a temporary camera so a vision model gets exactly the framing it needs.
+
+```bash
+# Frame the main camera, or a chosen camera, without touching the scene
+ucp view capture -o frame.png
+ucp view capture --target-name Windmill -o windmill-in-context.png
+
+# One object alone, auto-framed from its bounds; one file per requested angle
+ucp view isolate --name Windmill --views front,right,top --max-edge 900 -o windmill.png
+
+# A ring of angles around an object as one composite grid
+ucp view orbit --name Windmill -o windmill-orbit.png
+```
+
+| Option                  | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `--id / --path / --name`| Target object (isolate, orbit)                                  |
+| `--views <list>`        | Angles for `isolate`: `front,back,left,right,top,bottom`         |
+| `--max-edge <px>`       | Longest edge of each render (default 512)                        |
+| `--background <color>`  | Background color for isolated renders (Built-in and URP)         |
+| `-o, --output <path>`   | Output file; `isolate` writes `<name>-<view>.png` per angle      |
+
+The isolated object is rendered with the scene's lighting. Under HDRP the sky stays behind the
+object and `--background` has no effect: HDRP ignores the camera clear color, and clearing to a
+solid color would throw off its automatic exposure. Under Built-in and URP the background is the
+requested color, or transparent when the color has zero alpha.
+
 ### `ucp record`
 
 Record a lightweight, silent Game or Scene view video without adding objects or scripts to the

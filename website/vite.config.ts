@@ -8,9 +8,18 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@docs': path.resolve(__dirname, './.generated/docs'),
-      '@skills': path.resolve(__dirname, './.generated/skills'),
     },
   },
   base: '/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          markdown: ['react-markdown', 'remark-gfm', 'rehype-raw', 'rehype-slug', 'rehype-autolink-headings'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
+  },
 });

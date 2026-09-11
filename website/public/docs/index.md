@@ -37,6 +37,6 @@ The CLI discovers the running Unity Editor instance via a lock file, establishes
 
 ## Quick Links
 
-- [Installation](/docs/installation) - Get UCP set up
-- [Quick Start](/docs/quickstart) - Your first automation in 60 seconds
-- [CLI Overview](/docs/overview) - Flags, lifecycle, and recommended workflows
+- [Installation](https://unityctl.dev/docs/installation.md) - Get UCP set up
+- [Quick Start](https://unityctl.dev/docs/quickstart.md) - Your first automation in 60 seconds
+- [CLI Overview](https://unityctl.dev/docs/overview.md) - Flags, lifecycle, and recommended workflows

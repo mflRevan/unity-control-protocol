@@ -99,7 +99,7 @@ ucp doctor
 
 ## Related lifecycle commands
 
-Connection commands integrate with the [Editor Lifecycle](/docs/overview/editor-lifecycle) surface.
+Connection commands integrate with the [Editor Lifecycle](https://unityctl.dev/docs/overview/editor-lifecycle.md) surface.
 
 ```bash
 ucp open

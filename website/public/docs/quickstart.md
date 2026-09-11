@@ -64,6 +64,6 @@ ucp build targets
 
 ## What's Next?
 
-- [CLI Overview](/docs/overview) - Global flags, lifecycle, and recommended workflows
-- [Project Setup & Bridge](/docs/overview/project-setup) - Install, connect, and diagnose bridge state
-- [Objects & Components](/docs/authoring/objects) - Inspect and modify GameObjects
+- [CLI Overview](https://unityctl.dev/docs/overview.md) - Global flags, lifecycle, and recommended workflows
+- [Project Setup & Bridge](https://unityctl.dev/docs/overview/project-setup.md) - Install, connect, and diagnose bridge state
+- [Objects & Components](https://unityctl.dev/docs/authoring/objects.md) - Inspect and modify GameObjects

@@ -19,9 +19,9 @@
     /* Aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@docs/*": ["../docs/*"]
+      "@/*": ["./src/*"]
     },
+    "resolveJsonModule": true,
 
     /* Linting */
     "strict": true,

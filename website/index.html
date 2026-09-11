@@ -2,15 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/favicon-512.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UCP - Unity Control Protocol</title>
-    <meta
-      name="description"
-      content="A cross-platform CLI + Unity Editor bridge for programmatic control of Unity projects."
-    />
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('ucp-theme');
+          var dark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
+    <title>Unity Control Protocol</title>
+    <meta name="description" content="The Unity Editor as a command line. Scenes, objects, assets, play mode, tests, profiler, builds, screenshots and video from a terminal or an AI agent." />
+    <meta name="theme-color" content="#fbfbfc" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0b0e" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png" />
+    <link rel="apple-touch-icon" href="/favicon-512.png" />
+    <link rel="canonical" href="https://unityctl.dev/" />
+    <link rel="alternate" type="text/plain" title="llms.txt" href="https://unityctl.dev/llms.txt" />
+    <link rel="alternate" type="text/markdown" href="https://unityctl.dev/index.md" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Unity Control Protocol" />
+    <meta property="og:title" content="Unity Control Protocol" />
+    <meta property="og:description" content="The Unity Editor as a command line, for humans and AI agents." />
+    <meta property="og:url" content="https://unityctl.dev/" />
+    <meta property="og:image" content="https://unityctl.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Unity Control Protocol" />
+    <meta name="twitter:description" content="The Unity Editor as a command line, for humans and AI agents." />
+    <meta name="twitter:image" content="https://unityctl.dev/og.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Unity Control Protocol",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "url": "https://unityctl.dev/",
+        "downloadUrl": "https://www.npmjs.com/package/@mflrevan/ucp",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
