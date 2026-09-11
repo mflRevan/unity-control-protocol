@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`), the UCP bridge package, and a Unity project connected to Unity Version Control. `branches` and `history` need the `cm` CLI. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.6.3'
+  version: '0.6.4'
   homepage: https://unityctl.dev/skills/ucp-version-control
 ---
 

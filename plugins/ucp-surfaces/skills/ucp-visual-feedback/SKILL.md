@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer; video recording needs an interactive editor with a graphics device.
 metadata:
   author: mflRevan
-  version: '0.6.3'
+  version: '0.6.4'
   homepage: https://unityctl.dev/skills/ucp-visual-feedback
 ---
 

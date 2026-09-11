@@ -2,7 +2,7 @@
 
 > A Rust CLI and an in-editor bridge that expose the Unity Editor as commands: scenes, objects, assets, materials, prefabs, UI Toolkit, play mode, tests, profiler, builds, screenshots and video. Built for humans and AI agents.
 
-Version 0.6.3. Install the CLI with `npm install -g @mflrevan/ucp`, then `ucp install` inside a Unity project and `ucp open`.
+Version 0.6.4. Install the CLI with `npm install -g @mflrevan/ucp`, then `ucp install` inside a Unity project and `ucp open`.
 Every page below is also served as raw Markdown; the full documentation in one file is https://unityctl.dev/llms-full.txt.
 
 ## Getting started

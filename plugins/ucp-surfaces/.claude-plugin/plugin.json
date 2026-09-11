@@ -1,6 +1,6 @@
 {
   "name": "ucp-surfaces",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "description": "Focused Unity Control Protocol skills, one per command surface (ucp-assets, ucp-editor-lifecycle, ucp-project-config, ucp-runtime-debugging, ucp-scene-authoring, ucp-ui-toolkit, ucp-version-control, ucp-visual-feedback). Install instead of, or next to, the single omni skill.",
   "author": {
     "name": "mflRevan",

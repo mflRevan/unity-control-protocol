@@ -1,6 +1,6 @@
 # Unity Control Protocol agent skills
 
-Version 0.6.3. Each skill follows the Agent Skills specification (https://agentskills.io/specification).
+Version 0.6.4. Each skill follows the Agent Skills specification (https://agentskills.io/specification).
 Download the raw URL into `<skills dir>/<name>/SKILL.md` to install by hand.
 
 | skill | kind | commands | raw |
