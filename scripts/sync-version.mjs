@@ -115,7 +115,9 @@ const replacements = [
   ],
   [
     'skills/index.json',
-    (content) => replaceOne(content, /"version": ".*",\n  "generatedFrom"/, `"version": "${version}",\n  "generatedFrom"`),
+    // Tolerate CRLF: a Windows checkout with autocrlf rewrites the catalog's line endings.
+    (content) =>
+      replaceOne(content, /"version": ".*",\r?\n  "generatedFrom"/, (match) => match.replace(/"version": ".*"/, `"version": "${version}"`)),
     { optionalFile: true },
   ],
   ['version.json', () => `${JSON.stringify(metadata, null, 2)}\n`],
