@@ -59,35 +59,63 @@ const surfaces = [
   { icon: GitBranch, title: 'Version control', blurb: 'Unity VCS status, checkout, and checkin when the native cm client is not around.', command: 'ucp vcs status', to: '/docs/project/version-control', skill: 'ucp-version-control' },
 ];
 
-const showcase = [
+interface ShowcaseItem {
+  kind: 'video' | 'image';
+  src: string;
+  poster?: string;
+  width: number;
+  height: number;
+  span: 'full' | 'half';
+  /** Stage aspect when the capture should sit inside a larger frame instead of filling it. */
+  stage?: [number, number];
+  title: string;
+  caption: string;
+  command: string;
+}
+
+// Each capture is shown at its own aspect ratio, never cropped; the grid pairs the two 16:9 stills.
+const showcase: ShowcaseItem[] = [
   {
-    kind: 'video' as const,
+    kind: 'video',
     src: '/media/kingdom-flythrough.webm',
     poster: '/media/kingdom-flythrough.jpg',
+    width: 1280,
+    height: 648,
+    span: 'full',
     title: 'A camera move, recorded from the CLI',
     caption: 'The demo project is Unity’s Fantasy Kingdom sample moved to HDRP. The camera path is set through ucp exec and captured with ucp record.',
-    command: 'ucp play && ucp record capture --duration 11 --fps 30 --width 1920 --height 1080 -o flythrough.mp4',
+    command: 'ucp play && ucp record capture --duration 11 --fps 30 --width 1920 --height 1080 --bitrate-kbps 24000 -o flythrough.mp4',
   },
   {
-    kind: 'image' as const,
+    kind: 'image',
     src: '/media/kingdom-overview.webp',
+    width: 1600,
+    height: 900,
+    span: 'half',
     title: 'Game view screenshot',
     caption: 'What the player sees, straight to disk. Screenshots work in edit mode and play mode.',
     command: 'ucp screenshot --width 1920 --height 1080 -o overview.png',
   },
   {
-    kind: 'image' as const,
-    src: '/media/isolate.webp',
-    title: 'Isolated multi-view render',
-    caption: 'One object, several angles, framed from its bounds. Built for a vision model that has to judge geometry.',
-    command: 'ucp view isolate --name Preset_House_Windmill_01 --views front,right,top --max-edge 900 -o windmill.png',
-  },
-  {
-    kind: 'image' as const,
+    kind: 'image',
     src: '/media/ui-treasury.webp',
+    width: 780,
+    height: 460,
+    span: 'half',
+    stage: [16, 9],
     title: 'UI Toolkit panel, populated',
     caption: 'A UXML document rendered off-screen with scenario data, deterministic to the pixel.',
-    command: 'ucp ui screenshot Assets/UI/Kingdom/Treasury.ucp-ui.json --state prosperous',
+    command: 'ucp ui screenshot Assets/UI/Kingdom/Treasury.ucp-ui.json --state prosperous -o treasury.png',
+  },
+  {
+    kind: 'image',
+    src: '/media/isolate.webp',
+    width: 2720,
+    height: 900,
+    span: 'full',
+    title: 'Isolated multi-view render',
+    caption: 'One object, three angles, framed from its bounds. Built for a vision model that has to judge geometry.',
+    command: 'ucp view isolate --name Preset_House_Windmill_01 --views front,right,back --max-edge 900 -o windmill.png',
   },
 ];
 
@@ -221,15 +249,20 @@ function Showcase() {
           blurb="No editor screenshots by hand. Each capture, render, and clip came out of the CLI against the demo project, exactly as an agent would get it."
         />
         <Stagger className="mt-10 grid gap-5 md:grid-cols-2">
-          {showcase.map((item, index) => (
-            <StaggerItem key={item.src} className={cn(index === 0 && 'md:col-span-2')}>
-              <figure className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className={cn('relative bg-terminal', index === 0 ? 'aspect-[21/9]' : 'aspect-[16/10]')}>
+          {showcase.map((item) => (
+            <StaggerItem key={item.src} className={cn('flex', item.span === 'full' && 'md:col-span-2')}>
+              <figure className="flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+                <div
+                  className={cn('flex w-full items-center justify-center bg-terminal', item.stage && 'p-[6%]')}
+                  style={{ aspectRatio: item.stage ? `${item.stage[0]} / ${item.stage[1]}` : `${item.width} / ${item.height}` }}
+                >
                   {item.kind === 'video' ? (
                     <video
-                      className="absolute inset-0 size-full object-cover"
+                      className="block size-full"
                       src={item.src}
                       poster={item.poster}
+                      width={item.width}
+                      height={item.height}
                       autoPlay
                       muted
                       loop
@@ -238,19 +271,23 @@ function Showcase() {
                       aria-label={item.title}
                     />
                   ) : (
-                    <img className="absolute inset-0 size-full object-cover" src={item.src} alt={item.title} loading="lazy" decoding="async" />
+                    <img
+                      className={cn('block', item.stage ? 'max-h-full max-w-full rounded-md shadow-[0_20px_50px_-20px_rgba(0,0,0,0.8)]' : 'size-full')}
+                      src={item.src}
+                      alt={item.title}
+                      width={item.width}
+                      height={item.height}
+                      loading="lazy"
+                      decoding="async"
+                    />
                   )}
                 </div>
-                <figcaption className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold">{item.title}</h3>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.caption}</p>
-                    </div>
-                  </div>
+                <figcaption className="flex flex-1 flex-col border-t border-border p-4">
+                  <h3 className="text-sm font-semibold">{item.title}</h3>
+                  <p className="mt-1 flex-1 text-sm leading-6 text-muted-foreground">{item.caption}</p>
                   <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-code px-3 py-1.5 font-mono text-[12px]">
                     <span className="select-none text-primary">$</span>
-                    <span className="thin-scroll min-w-0 flex-1 overflow-x-auto whitespace-nowrap">{item.command}</span>
+                    <span className="thin-scroll min-w-0 flex-1 overflow-x-auto whitespace-nowrap py-0.5">{item.command}</span>
                     <CopyButton text={item.command} className="h-6 border-transparent bg-transparent px-1" />
                   </div>
                 </figcaption>
