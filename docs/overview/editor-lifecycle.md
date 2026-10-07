@@ -28,7 +28,7 @@ is refused rather than producing a second editor on the same project.
   just crashed survives the relaunch.
 - ucp never brings the editor window to the foreground. The bridge keeps an unfocused editor
   compiling, importing, and reloading by queueing player-loop updates; set `UCP_FOCUS_EDITOR=1`
-  only if you want the old nudge-to-front behaviour back.
+  only if you want the old nudge-to-front behaviour back. `ucp play` also switches the Game views to "Play Unfocused" for the session, since Unity's default "Play Focused" activates the editor window on play; `UCP_FOCUS_EDITOR=1` keeps Unity's default.
 
 ## Commands
 

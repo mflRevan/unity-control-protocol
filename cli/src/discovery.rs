@@ -311,7 +311,7 @@ pub fn focus_unity_editor(project: &Path) -> Result<bool, UcpError> {
     focus_process_window(pid)
 }
 
-fn focus_nudges_enabled() -> bool {
+pub fn focus_nudges_enabled() -> bool {
     std::env::var("UCP_FOCUS_EDITOR")
         .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
         .unwrap_or(false)

@@ -87,6 +87,14 @@ ucp screenshot -o test.png
 ucp stop
 ```
 
+## Focus
+
+`ucp play` does not bring the editor window to the front. Unity's Game view defaults to "Play
+Focused", which activates the editor's OS window when play mode starts; ucp switches every open
+Game view to "Play Unfocused" for the session and restores the previous setting when play mode
+ends. Set `UCP_FOCUS_EDITOR=1` to keep Unity's default behaviour (the game then also receives
+keyboard and mouse input immediately, as it would from the Play button).
+
 ## Editing code while playing
 
 `ucp hot-reload apply <file.cs>` patches edited method bodies into the running game without

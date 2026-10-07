@@ -1088,6 +1088,8 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
                 "saveDirtyScenes": !no_save,
                 "discardUntitled": !keep_untitled,
                 "logFile": log_file,
+                // The Game view may only grab the window when the old focus behaviour is asked for.
+                "focusGameView": crate::discovery::focus_nudges_enabled(),
             });
             play::run("play", payload, &ctx).await
         }

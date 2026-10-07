@@ -77,8 +77,11 @@ namespace UCP.Bridge
             {
                 s_lastPlayRequestedAtUtc = DateTime.UtcNow;
             }
+            // The Game view would otherwise focus itself and pull the editor window to the
+            // foreground; the guard switches it to Play Unfocused for this session.
+            var gameViewUnfocused = !GetBoolParam(paramsJson, "focusGameView", false) && GameViewFocusGuard.SuppressForPlay();
             EditorApplication.isPlaying = true;
-            return new { status = "ok" };
+            return new { status = "ok", gameViewUnfocused };
         }
 
         private static object HandleStatus(string paramsJson)
@@ -116,6 +119,8 @@ namespace UCP.Bridge
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
+            if (state == PlayModeStateChange.EnteredEditMode)
+                GameViewFocusGuard.RestoreAfterPlay();
             lock (s_sessionLock)
             {
                 switch (state)

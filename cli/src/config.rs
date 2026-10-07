@@ -92,11 +92,6 @@ pub fn editor_session_path(project: &Path) -> PathBuf {
     ucp_dir(project).join("editor-session.json")
 }
 
-/// The previous editor log, kept when `ucp open` rotates a non-empty `editor.log`.
-pub fn previous_editor_log_path(project: &Path) -> PathBuf {
-    editor_logs_dir(project).join("editor.prev.log")
-}
-
 /// Unity's per-user editor log, which editors launched by the Hub or by hand write to since
 /// they carry no `-logFile`.
 pub fn global_editor_log_path() -> Option<PathBuf> {

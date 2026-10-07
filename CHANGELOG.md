@@ -47,8 +47,10 @@
   used to nudge the editor every two to ten seconds, which was the main reason Unity kept
   stealing focus from the terminal and the IDE during compiles and reloads. The bridge keeps an
   unfocused editor processing by queueing player-loop updates while work is pending; the UI
-  harness and `scene focus` no longer activate the editor either. `UCP_FOCUS_EDITOR=1` restores
-  the old nudge.
+  harness and `scene focus` no longer activate the editor either. `ucp play` switches the Game
+  views to "Play Unfocused" for the session (and back afterwards), since Unity's default "Play
+  Focused" pulls the whole editor window to the front on Windows. `UCP_FOCUS_EDITOR=1` restores
+  the old nudge and the focused Game view.
 - One invocation launches at most one editor, and never after it attached to one: a command
   bound to an editor that exits fails with "the editor exited" instead of starting another. A
   stray `logs --follow` left behind after a crash used to relaunch the editor on every reconnect,

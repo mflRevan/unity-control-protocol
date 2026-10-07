@@ -108,7 +108,12 @@ async fn run_play(payload: Value, ctx: &Context) -> anyhow::Result<()> {
         }
 
         match confirm_play_mode_entry(ctx, &project, &lock.token).await? {
-            PlayConfirmation::Playing(confirmed) => break confirmed,
+            PlayConfirmation::Playing(mut confirmed) => {
+                if let Some(unfocused) = requested.get("gameViewUnfocused") {
+                    confirmed["gameViewUnfocused"] = unfocused.clone();
+                }
+                break confirmed;
+            }
             PlayConfirmation::DiscardedByReload => {
                 if attempt >= MAX_ATTEMPTS {
                     anyhow::bail!(
