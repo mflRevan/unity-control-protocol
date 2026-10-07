@@ -92,6 +92,28 @@ pub fn editor_session_path(project: &Path) -> PathBuf {
     ucp_dir(project).join("editor-session.json")
 }
 
+/// The previous editor log, kept when `ucp open` rotates a non-empty `editor.log`.
+pub fn previous_editor_log_path(project: &Path) -> PathBuf {
+    editor_logs_dir(project).join("editor.prev.log")
+}
+
+/// Unity's per-user editor log, which editors launched by the Hub or by hand write to since
+/// they carry no `-logFile`.
+pub fn global_editor_log_path() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA").map(|base| PathBuf::from(base).join("Unity/Editor/Editor.log"))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("HOME").map(|base| PathBuf::from(base).join("Library/Logs/Unity/Editor.log"))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::env::var_os("HOME").map(|base| PathBuf::from(base).join(".config/unity3d/Editor.log"))
+    }
+}
+
 pub fn lock_file_path(project: &Path) -> PathBuf {
     ucp_dir(project).join("bridge.lock")
 }

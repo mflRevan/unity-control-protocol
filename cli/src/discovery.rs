@@ -12,6 +12,35 @@ pub struct UnityEditorProcess {
     pub args: Vec<String>,
 }
 
+impl UnityEditorProcess {
+    /// Launched through Unity Hub (`-useHub -hubIPC`), which also means no `-logFile`.
+    pub fn launched_by_hub(&self) -> bool {
+        self.args.iter().any(|arg| {
+            let arg = arg.trim_matches('"');
+            arg.eq_ignore_ascii_case("-useHub") || arg.eq_ignore_ascii_case("-hubIPC")
+        })
+    }
+
+    /// The `-logFile <path>` this editor writes to, if it was given one.
+    pub fn log_file(&self) -> Option<PathBuf> {
+        for (index, arg) in self.args.iter().enumerate() {
+            let arg = arg.trim_matches('"');
+            if let Some(value) = arg.strip_prefix("-logFile=").or_else(|| arg.strip_prefix("-logfile=")) {
+                return (!value.is_empty()).then(|| PathBuf::from(value.trim_matches('"')));
+            }
+            if arg.eq_ignore_ascii_case("-logFile") {
+                return self
+                    .args
+                    .get(index + 1)
+                    .map(|value| value.trim_matches('"'))
+                    .filter(|value| !value.is_empty() && !value.starts_with('-'))
+                    .map(PathBuf::from);
+            }
+        }
+        None
+    }
+}
+
 /// Discover a Unity project by searching upward from `start` for ProjectSettings/.
 pub fn find_unity_project(start: &Path) -> Result<PathBuf, UcpError> {
     let mut dir = start.to_path_buf();
@@ -72,10 +101,153 @@ pub fn is_unity_editor_running_for_project(project: &Path) -> bool {
 
 pub fn unity_editor_pid_for_project(project: &Path) -> Option<u32> {
     let normalized_project = normalize_path(project);
-    list_running_unity_editors()
+    let by_command_line = list_running_unity_editors()
         .into_iter()
         .find(|process| normalize_path(&process.project_path) == normalized_project)
-        .map(|process| process.pid)
+        .map(|process| process.pid);
+    if by_command_line.is_some() {
+        return by_command_line;
+    }
+    // An editor the command line does not identify (opened from the Hub's recent list, from
+    // a project-file association, or with an argument form this parser does not know) still
+    // runs the bridge, and the bridge's lock file names its pid. `read_lock_file` already
+    // drops locks whose pid is dead, so an alive pid that is a Unity executable is the editor.
+    let lock = read_lock_file(project).ok()?;
+    let normalized_lock = normalize_path(Path::new(&lock.project_path));
+    if normalized_lock != normalized_project {
+        return None;
+    }
+    process_is_unity_editor(lock.pid).then_some(lock.pid)
+}
+
+fn process_is_unity_editor(pid: u32) -> bool {
+    let target = sysinfo::Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[target]),
+        true,
+        sysinfo::ProcessRefreshKind::nothing()
+            .with_cmd(sysinfo::UpdateKind::Always)
+            .with_exe(sysinfo::UpdateKind::Always),
+    );
+    let Some(process) = system.process(target) else {
+        return false;
+    };
+    let args: Vec<String> = process
+        .cmd()
+        .iter()
+        .map(|value| value.to_string_lossy().into_owned())
+        .collect();
+    is_unity_editor_executable(process.exe(), &args) && !is_asset_import_worker(&args)
+}
+
+/// Whether a Unity editor holds the project open without ucp being able to name its pid.
+///
+/// Unity keeps `Temp/UnityLockfile` open for the life of the editor and refuses to open a
+/// project a second time while it is held (with a modal, or by handing off to the Hub). On
+/// Windows that handle is exclusive, so a failed open for writing with a sharing violation is
+/// a reliable "someone has this project" signal even when discovery found no process.
+pub fn project_is_held_by_unity(project: &Path) -> bool {
+    let lockfile = project.join("Temp").join("UnityLockfile");
+    if !lockfile.is_file() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        match std::fs::OpenOptions::new().write(true).open(&lockfile) {
+            Ok(_) => false,
+            // ERROR_SHARING_VIOLATION
+            Err(error) => error.raw_os_error() == Some(32),
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Other `ucp` processes on this machine: a hung or forgotten one keeps acting on the editor
+/// (reconnecting, answering dialogs, relaunching) long after the human moved on.
+pub fn list_other_ucp_processes() -> Vec<UcpProcess> {
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::nothing()
+            .with_cmd(sysinfo::UpdateKind::Always)
+            .with_exe(sysinfo::UpdateKind::Always),
+    );
+    let me = std::process::id();
+    // Our own ancestry (a shell running `ucp`, or `cargo run`) is not a stray process.
+    let mut lineage = vec![me];
+    let mut cursor = system.process(sysinfo::Pid::from_u32(me));
+    while let Some(process) = cursor {
+        match process.parent() {
+            Some(parent) if !lineage.contains(&parent.as_u32()) => {
+                lineage.push(parent.as_u32());
+                cursor = system.process(parent);
+            }
+            _ => break,
+        }
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    let mut found = Vec::new();
+    for process in system.processes().values() {
+        let pid = process.pid().as_u32();
+        if lineage.contains(&pid) {
+            continue;
+        }
+        let is_ucp = process
+            .exe()
+            .and_then(|path| path.file_stem())
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| stem.eq_ignore_ascii_case("ucp"))
+            || process.name().to_string_lossy().eq_ignore_ascii_case("ucp.exe")
+            || process.name().to_string_lossy().eq_ignore_ascii_case("ucp");
+        if !is_ucp {
+            continue;
+        }
+        let args: Vec<String> = process
+            .cmd()
+            .iter()
+            .skip(1)
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect();
+        found.push(UcpProcess {
+            pid,
+            age_seconds: now.saturating_sub(process.start_time()),
+            command: args.join(" "),
+            project: extract_project_path_from_args(&args)
+                .or_else(|| ucp_project_from_args(&args))
+                .map(|path| path.display().to_string()),
+        });
+    }
+    found.sort_by(|a, b| b.age_seconds.cmp(&a.age_seconds));
+    found
+}
+
+fn ucp_project_from_args(args: &[String]) -> Option<PathBuf> {
+    for (index, arg) in args.iter().enumerate() {
+        if let Some(value) = arg.strip_prefix("--project=") {
+            return Some(PathBuf::from(value.trim_matches('"')));
+        }
+        if arg == "--project" {
+            return args.get(index + 1).map(|value| PathBuf::from(value.trim_matches('"')));
+        }
+    }
+    None
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UcpProcess {
+    pub pid: u32,
+    pub age_seconds: u64,
+    pub command: String,
+    pub project: Option<String>,
 }
 
 pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
@@ -124,12 +296,25 @@ pub fn list_running_unity_editors() -> Vec<UnityEditorProcess> {
     processes
 }
 
+/// Bring the editor window to the foreground. Off unless `UCP_FOCUS_EDITOR=1`: the editor
+/// keeps compiling, importing, and reloading while unfocused (the bridge queues player-loop
+/// updates for it), and the former "nudge every few seconds while waiting" behaviour was the
+/// single biggest reason Unity kept stealing focus from the terminal and the IDE.
 pub fn focus_unity_editor(project: &Path) -> Result<bool, UcpError> {
+    if !focus_nudges_enabled() {
+        return Ok(false);
+    }
     let Some(pid) = unity_editor_pid_for_project(project) else {
         return Ok(false);
     };
 
     focus_process_window(pid)
+}
+
+fn focus_nudges_enabled() -> bool {
+    std::env::var("UCP_FOCUS_EDITOR")
+        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
 }
 
 pub fn handle_unity_startup_dialogs(
@@ -392,7 +577,9 @@ pub fn extract_project_path_from_args(args: &[String]) -> Option<PathBuf> {
 }
 
 fn is_project_path_flag(value: &str) -> bool {
-    value.eq_ignore_ascii_case("-projectpath")
+    // `-createProject <path>` is what Unity Hub passes for a brand-new project; the editor
+    // then has that project open exactly like `-projectPath` would.
+    value.eq_ignore_ascii_case("-projectpath") || value.eq_ignore_ascii_case("-createproject")
 }
 
 fn is_unity_editor_executable(executable_path: Option<&Path>, args: &[String]) -> bool {

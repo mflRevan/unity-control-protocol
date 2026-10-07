@@ -8,7 +8,26 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+
+/// The editor this invocation attached to or launched. One `ucp` process works with one
+/// editor: once it has one, a later reconnect that finds the editor gone is a failure to
+/// report, never a reason to launch another. A hung `logs --follow` reconnecting forever used
+/// to relaunch the editor after every crash, hours after the human had stopped looking.
+static ATTACHED_PID: OnceLock<u32> = OnceLock::new();
+
+pub fn note_attached(pid: u32) {
+    let _ = ATTACHED_PID.set(pid);
+}
+
+pub fn attached_pid() -> Option<u32> {
+    ATTACHED_PID.get().copied()
+}
+
+/// An editor ucp launched that disappears again within this window is treated as crashed
+/// on startup; automatic launches stop until a human runs `ucp open`.
+const YOUNG_EDITOR_SECS: i64 = 120;
 
 #[derive(Debug, Clone)]
 struct UnityLaunchTarget {
@@ -25,6 +44,13 @@ pub struct EditorSession {
     pub executable_path: Option<String>,
     pub log_path: String,
     pub started_at: String,
+    /// "ucp" for editors this CLI launched, "hub" or "manual" for ones it adopted.
+    #[serde(default = "default_launched_by")]
+    pub launched_by: String,
+}
+
+fn default_launched_by() -> String {
+    "ucp".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,6 +88,10 @@ pub struct EditorStatus {
     pub resolution_warning: Option<String>,
     pub log_path: String,
     pub session: Option<EditorSession>,
+    /// "ucp", "hub", or "manual" for a running editor: from the session when ucp launched or
+    /// adopted it, otherwise from the process command line, so an editor that only ever saw
+    /// fast-path commands still reports where it came from.
+    pub launched_by: Option<String>,
 }
 
 pub async fn ensure_editor_running(
@@ -73,12 +103,14 @@ pub async fn ensure_editor_running(
 
         loop {
             if !discovery::is_process_running(pid) {
-                clear_session(project)?;
+                // Keep the session file: it is the evidence `start_editor` uses to tell a
+                // crash loop from a normal first launch.
                 break;
             }
 
             if bridge_is_available(project).await {
                 let outcome = already_running_outcome(project, pid);
+                note_attached(pid);
                 persist_session(project, &outcome)?;
                 return Ok(outcome);
             }
@@ -134,10 +166,16 @@ pub async fn ensure_editor_running(
             if let Some(current_pid) = discovery::unity_editor_pid_for_project(project) {
                 pid = current_pid;
             } else {
-                clear_session(project)?;
                 break;
             }
         }
+    }
+
+    if let Some(previous) = attached_pid() {
+        anyhow::bail!(
+            "Unity editor (pid {previous}) exited while this command was running. It is not relaunched automatically: \
+             check `ucp editor logs` for the reason, then run `ucp open`."
+        );
     }
 
     start_editor(project, ctx).await
@@ -171,9 +209,36 @@ pub async fn start_editor(
             ));
         }
         let outcome = already_running_outcome(project, existing_pid);
+        note_attached(existing_pid);
         persist_session(project, &outcome)?;
         return Ok(outcome);
     }
+
+    // Unity itself refuses a second editor on a held project, with a modal or a hand-off to
+    // the Hub; either way the launch below would not produce the editor the caller expects.
+    if discovery::project_is_held_by_unity(project) {
+        anyhow::bail!(
+            "The project is open in a Unity editor that ucp could not identify (Temp/UnityLockfile is held). \
+             Close that editor, or open the project from a terminal with `ucp open` next time so ucp can attach to it."
+        );
+    }
+
+    if ctx.launch_intent == commands::LaunchIntent::Auto {
+        if let Ok(Some(session)) = read_session(project) {
+            let age = chrono::DateTime::parse_from_rfc3339(&session.started_at)
+                .map(|started| (Utc::now() - started.with_timezone(&Utc)).num_seconds())
+                .unwrap_or(i64::MAX);
+            if session.launched_by == "ucp" && (0..YOUNG_EDITOR_SECS).contains(&age) {
+                anyhow::bail!(
+                    "The Unity editor ucp launched {age}s ago (pid {}) is no longer running. Not relaunching it automatically, \
+                     since an editor that dies that quickly usually dies again: check `ucp editor logs`, then run `ucp open` to try deliberately.",
+                    session.pid
+                );
+            }
+        }
+    }
+
+    rotate_editor_log(&log_path);
 
     if !ctx.json {
         output::print_info(&format!(
@@ -202,6 +267,7 @@ pub async fn start_editor(
         const DETACHED_PROCESS: u32 = 0x0000_0008;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+        stop_inheriting_std_handles();
     }
 
     let child = command.spawn().map_err(|error| {
@@ -230,8 +296,78 @@ pub async fn start_editor(
         log_path: log_path.display().to_string(),
     };
 
+    if let Some(pid) = pid {
+        note_attached(pid);
+    }
     persist_session(project, &outcome)?;
     Ok(outcome)
+}
+
+/// Keep one previous log. A long session's `editor.log` runs into gigabytes, and the log from
+/// the editor that just crashed is exactly what the next launch must not overwrite.
+fn rotate_editor_log(log_path: &Path) {
+    let Ok(metadata) = fs::metadata(log_path) else {
+        return;
+    };
+    if metadata.len() == 0 {
+        return;
+    }
+    let previous = log_path.with_file_name("editor.prev.log");
+    let _ = fs::remove_file(&previous);
+    let _ = fs::rename(log_path, &previous);
+}
+
+/// Where the editor for this project is writing its log: the `-logFile` ucp gave it, the one
+/// its own command line names, or Unity's per-user log for Hub and manual launches.
+pub fn effective_editor_log_path(project: &Path) -> Option<PathBuf> {
+    let own = config::editor_log_path(project);
+    let process = discovery::unity_editor_pid_for_project(project).and_then(|pid| {
+        discovery::list_running_unity_editors()
+            .into_iter()
+            .find(|process| process.pid == pid)
+    });
+    match process {
+        // An editor started without `-logFile` (by hand, by the Hub, by a file association)
+        // writes Unity's per-user Editor.log; the project log next to it is a stale leftover
+        // from an earlier ucp launch and must not shadow the live one.
+        Some(process) => process
+            .log_file()
+            .filter(|path| path.is_file())
+            .or_else(|| config::global_editor_log_path().filter(|path| path.is_file()))
+            .or_else(|| own.is_file().then_some(own.clone())),
+        None => own.is_file().then_some(own),
+    }
+}
+
+/// Nulling the child's stdio is not enough on Windows: `CreateProcess` is called with handle
+/// inheritance on, so every inheritable handle in this process (the pipe a shell gave us as
+/// stdout, for one) is duplicated into the editor as well. The editor then holds that pipe open
+/// for hours after ucp exits, and `ucp open | grep ...` or a script line like `ucp scene list |
+/// head` never sees end-of-file. Clearing the inherit flag on our own standard handles keeps
+/// them usable here while leaving the editor with nothing but the NUL handles it was given.
+#[cfg(windows)]
+fn stop_inheriting_std_handles() {
+    use std::os::windows::io::AsRawHandle;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn SetHandleInformation(handle: *mut std::ffi::c_void, mask: u32, flags: u32) -> i32;
+    }
+    const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
+
+    let handles = [
+        std::io::stdin().as_raw_handle(),
+        std::io::stdout().as_raw_handle(),
+        std::io::stderr().as_raw_handle(),
+    ];
+    for handle in handles {
+        if !handle.is_null() {
+            // Failure only means the handle was already non-inheritable or invalid; nothing to do.
+            unsafe {
+                SetHandleInformation(handle.cast(), HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
 }
 
 pub async fn close_editor(
@@ -385,7 +521,17 @@ pub fn status(project: &Path, ctx: &commands::Context) -> EditorStatus {
         requested_version,
         installed_versions,
         resolution_warning,
-        log_path: config::editor_log_path(project).display().to_string(),
+        log_path: effective_editor_log_path(project)
+            .unwrap_or_else(|| config::editor_log_path(project))
+            .display()
+            .to_string(),
+        launched_by: process.as_ref().map(|process| {
+            match read_session(project).ok().flatten() {
+                Some(session) if session.pid == process.pid => session.launched_by,
+                _ if process.launched_by_hub() => "hub".to_string(),
+                _ => "manual".to_string(),
+            }
+        }),
         session: read_session(project).ok().flatten(),
     }
 }
@@ -766,12 +912,30 @@ fn persist_session(project: &Path, outcome: &EditorStartOutcome) -> anyhow::Resu
     };
 
     fs::create_dir_all(config::ucp_dir(project))?;
+    let launched_by = if outcome.started {
+        "ucp".to_string()
+    } else {
+        let hub = discovery::list_running_unity_editors()
+            .into_iter()
+            .find(|process| process.pid == pid)
+            .is_some_and(|process| process.launched_by_hub());
+        if hub { "hub".to_string() } else { "manual".to_string() }
+    };
+    // An adopted editor keeps its original record; only a launch starts a new session.
+    if !outcome.started {
+        if let Ok(Some(existing)) = read_session(project) {
+            if existing.pid == pid {
+                return Ok(());
+            }
+        }
+    }
     let session = EditorSession {
         pid,
         project_path: project.display().to_string(),
         executable_path: outcome.executable_path.clone(),
         log_path: outcome.log_path.clone(),
         started_at: Utc::now().to_rfc3339(),
+        launched_by,
     };
     fs::write(
         config::editor_session_path(project),

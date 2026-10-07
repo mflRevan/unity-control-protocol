@@ -190,6 +190,30 @@ pub async fn run(ctx: &Context) -> anyhow::Result<()> {
         }
     }
 
+    // Other ucp processes: a forgotten `logs --follow` or a hung command keeps a bridge
+    // connection, answers dialogs, and (before 0.6.5) relaunched crashed editors for hours.
+    let strays = discovery::list_other_ucp_processes();
+    let old_strays: Vec<&discovery::UcpProcess> =
+        strays.iter().filter(|process| process.age_seconds >= 600).collect();
+    if old_strays.is_empty() {
+        checks.push((
+            "Other ucp processes",
+            true,
+            if strays.is_empty() { "None".into() } else { format!("{} recent", strays.len()) },
+        ));
+    } else {
+        let summary = old_strays
+            .iter()
+            .map(|process| format!("pid {} ({}m): ucp {}", process.pid, process.age_seconds / 60, process.command))
+            .collect::<Vec<_>>()
+            .join("; ");
+        checks.push(("Other ucp processes", false, summary));
+        warnings.push(format!(
+            "{} ucp process(es) have been running for over 10 minutes; if nobody is waiting on them, stop them (`ucp editor ps` lists them)",
+            old_strays.len()
+        ));
+    }
+
     // Serialization mode checks for native reference indexing
     if let Some(ref proj) = project {
         let ref_status = super::references::check_serialization(proj);

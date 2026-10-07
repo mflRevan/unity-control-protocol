@@ -265,6 +265,9 @@ namespace UCP.Bridge
 
             // Shader diagnostics
             ShaderController.Register(s_router);
+
+            // Hot reload (method-body patches without a domain reload)
+            HotReloadController.Register(s_router);
         }
 
         private static void StartServer()
@@ -594,7 +597,13 @@ namespace UCP.Bridge
         private static void PumpMainThread()
         {
             System.Threading.Volatile.Write(ref s_lastMainThreadTick, DateTime.UtcNow.Ticks);
-            System.Threading.Volatile.Write(ref s_compiling, SampleCompiling() ? 1 : 0);
+            var compiling = SampleCompiling();
+            System.Threading.Volatile.Write(ref s_compiling, compiling ? 1 : 0);
+            // An unfocused editor throttles its loop (Preferences > Interaction Mode). Queueing a
+            // player-loop update while work is pending keeps compiles, imports, and reloads moving
+            // without the CLI having to drag the window to the foreground.
+            if (compiling || EditorApplication.isUpdating || !s_mainThreadQueue.IsEmpty)
+                EditorApplication.QueuePlayerLoopUpdate();
             int processed = 0;
             while (s_mainThreadQueue.TryDequeue(out var action) && processed < 50)
             {

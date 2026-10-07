@@ -18,12 +18,18 @@ pub enum EditorAction {
     Open,
     /// Close the Unity editor for the project
     Close {
+        /// Close even if the active scene has unsaved changes (they are lost)
+        #[arg(long)]
+        discard_changes: bool,
         /// Force kill the editor if graceful shutdown times out
         #[arg(long)]
         force: bool,
     },
     /// Restart the Unity editor for the project
     Restart {
+        /// Restart even if the active scene has unsaved changes (they are lost)
+        #[arg(long)]
+        discard_changes: bool,
         /// Force kill the editor if graceful shutdown times out
         #[arg(long)]
         force: bool,
@@ -50,8 +56,8 @@ pub async fn run(action: EditorAction, ctx: &Context) -> anyhow::Result<()> {
     match action {
         EditorAction::Ps => ps(ctx),
         EditorAction::Open => open(ctx).await,
-        EditorAction::Close { force } => close(ctx, force).await,
-        EditorAction::Restart { force } => restart(ctx, force).await,
+        EditorAction::Close { force, discard_changes } => close(ctx, force, discard_changes).await,
+        EditorAction::Restart { force, discard_changes } => restart(ctx, force, discard_changes).await,
         EditorAction::Status => status(ctx),
         EditorAction::Logs { lines } => logs(ctx, lines),
         EditorAction::Dialog { answer } => dialog(ctx, answer),
@@ -164,13 +170,15 @@ async fn open(ctx: &Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
+async fn close(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
-    super::enforce_active_scene_guard_for_project(
-        &project,
-        super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
-    )
-    .await?;
+    if !discard_changes {
+        super::enforce_active_scene_guard_for_project(
+            &project,
+            super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
+        )
+        .await?;
+    }
     let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
 
     if ctx.json {
@@ -193,13 +201,15 @@ async fn close(ctx: &Context, force: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn restart(ctx: &Context, force: bool) -> anyhow::Result<()> {
+async fn restart(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
-    super::enforce_active_scene_guard_for_project(
-        &project,
-        super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
-    )
-    .await?;
+    if !discard_changes {
+        super::enforce_active_scene_guard_for_project(
+            &project,
+            super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
+        )
+        .await?;
+    }
     let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
 
     // close_editor gives up once its own budget is spent, so a slow shutdown comes back as
@@ -230,7 +240,13 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
     }
 
     if status.running {
-        output::print_success("Unity editor is running");
+        let origin = match status.launched_by.as_deref() {
+            Some("hub") => " (launched by Unity Hub)",
+            Some("manual") => " (launched outside ucp)",
+            Some(_) => " (launched by ucp)",
+            None => "",
+        };
+        output::print_success(&format!("Unity editor is running{origin}"));
     } else {
         output::print_warn("Unity editor is not running");
     }
@@ -266,10 +282,12 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
 
 fn logs(ctx: &Context, lines: usize) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
-    let log_path = crate::config::editor_log_path(&project);
-    if !log_path.is_file() {
-        anyhow::bail!("Editor log file not found at {}", log_path.display());
-    }
+    let Some(log_path) = editor_runtime::effective_editor_log_path(&project) else {
+        anyhow::bail!(
+            "No editor log found: ucp writes {} for editors it launches, and editors opened from the Hub or by hand write Unity's per-user Editor.log",
+            crate::config::editor_log_path(&project).display()
+        );
+    };
 
     let content = fs::read_to_string(&log_path)?;
     let rendered = tail_lines(&content, lines);
@@ -292,7 +310,10 @@ fn logs(ctx: &Context, lines: usize) -> anyhow::Result<()> {
 fn ps(ctx: &Context) -> anyhow::Result<()> {
     let editors = discovery::list_running_unity_editors();
     if ctx.json {
-        output::print_json(&output::success_json(serde_json::to_value(&editors)?));
+        output::print_json(&output::success_json(serde_json::json!({
+            "editors": editors,
+            "ucpProcesses": discovery::list_other_ucp_processes(),
+        })));
         return Ok(());
     }
 
@@ -302,13 +323,38 @@ fn ps(ctx: &Context) -> anyhow::Result<()> {
     }
 
     output::print_success(&format!("Found {} Unity editor process(es)", editors.len()));
-    for editor in editors {
-        eprintln!("  PID {}  {}", editor.pid, editor.project_path.display());
-        if let Some(path) = editor.executable_path {
+    for editor in &editors {
+        let origin = if editor.launched_by_hub() { "  (Unity Hub)" } else { "" };
+        eprintln!("  PID {}  {}{origin}", editor.pid, editor.project_path.display());
+        if let Some(path) = editor.executable_path.as_ref() {
             eprintln!("    Executable: {}", path.display());
         }
     }
+    let strays = discovery::list_other_ucp_processes();
+    if !strays.is_empty() {
+        eprintln!();
+        output::print_warn(&format!("{} other ucp process(es) running:", strays.len()));
+        for stray in strays {
+            eprintln!(
+                "  PID {}  {}  ucp {}",
+                stray.pid,
+                format_age(stray.age_seconds),
+                stray.command
+            );
+        }
+        eprintln!("  A ucp that outlives its task keeps acting on the editor; stop it if nobody is waiting on it.");
+    }
     Ok(())
+}
+
+fn format_age(seconds: u64) -> String {
+    if seconds >= 3600 {
+        format!("{}h{:02}m", seconds / 3600, (seconds % 3600) / 60)
+    } else if seconds >= 60 {
+        format!("{}m{:02}s", seconds / 60, seconds % 60)
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn tail_lines(content: &str, lines: usize) -> String {

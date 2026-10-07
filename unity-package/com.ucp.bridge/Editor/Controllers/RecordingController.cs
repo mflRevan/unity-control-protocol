@@ -19,6 +19,7 @@ namespace UCP.Bridge
         private static RenderTexture s_target;
         private static Texture2D s_readback;
         private static RecordingSettings s_settings;
+        private static int s_lastBitrateKbps;
         private static Dictionary<string, object> s_lastResult;
         private static string s_state = "idle";
         private static string s_path;
@@ -178,6 +179,11 @@ namespace UCP.Bridge
             settings.Width = dimensions.width;
             settings.Height = dimensions.height;
             settings.SourceAspect = sourceAspect;
+            // Default bitrate scales with the pixel rate (about 0.2 bits per pixel per frame):
+            // the old flat 2 Mbps smeared macroblocks across anything above 960px with motion.
+            settings.BitrateKbps ??= Mathf.Clamp(
+                Mathf.RoundToInt(settings.Width.Value * settings.Height.Value * settings.Fps * 0.2f / 1000f), 2000, 50000);
+            s_lastBitrateKbps = settings.BitrateKbps.Value;
 
             ResolveOutputPaths(settings, out s_path, out s_tempPath);
             var parent = Path.GetDirectoryName(s_path);
@@ -239,7 +245,7 @@ namespace UCP.Bridge
                 frameRate.numerator = Mathf.RoundToInt(settings.Fps * 1000f);
                 frameRate.denominator = Mathf.RoundToInt((float)settings.Slowdown * 1000f);
             }
-            var bitrate = (uint)(settings.BitrateKbps * 1000);
+            var bitrate = (uint)((settings.BitrateKbps ?? 2000) * 1000);
             VideoTrackEncoderAttributes attributes;
             if (settings.Format == "webm")
             {
@@ -438,6 +444,8 @@ namespace UCP.Bridge
                 ["droppedFrames"] = s_droppedFrames,
                 ["size"] = size
             };
+            if (s_lastBitrateKbps > 0)
+                result["bitrateKbps"] = s_lastBitrateKbps;
             if (s_settings != null)
             {
                 result["view"] = s_settings.View;
@@ -471,7 +479,7 @@ namespace UCP.Bridge
                 Height = ReadNullableInt(p, "height"),
                 Fps = Mathf.Clamp(ReadInt(p, "fps", 15), 1, 60),
                 Format = ReadString(p, "format", "auto").ToLowerInvariant(),
-                BitrateKbps = Mathf.Clamp(ReadInt(p, "bitrateKbps", 2000), 128, 50000),
+                BitrateKbps = ReadNullableInt(p, "bitrateKbps") is int requested ? Mathf.Clamp(requested, 128, 50000) : (int?)null,
                 Overwrite = ReadBool(p, "overwrite", false),
                 Path = ReadString(p, "path", null),
                 Duration = ReadDouble(p, "duration", 0d),
@@ -603,7 +611,7 @@ namespace UCP.Bridge
                 s_state = "armed";
                 SubscribeTick();
                 if (s_armed.Trigger == "play-enter" && EditorApplication.isPlaying)
-                    EditorApplication.delayCall += StartArmedRecording;
+                    Deferred.Run(StartArmedRecording);
                 else if (s_armed.Trigger == "play-exit" && EditorApplication.isPlaying)
                 {
                     s_armed.ObservedPlayMode = true;
@@ -611,7 +619,7 @@ namespace UCP.Bridge
                 }
                 else if (s_armed.Trigger == "play-exit" && s_armed.ObservedPlayMode
                     && !EditorApplication.isPlayingOrWillChangePlaymode)
-                    EditorApplication.delayCall += StartArmedRecording;
+                    Deferred.Run(StartArmedRecording);
             }
             catch { SessionState.EraseString(ArmedSessionKey); }
         }
@@ -668,7 +676,7 @@ namespace UCP.Bridge
             public int? Height;
             public int Fps;
             public string Format;
-            public int BitrateKbps;
+            public int? BitrateKbps;
             public bool Overwrite;
             public string Path;
             public double Duration;

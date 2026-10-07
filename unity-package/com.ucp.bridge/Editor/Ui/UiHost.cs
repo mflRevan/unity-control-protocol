@@ -41,7 +41,8 @@ namespace UCP.Bridge
                 window.position = new Rect(80f, 80f, width, height);
                 window.ShowUtility();
                 window.EnsureContent();
-                window.Focus();
+                // No Focus(): the utility window renders and captures without being the active
+                // window, and focusing it would pull the whole editor in front of the terminal.
                 return window;
             }
             catch
@@ -106,7 +107,6 @@ namespace UCP.Bridge
         internal void Pump()
         {
             EnsureContent();
-            Focus();
             Repaint();
             EditorApplication.QueuePlayerLoopUpdate();
         }

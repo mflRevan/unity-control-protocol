@@ -25,7 +25,9 @@ namespace UCP.Bridge
 
         private static object HandleQuit(string paramsJson)
         {
-            EditorApplication.delayCall += () => EditorApplication.Exit(0);
+            // Not delayCall: that waits for an inspector update an unfocused editor never does.
+            // The short delay lets the response reach the caller before the process goes away.
+            Deferred.Run(() => EditorApplication.Exit(0), 0.3);
             return new { status = "ok", message = "Unity editor shutdown requested" };
         }
     }

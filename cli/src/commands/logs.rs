@@ -301,6 +301,14 @@ async fn stream_live_logs(
             }
             Some(_) => continue,
             None => {
+                // The stream only ends when the bridge goes away: a domain reload (reconnect) or
+                // the editor exiting (stop). Reconnecting never launches an editor, so a dead
+                // editor ends the stream here instead of turning into a relaunch loop.
+                if let Some(pid) = crate::editor_runtime::attached_pid() {
+                    if !crate::discovery::is_process_running(pid) {
+                        anyhow::bail!("Unity editor (pid {pid}) exited; the log stream ended");
+                    }
+                }
                 let (_, _, mut reconnected) = super::connect_client(ctx).await?;
                 received = drain_buffered_logs(
                     &mut reconnected,

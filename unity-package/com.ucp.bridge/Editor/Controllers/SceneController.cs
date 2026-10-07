@@ -146,8 +146,9 @@ namespace UCP.Bridge
             if (sceneView == null)
                 throw new System.InvalidOperationException("Unable to open Scene view");
 
+            // Show() docks or raises the view inside the editor; Focus() would also activate the
+            // editor window itself and steal the terminal's foreground.
             sceneView.Show();
-            sceneView.Focus();
             Selection.activeGameObject = target;
 
             var focusPoint = bounds.center;

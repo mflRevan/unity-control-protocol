@@ -8,6 +8,7 @@ pub mod editor;
 pub mod exec;
 pub mod files;
 pub mod frame;
+pub mod hot_reload;
 pub mod install;
 pub mod logs;
 pub mod material;
@@ -58,6 +59,17 @@ pub struct Context {
     pub verbose: bool,
     pub bridge_update_policy: config::BridgeUpdatePolicy,
     pub dialog_policy: config::StartupDialogPolicy,
+    /// Whether this invocation was asked to launch an editor (`ucp open`, `ucp editor open`,
+    /// `ucp editor restart`) or merely to use one. Automatic launches are convenience and
+    /// back off when the previous editor died young; explicit ones always proceed.
+    pub launch_intent: LaunchIntent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LaunchIntent {
+    #[default]
+    Auto,
+    Explicit,
 }
 
 /// Standard post-action lifecycle policy for Unity-facing commands.
@@ -326,6 +338,11 @@ pub enum Command {
         #[command(subcommand)]
         action: shader::ShaderAction,
     },
+    /// Patch edited C# method bodies into the running editor without a domain reload
+    HotReload {
+        #[command(subcommand)]
+        action: hot_reload::HotReloadAction,
+    },
     /// Frame debugger/profiler export helpers
     Frame {
         #[command(subcommand)]
@@ -486,6 +503,20 @@ impl TargetArgs {
 
     pub fn is_set(&self) -> bool {
         self.id.is_some() || self.path.is_some() || self.name.is_some()
+    }
+}
+
+impl std::fmt::Display for TargetArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(id) = self.id {
+            write!(f, "{id}")
+        } else if let Some(path) = &self.path {
+            write!(f, "{path}")
+        } else if let Some(name) = &self.name {
+            write!(f, "{name}")
+        } else {
+            write!(f, "?")
+        }
     }
 }
 
@@ -650,6 +681,9 @@ pub async fn connect_client(ctx: &Context) -> anyhow::Result<(PathBuf, LockFile,
         if let Ok(mut client) = BridgeClient::connect(&lock).await {
             client.set_request_timeout(request_timeout(ctx));
             if let Ok(handshake) = client.handshake().await {
+                // From here on this invocation is bound to that editor: if it dies, the
+                // command fails instead of launching a replacement (see editor_runtime).
+                editor_runtime::note_attached(lock.pid);
                 if editor_compiling(&handshake) {
                     // A request sent now would race the domain reload that ends the compile and
                     // come back as a dropped connection. Wait for the bridge to come back (or
@@ -793,11 +827,11 @@ pub async fn await_unity_lifecycle(
 
     let log_status = fetch_lifecycle_log_status(project).await;
 
-    // Surface the console only when the wait turned up errors or exceptions; the editor state
-    // line already carries the counts, and "0 entries" after every mutation is noise.
+    // Surface the console only when THIS command produced errors; a project with old errors
+    // sitting in its console must not get the whole summary after every mutation.
     if !ctx.json {
         if let Some(status) = &log_status {
-            if log_status_has_failures(status) {
+            if crate::editor_state::command_produced_errors() && log_status_has_failures(status) {
                 crate::commands::logs::print_status(status, ctx);
             }
         }
@@ -884,6 +918,17 @@ pub async fn enforce_active_scene_guard(
         "{}",
         format_active_scene_guard_message(command_label, &summary)
     );
+}
+
+/// Whether the active scene has unsaved changes; false when the bridge cannot say.
+pub async fn active_scene_is_dirty(client: &mut BridgeClient) -> bool {
+    client
+        .call("scene/dirty-summary", serde_json::json!({}))
+        .await
+        .ok()
+        .and_then(|value| serde_json::from_value::<ActiveSceneDirtySummary>(value).ok())
+        .map(|summary| summary.is_dirty)
+        .unwrap_or(false)
 }
 
 pub async fn enforce_active_scene_guard_for_project(
@@ -1033,7 +1078,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Editor { action } => editor::run(action, &ctx).await,
         Command::Bridge { action } => bridge::run(action, &ctx).await,
         Command::Open => editor::run(editor::EditorAction::Open, &ctx).await,
-        Command::Close => editor::run(editor::EditorAction::Close { force: false }, &ctx).await,
+        Command::Close => editor::run(editor::EditorAction::Close { force: false, discard_changes: false }, &ctx).await,
         Command::Play {
             no_save,
             keep_untitled,
@@ -1093,6 +1138,7 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
         Command::Object { action } => object::run(action, &ctx).await,
         Command::Asset { action } => asset::run(action, &ctx).await,
         Command::Shader { action } => shader::run(action, &ctx).await,
+        Command::HotReload { action } => hot_reload::run(action, &ctx).await,
         Command::Frame { action } => match action {
             FrameAction::Capture { out } => frame::capture(out, &ctx).await,
         },

@@ -90,7 +90,7 @@ namespace UCP.Bridge
 
         private static void ExecuteWhenReady(ExecutionSettings settings, TestMode mode, double deadline)
         {
-            EditorApplication.delayCall += () =>
+            Deferred.Run(() =>
             {
                 var stillInPlayMode = EditorApplication.isPlaying || EditorApplication.isPlayingOrWillChangePlaymode;
                 if (mode == TestMode.EditMode && stillInPlayMode)
@@ -129,7 +129,7 @@ namespace UCP.Bridge
                 }
 
                 s_api.Execute(settings);
-            };
+            });
         }
 
         private class TestResultCollector : ICallbacks

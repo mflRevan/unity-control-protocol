@@ -177,6 +177,18 @@ async fn async_main() -> anyhow::Result<()> {
             .or(cli_settings.bridge_update_policy)
             .unwrap_or_default(),
         dialog_policy: cli.dialog_policy.unwrap_or_default(),
+        launch_intent: match &cli.command {
+            commands::Command::Open => commands::LaunchIntent::Explicit,
+            commands::Command::Editor { action }
+                if matches!(
+                    action,
+                    commands::editor::EditorAction::Open | commands::editor::EditorAction::Restart { .. }
+                ) =>
+            {
+                commands::LaunchIntent::Explicit
+            }
+            _ => commands::LaunchIntent::Auto,
+        },
     };
 
     if !ctx.json && !matches!(cli.command, commands::Command::Doctor) {
@@ -323,9 +335,9 @@ mod tests {
 
         match cli.command {
             commands::Command::Object {
-                action: commands::object::ObjectAction::GetChildren { id, depth },
+                action: commands::object::ObjectAction::GetChildren { target, depth },
             } => {
-                assert_eq!(id, -42);
+                assert_eq!(target.id, Some(-42));
                 assert_eq!(depth, 2);
             }
             _ => panic!("unexpected command variant"),
@@ -522,13 +534,13 @@ mod tests {
             commands::Command::Object {
                 action:
                     commands::object::ObjectAction::SetProperty {
-                        id,
+                        target,
                         property,
                         value,
                         ..
                     },
             } => {
-                assert_eq!(id, -5);
+                assert_eq!(target.id, Some(-5));
                 assert_eq!(property, "m_Mass");
                 assert_eq!(value, "-55730");
             }
