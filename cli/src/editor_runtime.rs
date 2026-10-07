@@ -392,18 +392,28 @@ pub async fn close_editor(
     let mut graceful = false;
 
     // Right after a compile, a test run, or play mode the bridge is mid-restart; give it a
-    // bounded moment to come back so the quit can be the clean in-editor one.
-    let _ = crate::bridge_lifecycle::wait_for_bridge(
-        project,
-        discovery::read_lock_file(project).ok().as_ref(),
-        ctx.timeout.min(60),
-        ctx.dialog_policy,
-        crate::bridge_lifecycle::WaitMode::RestartOptional,
-    )
-    .await;
+    // bounded moment to come back so the quit can be the clean in-editor one. A bridge that
+    // answers with a stalled main thread (modal dialog, hung operation) gets no such wait and no
+    // quit request: neither would ever run, and the terminate below is the recovery path.
+    let probe = commands::probe_bridge(project).await;
+    if probe.as_ref().is_none_or(|info| commands::editor_compiling(info)) {
+        let _ = crate::bridge_lifecycle::wait_for_bridge(
+            project,
+            discovery::read_lock_file(project).ok().as_ref(),
+            ctx.timeout.min(60),
+            ctx.dialog_policy,
+            crate::bridge_lifecycle::WaitMode::RestartOptional,
+        )
+        .await;
+    }
     if let Ok(lock) = discovery::read_lock_file(project) {
         if let Ok(mut client) = BridgeClient::connect(&lock).await {
-            if client.handshake().await.is_ok()
+            let responsive = client
+                .handshake()
+                .await
+                .map(|info| commands::main_thread_responsive(&info))
+                .unwrap_or(false);
+            if responsive
                 && client
                     .call("editor/quit", serde_json::json!({}))
                     .await

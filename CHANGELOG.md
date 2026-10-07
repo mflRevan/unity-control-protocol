@@ -67,7 +67,10 @@
 - `exec run --record` uses the same size-scaled bitrate default as `ucp record` instead of a flat
   2 Mbps.
 - `editor close` waits up to a minute for a bridge that is mid-restart (after tests, a compile,
-  or play mode) before falling back to terminating the process.
+  or play mode) before falling back to terminating the process. When the bridge answers but the
+  editor's main thread is stalled (a modal dialog, a hung operation), `close` and `restart` say so
+  at once instead of waiting on requests that cannot run; `--force` terminates the process right
+  away. A matrix run had spent a quarter of an hour in that close.
 - `ucp play` and `ucp scene load` save a dirty active scene first (and discard a dirty untitled one
   unless `--keep-untitled`), as their `--no-save` flags always implied; `--no-save` refuses with a
   non-zero exit code instead.

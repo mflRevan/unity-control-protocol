@@ -933,6 +933,16 @@ pub async fn active_scene_dirty_state(client: &mut BridgeClient) -> Option<(bool
 }
 
 
+/// One quick handshake with the bridge, or `None` when nothing answers. Lets a command find out
+/// whether the editor's main thread can run a request at all before it waits on one.
+pub async fn probe_bridge(project: &std::path::Path) -> Option<serde_json::Value> {
+    let lock = discovery::read_lock_file(project).ok()?;
+    let mut client = BridgeClient::connect(&lock).await.ok()?;
+    let handshake = client.handshake().await.ok();
+    client.close().await;
+    handshake
+}
+
 pub async fn enforce_active_scene_guard_for_project(
     project: &std::path::Path,
     policy: ActiveSceneGuardPolicy,

@@ -173,21 +173,50 @@ async fn open(ctx: &Context) -> anyhow::Result<()> {
 async fn close(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     if !discard_changes {
-        // Right after tests, a compile, or play mode the bridge is mid-restart; the dirty-scene
-        // check would otherwise fail on a closed connection instead of answering.
-        let _ = crate::bridge_lifecycle::wait_for_bridge(
-            &project,
-            crate::discovery::read_lock_file(&project).ok().as_ref(),
-            ctx.timeout.min(60),
-            ctx.dialog_policy,
-            crate::bridge_lifecycle::WaitMode::RestartOptional,
-        )
-        .await;
-        super::enforce_active_scene_guard_for_project(
-            &project,
-            super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
-        )
-        .await?;
+        match super::probe_bridge(&project).await {
+            // The bridge answers but the editor's main thread is not ticking: a modal dialog or a
+            // hung operation. No request will run, so do not wait on one; say so, or terminate.
+            Some(info) if !super::main_thread_responsive(&info) && !super::editor_compiling(&info) => {
+                let age = super::main_thread_tick_age_ms(&info)
+                    .map(|ms| format!(" for {} s", ms / 1000))
+                    .unwrap_or_default();
+                if !force {
+                    anyhow::bail!(
+                        "Unity's main thread is not responding{age} (a modal dialog, or a hung operation), \
+                         so the editor can neither save nor quit cleanly. Answer the dialog with \
+                         `ucp editor dialog`, or run `ucp editor close --force` to terminate the process; \
+                         unsaved changes are then lost."
+                    );
+                }
+                output::print_warn(&format!(
+                    "Unity's main thread is not responding{age}; skipping the dirty-scene check and terminating the process"
+                ));
+            }
+            Some(info) if super::main_thread_responsive(&info) => {
+                super::enforce_active_scene_guard_for_project(
+                    &project,
+                    super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
+                )
+                .await?;
+            }
+            _ => {
+                // Right after tests, a compile, or play mode the bridge is mid-restart; give it a
+                // bounded moment so the dirty-scene check can answer instead of failing.
+                let _ = crate::bridge_lifecycle::wait_for_bridge(
+                    &project,
+                    crate::discovery::read_lock_file(&project).ok().as_ref(),
+                    ctx.timeout.min(60),
+                    ctx.dialog_policy,
+                    crate::bridge_lifecycle::WaitMode::RestartOptional,
+                )
+                .await;
+                super::enforce_active_scene_guard_for_project(
+                    &project,
+                    super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
+                )
+                .await?;
+            }
+        }
     }
     let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
 
@@ -214,21 +243,50 @@ async fn close(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Res
 async fn restart(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     if !discard_changes {
-        // Right after tests, a compile, or play mode the bridge is mid-restart; the dirty-scene
-        // check would otherwise fail on a closed connection instead of answering.
-        let _ = crate::bridge_lifecycle::wait_for_bridge(
-            &project,
-            crate::discovery::read_lock_file(&project).ok().as_ref(),
-            ctx.timeout.min(60),
-            ctx.dialog_policy,
-            crate::bridge_lifecycle::WaitMode::RestartOptional,
-        )
-        .await;
-        super::enforce_active_scene_guard_for_project(
-            &project,
-            super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
-        )
-        .await?;
+        match super::probe_bridge(&project).await {
+            // The bridge answers but the editor's main thread is not ticking: a modal dialog or a
+            // hung operation. No request will run, so do not wait on one; say so, or terminate.
+            Some(info) if !super::main_thread_responsive(&info) && !super::editor_compiling(&info) => {
+                let age = super::main_thread_tick_age_ms(&info)
+                    .map(|ms| format!(" for {} s", ms / 1000))
+                    .unwrap_or_default();
+                if !force {
+                    anyhow::bail!(
+                        "Unity's main thread is not responding{age} (a modal dialog, or a hung operation), \
+                         so the editor can neither save nor quit cleanly. Answer the dialog with \
+                         `ucp editor dialog`, or run `ucp editor restart --force` to terminate the process; \
+                         unsaved changes are then lost."
+                    );
+                }
+                output::print_warn(&format!(
+                    "Unity's main thread is not responding{age}; skipping the dirty-scene check and terminating the process"
+                ));
+            }
+            Some(info) if super::main_thread_responsive(&info) => {
+                super::enforce_active_scene_guard_for_project(
+                    &project,
+                    super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
+                )
+                .await?;
+            }
+            _ => {
+                // Right after tests, a compile, or play mode the bridge is mid-restart; give it a
+                // bounded moment so the dirty-scene check can answer instead of failing.
+                let _ = crate::bridge_lifecycle::wait_for_bridge(
+                    &project,
+                    crate::discovery::read_lock_file(&project).ok().as_ref(),
+                    ctx.timeout.min(60),
+                    ctx.dialog_policy,
+                    crate::bridge_lifecycle::WaitMode::RestartOptional,
+                )
+                .await;
+                super::enforce_active_scene_guard_for_project(
+                    &project,
+                    super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),
+                )
+                .await?;
+            }
+        }
     }
     let outcome = editor_runtime::close_editor(&project, ctx, force).await?;
 
