@@ -52,6 +52,18 @@ pub fn current() -> Option<Value> {
         .and_then(|m| m.lock().ok().and_then(|s| s.clone()))
 }
 
+/// Whether the most recent bridge response reported console errors produced by that request
+/// (as opposed to errors that were already sitting in the console before it ran).
+pub fn command_produced_errors() -> bool {
+    current()
+        .and_then(|state| state.get("console").cloned())
+        .map(|console| {
+            console.get("newErrors").and_then(Value::as_u64).unwrap_or(0) > 0
+                || console.get("newExceptions").and_then(Value::as_u64).unwrap_or(0) > 0
+        })
+        .unwrap_or(false)
+}
+
 pub fn modal() -> Option<ModalNote> {
     MODAL
         .get()
@@ -115,8 +127,14 @@ pub fn format_line(state: Option<&Value>, modal: Option<&ModalNote>) -> Option<S
             let warnings = count(console, "warnings");
             let new_errors = count(console, "newErrors");
             let new_warnings = count(console, "newWarnings");
+            // Only non-zero counts are spelled out: "0 errors" made every success line match a
+            // script's `grep error`.
             let mut text = if errors == 0 && warnings == 0 {
                 "console clean".to_string()
+            } else if errors == 0 {
+                format!("console {warnings} warning{}", plural(warnings))
+            } else if warnings == 0 {
+                format!("console {errors} error{}", plural(errors))
             } else {
                 format!(
                     "console {errors} error{}, {warnings} warning{}",
@@ -276,7 +294,7 @@ mod tests {
             format_line(Some(&state), Some(&modal)).as_deref(),
             Some(
                 "[editor] entering play · scene Untitled (untitled, dirty) · \
-                 console 0 errors, 1 warning (+1 warning from this command) · importing assets · \
+                 console 1 warning (+1 warning from this command) · importing assets · \
                  prefab stage Assets/Prefabs/Door.prefab · MODAL \"Save Scene?\" [Save | Don't Save | Cancel]"
             )
         );

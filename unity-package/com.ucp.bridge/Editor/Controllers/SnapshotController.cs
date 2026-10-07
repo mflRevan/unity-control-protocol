@@ -25,6 +25,10 @@ namespace UCP.Bridge
             var maxDepth = 0;
             if (p != null && p.TryGetValue("depth", out var d))
                 maxDepth = System.Convert.ToInt32(d);
+            // A name filter is a search: with the default depth it would only ever see roots,
+            // and "nothing matched" for an object three levels down is wrong, not lean.
+            if (!string.IsNullOrEmpty(filter) && maxDepth == 0)
+                maxDepth = 64;
 
             var scene = SceneManager.GetActiveScene();
             var roots = scene.GetRootGameObjects();
@@ -51,6 +55,16 @@ namespace UCP.Bridge
                     ["rootCount"] = roots.Length
                 }
             };
+        }
+
+        /// <summary>"Root/Child/Leaf": the address that survives reloads, unlike an instance id.</summary>
+        private static string HierarchyPath(GameObject go)
+        {
+            var names = new List<string>();
+            for (var t = go.transform; t != null; t = t.parent)
+                names.Add(t.name);
+            names.Reverse();
+            return string.Join("/", names);
         }
 
         private static bool SerializeGameObject(
@@ -88,6 +102,7 @@ namespace UCP.Bridge
             {
                 ["instanceId"] = go.GetId(),
                 ["name"] = go.name,
+                ["path"] = HierarchyPath(go),
                 ["active"] = go.activeSelf,
                 ["tag"] = go.tag,
                 ["layer"] = go.layer,
@@ -153,17 +168,15 @@ namespace UCP.Bridge
         private static object HandleGetChildren(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
 
-            long instanceId = Convert.ToInt64(idObj);
             int maxDepth = 1;
             if (p.TryGetValue("depth", out var depthObj))
                 maxDepth = Math.Max(1, Convert.ToInt32(depthObj));
 
-            var go = FindByInstanceId(instanceId);
-            if (go == null)
-                throw new Exception($"GameObject not found: {instanceId}");
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
 
             var children = new List<object>();
             int objectCount = 0;

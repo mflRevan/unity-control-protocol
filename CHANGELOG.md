@@ -1,5 +1,80 @@
 # Changelog
 
+## [0.7.0] - Unreleased
+
+### Added
+
+- `ucp hot-reload apply <files>`: compile edited scripts on their own with Unity's bundled C#
+  compiler and patch their method bodies into the running editor, in edit mode or play mode,
+  in about a second and without a domain reload. Object state and play mode survive; the
+  response lists what was patched and which edits need `ucp compile` (fields, types,
+  signatures). `hot-reload status` and `hot-reload revert` show and drop the patches; while
+  any is live, auto refresh is held so a window focus cannot recompile underneath them, and a
+  play-mode domain reload re-applies them. The bridge now ships Lib.Harmony 2.2.2 (MIT) as an
+  editor-only plugin for this.
+- `asset import-settings write` on a texture field that a per-platform override shadows
+  (`m_MaxTextureSize`, `m_TextureFormat`, ...) reports the overriding platforms in
+  `platformOverrides` and prints a warning, instead of silently changing only the default.
+- `asset write` and `write-batch` accept a colour as `[r,g,b,a]`, as the `{"r":..,"g":..,"b":..,"a":..}`
+  object `asset read` prints, or as `"#RRGGBBAA"`; an unsupported shape is a reported error.
+- `ucp asset refresh [path] [--no-wait]`: import files written outside the editor, or one path,
+  and wait for the import to settle. `import-settings` commands on a freshly written file import
+  it first instead of failing with "no asset importer".
+- Every `object` command takes `--path Root/Child/Leaf`, `--name`, or `--id`; `scene snapshot`
+  entries carry their `path`, and `--filter` searches the whole hierarchy instead of the roots.
+- `object set-property` and `set-active` read the applied value back (`value`,
+  `activeInHierarchy`) and say when the edit happened in play mode.
+- `ucp editor ps` lists other `ucp` processes with their age and command line; `ucp doctor` warns
+  about ones older than ten minutes.
+- `editor close --discard-changes` and `editor restart --discard-changes`: the explicit way past
+  a dirty scene. `--force` alone still refuses, since the unsaved work is the whole point.
+
+### Fixed
+
+- `editor close` and `editor restart` quit an unfocused editor. The bridge deferred the quit with
+  `EditorApplication.delayCall`, which only fires after an inspector update, and an idle editor
+  nobody is looking at never performs one; the close reported "still closing" and the editor
+  stayed. The same deferral drove armed recordings and queued test runs, and all three now use
+  an update-driven timer that also queues a player-loop tick.
+- A `ucp` that launches the editor from inside a shell pipeline (`ucp open | grep`, a script
+  line ending in `| head`) no longer hangs the pipeline for as long as the editor lives. On
+  Windows the editor inherited ucp's pipe handles even though its own stdio was nulled; ucp now
+  clears the inherit flag on its standard handles before the launch.
+
+### Changed
+
+- ucp no longer brings the Unity window to the foreground. The bridge-ready and settle waits
+  used to nudge the editor every two to ten seconds, which was the main reason Unity kept
+  stealing focus from the terminal and the IDE during compiles and reloads. The bridge keeps an
+  unfocused editor processing by queueing player-loop updates while work is pending; the UI
+  harness and `scene focus` no longer activate the editor either. `UCP_FOCUS_EDITOR=1` restores
+  the old nudge.
+- One invocation launches at most one editor, and never after it attached to one: a command
+  bound to an editor that exits fails with "the editor exited" instead of starting another. A
+  stray `logs --follow` left behind after a crash used to relaunch the editor on every reconnect,
+  for hours. An editor ucp launched that dies within two minutes also stops automatic launches
+  (`ucp open` always proceeds), and `ucp open` keeps the previous log as `editor.prev.log`.
+- Editors started by Unity Hub (`-createProject` as well as `-projectPath`), from a file
+  association, or by hand are discovered and adopted: lifecycle commands work on them,
+  `editor status` says how they were launched (`launchedBy` in `--json`), and `editor logs` and
+  `status` report Unity's per-user `Editor.log` for an editor started without `-logFile` instead
+  of a stale project log. Launching is refused while Unity holds the project's `Temp/UnityLockfile`.
+- `ucp play` and `ucp scene load` save a dirty active scene first (and discard a dirty untitled one
+  unless `--keep-untitled`), as their `--no-save` flags always implied; `--no-save` refuses with a
+  non-zero exit code instead.
+- `material set-property`, `set-keyword`, and `set-shader` re-derive pipeline keywords (HDRP and
+  URP helpers, property drawers elsewhere) and save the asset; the response reports the value
+  read back, which helper ran, and `saved`.
+- `spatial bounds` includes inactive children and skips renderers with an empty box, so a parent
+  whose meshes sit on children no longer reports a zero-size box at its pivot.
+- `record` picks a bitrate from resolution and frame rate (about 0.2 bits per pixel per frame,
+  at least 2 Mbps) instead of a flat 2 Mbps; the response reports `bitrateKbps`.
+- The `[editor]` line spells out only non-zero console counts ("console 2 warnings"), so a
+  success line no longer contains the word "errors"; the console summary after a mutation appears
+  only when that command produced errors, not whenever old errors sit in the console.
+- `shader errors` classifies diagnostics by Unity's severity enum, so warnings no longer print as
+  `[error]`.
+
 ## [0.6.4] - 2026-09-11
 
 ### Added

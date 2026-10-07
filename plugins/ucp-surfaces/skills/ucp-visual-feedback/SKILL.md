@@ -65,6 +65,7 @@ ucp view orbit --id 46894 --count 8 --elevation 25 --max-edge 384 -o orbit.png
 ucp record capture --duration 5 -o clip.mp4                    # block until the file is final
 ucp record capture --view scene --duration 8 --max-edge 640 -o scene.webm
 ucp record capture --duration 6 --slowdown 6 -o for-the-model.mp4
+ucp record capture --duration 8 --width 1920 --height 1080 --fps 30 -o hq.mp4   # bitrate scales with size; --bitrate-kbps overrides
 ucp record start --duration 30 -o session.mp4 --max-duration 120   # detached; survives this CLI call
 ucp play && ucp stop
 ucp record stop                                                 # finalize (or cancel an armed trigger)

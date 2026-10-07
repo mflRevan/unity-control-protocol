@@ -130,14 +130,135 @@ namespace UCP.Bridge
             var propType = shader.GetPropertyType(propIdx);
             Undo.RecordObject(mat, $"UCP Set Material {propName}");
             WriteMaterialValue(mat, propName, propType, p["value"]);
-            EditorUtility.SetDirty(mat);
+            var finish = FinishMaterialEdit(mat);
 
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
                 ["material"] = mat.name,
-                ["property"] = propName
+                ["property"] = propName,
+                ["value"] = ReadMaterialValue(mat, propName, propType),
+                ["keywordsReset"] = finish.keywordsReset,
+                ["saved"] = finish.saved
             };
+        }
+
+        /// <summary>
+        /// What the Inspector does after an edit and a bare property write skips: re-derive the
+        /// shader keywords that depend on property values (HDRP and URP keep a lot of state there,
+        /// so without this a toggled `_LayerCount` or `_VertexColorMode` has no visible effect),
+        /// then write the asset to disk so the change survives the session.
+        /// </summary>
+        private static (string keywordsReset, bool saved) FinishMaterialEdit(Material mat, bool resetKeywords = true)
+        {
+            EditorUtility.SetDirty(mat);
+            string keywordsReset = null;
+            if (resetKeywords)
+                keywordsReset = ResetPipelineKeywords(mat);
+            var saved = false;
+            if (AssetDatabase.Contains(mat))
+            {
+                AssetDatabase.SaveAssetIfDirty(mat);
+                saved = true;
+            }
+            return (keywordsReset, saved);
+        }
+
+        // The pipeline editor assemblies are not referenced by the bridge (it must load without
+        // them), so the helpers that re-derive keywords from property values are found by name.
+        private static readonly (string type, string method)[] KeywordResetters =
+        {
+            ("UnityEditor.Rendering.HighDefinition.HDShaderUtils", "ResetMaterialKeywords"),
+            ("UnityEditor.Rendering.Universal.ShaderUtils", "ResetMaterialKeywords"),
+            ("Unity.Rendering.Universal.ShaderUtils", "ResetMaterialKeywords"),
+        };
+
+        /// <returns>The helper that ran, or "propertyDrawers" for the generic fallback.</returns>
+        private static string ResetPipelineKeywords(Material mat)
+        {
+            foreach (var (typeName, methodName) in KeywordResetters)
+            {
+                var type = FindLoadedType(typeName);
+                if (type == null)
+                    continue;
+                var method = type.GetMethod(methodName,
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static,
+                    null, new[] { typeof(Material) }, null);
+                if (method == null)
+                    continue;
+                try
+                {
+                    method.Invoke(null, new object[] { mat });
+                    return type.Name + "." + methodName;
+                }
+                catch (Exception)
+                {
+                    // A shader this pipeline helper does not own throws; fall through to the next.
+                }
+            }
+            var urp = TryUrpUpdateMaterial(mat);
+            if (urp == null)
+                return "ShaderUtils.UpdateMaterial";
+            if (urp != "no URP")
+                return "propertyDrawers (URP helper failed: " + urp + ")";
+            // Built-in pipeline and custom shaders: property drawers own the keyword rules.
+            MaterialEditor.ApplyMaterialPropertyDrawers(mat);
+            return "propertyDrawers";
+        }
+
+        /// <summary>
+        /// URP has no public one-call reset; its internal
+        /// <c>ShaderUtils.UpdateMaterial(Material, MaterialUpdateType.ModifiedMaterial, ShaderID)</c>
+        /// is what the Lit/Unlit inspectors run after an edit.
+        /// </summary>
+        private static string TryUrpUpdateMaterial(Material mat)
+        {
+            // URP 17 moved the class to Unity.Rendering.Universal; older releases use UnityEditor.*.
+            var utils = FindLoadedType("Unity.Rendering.Universal.ShaderUtils")
+                ?? FindLoadedType("UnityEditor.Rendering.Universal.ShaderUtils");
+            if (utils == null)
+                return "no URP";
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+            var getShaderId = utils.GetMethod("GetShaderID", flags, null, new[] { typeof(Shader) }, null);
+            System.Reflection.MethodInfo update = null;
+            foreach (var candidate in utils.GetMethods(flags))
+            {
+                if (candidate.Name != "UpdateMaterial")
+                    continue;
+                var parameters = candidate.GetParameters();
+                if (parameters.Length == 3 && parameters[0].ParameterType == typeof(Material) && parameters[2].ParameterType.Name == "ShaderID")
+                {
+                    update = candidate;
+                    break;
+                }
+            }
+            if (update == null || getShaderId == null)
+                return "UpdateMaterial/GetShaderID not found on " + utils.Assembly.GetName().Name;
+            try
+            {
+                var updateType = Enum.Parse(update.GetParameters()[1].ParameterType, "ModifiedMaterial");
+                var shaderId = getShaderId.Invoke(null, new object[] { mat.shader });
+                update.Invoke(null, new[] { mat, updateType, shaderId });
+                return null;
+            }
+            catch (Exception e)
+            {
+                return (e.InnerException ?? e).Message;
+            }
+        }
+
+        private static Type FindLoadedType(string fullName)
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type type = null;
+                try { type = assembly.GetType(fullName, false); }
+                catch (Exception) { /* dynamic or broken assembly */ }
+                if (type != null)
+                    return type;
+            }
+            return null;
         }
 
         private static object HandleGetKeywords(string paramsJson)
@@ -171,14 +292,15 @@ namespace UCP.Bridge
                 mat.EnableKeyword(keyword);
             else
                 mat.DisableKeyword(keyword);
-            EditorUtility.SetDirty(mat);
+            var finish = FinishMaterialEdit(mat, resetKeywords: false);
 
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
                 ["material"] = mat.name,
                 ["keyword"] = keyword,
-                ["enabled"] = enabled
+                ["enabled"] = enabled,
+                ["saved"] = finish.saved
             };
         }
 
@@ -196,7 +318,7 @@ namespace UCP.Bridge
 
             Undo.RecordObject(mat, "UCP Set Shader");
             mat.shader = shader;
-            EditorUtility.SetDirty(mat);
+            FinishMaterialEdit(mat);
 
             return new Dictionary<string, object>
             {

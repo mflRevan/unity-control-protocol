@@ -52,7 +52,9 @@ This policy is a core architectural rule, not a UX nicety. A mutating command sh
 The same policy now also distinguishes between scene-editing mutations and scene-disruptive mutations:
 
 - **Scene-editing mutations**: object, prefab, and scene-lighting operations can intentionally leave the active scene dirty. These surfaces should expose an explicit `--save` option rather than silently persisting scene changes.
-- **Scene-disruptive mutations**: commands that can close the editor, switch scenes, enter play mode, trigger recompilation/domain reloads, or kick off package/build-target/define refresh flows must preflight the active scene first. If the active scene is dirty, they should fail with a concise scene-change summary instead of letting Unity show its native save dialog.
+- **Scene-disruptive mutations**: commands that can close the editor, switch scenes, enter play mode, trigger recompilation/domain reloads, or kick off package/build-target/define refresh flows must preflight the active scene first. If the active scene is dirty, they either save it through the bridge's modal-safe path (`play`, `scene load`: a dirty untitled scene is discarded unless `--keep-untitled`) or fail with a concise scene-change summary (`compile`, `close`, `restart`, package and build-target changes, and every command run with `--no-save`). Unity's native save dialog is never allowed to appear; `close --discard-changes` is the explicit way past it.
+
+The editor launch policy is part of the same contract. One CLI invocation launches at most one editor, and never after it has attached to one: a command bound to an editor that exits fails with "the editor exited" rather than starting another (a stray `logs --follow` used to relaunch a crashed editor forever). Launches are also refused while Unity holds the project's `Temp/UnityLockfile`, and automatic launches pause for two minutes after an editor ucp started died young; `ucp open` is the explicit override. Editors started by Unity Hub (`-projectPath` or `-createProject`), by file association, or by hand are discovered and adopted, with `editor logs` falling back to Unity's per-user `Editor.log`. ucp never brings the Unity window to the foreground (`UCP_FOCUS_EDITOR=1` restores the old nudge); the bridge keeps an unfocused editor processing by queueing player-loop updates while work is pending.
 
 That separation is a core operability contract for autonomous Unity work: edits may stay unsaved by default, but disruptive transitions must never surprise the user with an unmanaged modal.
 
@@ -216,6 +218,22 @@ The Unity package should continue to emphasize:
 - object identity goes through `UnityObjectCompat` only: ids are `long` on the wire, backed by
   32-bit instance ids up to 6000.4 and 64-bit `EntityId` from 6000.5, and nothing outside that
   class may call `GetInstanceID()` or truncate an id to `int`
+
+- deferred main-thread work goes through `Deferred.Run(action, delaySeconds)`, never
+  `EditorApplication.delayCall`: delayCall fires after an inspector update, which an unfocused
+  idle editor never performs now that ucp does not raise the window, so a quit or a recording
+  queued that way waits for a mouse move. `Deferred` runs on `EditorApplication.update` and
+  queues a player-loop tick so it fires promptly in the background.
+- hot reload (`Editor/HotReload/HotReloadController.cs`) is the one place that patches live
+  code: it compiles the given files out of process with Unity's bundled Roslyn against the
+  loaded assemblies, loads the result as a side assembly, and installs Harmony prefixes
+  (emitted with Reflection.Emit) that forward to the new bodies when the instance field layout
+  is unchanged. It holds `AssetDatabase.DisallowAutoRefresh` while patches are live, records
+  the patched files in `SessionState` so a non-rebuild domain reload (play mode entry) re-applies
+  them, and drops them when the script assemblies were rebuilt. The bundled `Editor/Plugins/
+  0Harmony.dll` must stay the classic Lib.Harmony 2.2.x build: the 2.3 "fat" builds fail Unity's
+  assembly hasher (`Read out of bounds` while hashing type references) and the whole bridge
+  then fails to load.
 
 The bridge should stay pragmatic and reliable. It should not become harder to evolve than the editor workflows it is meant to automate.
 

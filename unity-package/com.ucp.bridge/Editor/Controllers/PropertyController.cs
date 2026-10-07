@@ -23,12 +23,12 @@ namespace UCP.Bridge
         private static object HandleGetFields(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
 
             var componentType = p.TryGetValue("component", out var cObj) ? cObj?.ToString() : null;
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
 
             if (componentType != null)
             {
@@ -65,15 +65,15 @@ namespace UCP.Bridge
         private static object HandleGetProperty(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("component", out var cObj) || cObj == null)
                 throw new ArgumentException("Missing 'component' parameter");
             if (!p.TryGetValue("property", out var propObj) || propObj == null)
                 throw new ArgumentException("Missing 'property' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
             var comp = FindComponent(go, cObj.ToString());
             string propName = propObj.ToString();
 
@@ -91,8 +91,8 @@ namespace UCP.Bridge
         private static object HandleSetProperty(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("component", out var cObj) || cObj == null)
                 throw new ArgumentException("Missing 'component' parameter");
             if (!p.TryGetValue("property", out var propObj) || propObj == null)
@@ -100,8 +100,8 @@ namespace UCP.Bridge
             if (!p.ContainsKey("value"))
                 throw new ArgumentException("Missing 'value' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
             var comp = FindComponent(go, cObj.ToString());
             string propName = propObj.ToString();
 
@@ -111,25 +111,35 @@ namespace UCP.Bridge
             UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             SceneChangeTracker.RecordGameObjectChange(go, comp.GetType().Name);
 
+            // Read back: a value a script overwrites every frame, or a setter that clamps, shows
+            // up here instead of as a silently ignored write.
+            object applied = null;
+            string appliedType = null;
+            try { applied = GetPropertyValue(comp, propName, out appliedType); }
+            catch (Exception) { /* not every writable path is readable; the write itself succeeded */ }
+
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
                 ["instanceId"] = instanceId,
                 ["component"] = cObj.ToString(),
-                ["property"] = propName
+                ["property"] = propName,
+                ["value"] = applied,
+                ["type"] = appliedType,
+                ["playMode"] = EditorApplication.isPlaying
             };
         }
 
         private static object HandleSetActive(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("active", out var activeObj))
                 throw new ArgumentException("Missing 'active' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
 
             Undo.RecordObject(go, "UCP Set Active");
             go.SetActive(Convert.ToBoolean(activeObj));
@@ -141,20 +151,22 @@ namespace UCP.Bridge
             {
                 ["status"] = "ok",
                 ["instanceId"] = instanceId,
-                ["active"] = go.activeSelf
+                ["active"] = go.activeSelf,
+                ["activeInHierarchy"] = go.activeInHierarchy,
+                ["playMode"] = EditorApplication.isPlaying
             };
         }
 
         private static object HandleSetName(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("name", out var nameObj) || nameObj == null)
                 throw new ArgumentException("Missing 'name' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
 
             Undo.RecordObject(go, "UCP Rename");
             go.name = nameObj.ToString();

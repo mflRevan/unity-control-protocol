@@ -28,9 +28,10 @@ pub struct RecordSettings {
     /// Output container/codec selection
     #[arg(long, default_value = "auto", value_parser = ["auto", "mp4", "webm"])]
     pub format: String,
-    /// Target video bitrate in kilobits per second
-    #[arg(long, default_value_t = 2_000, value_parser = clap::value_parser!(u32).range(128..=50_000))]
-    pub bitrate_kbps: u32,
+    /// Target video bitrate in kilobits per second. Default scales with resolution and frame
+    /// rate (about 0.2 bits per pixel per frame, at least 2000), so 1080p30 lands near 12 Mbps.
+    #[arg(long, value_parser = clap::value_parser!(u32).range(128..=50_000))]
+    pub bitrate_kbps: Option<u32>,
     /// Stretch playback by this factor for multimodal analysis, without dropping or duplicating a
     /// single captured frame.
     ///

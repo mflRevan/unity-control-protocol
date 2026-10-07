@@ -73,7 +73,10 @@ requested color, or transparent when the color has zero alpha.
 
 Record a lightweight, silent Game or Scene view video without adding objects or scripts to the
 scene. The defaults are tuned for agent vision: 960px on the longest edge, source aspect ratio
-preserved, 15fps, 2Mbps, and H.264/MP4 on Windows and macOS or VP8/WebM on Linux.
+preserved, 15fps, and H.264/MP4 on Windows and macOS or VP8/WebM on Linux. The bitrate scales
+with resolution and frame rate (about 0.2 bits per pixel per frame, at least 2 Mbps; 1080p30 lands
+near 12 Mbps) so moving water or sky does not smear into macroblocks; `--bitrate-kbps` overrides
+it, and the response reports the value used.
 
 ```bash
 # One bounded clip; waits for the finalized file

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -34,6 +35,12 @@ namespace UCP.Bridge
             return normalized;
         }
 
+        private static string ToAbsolutePath(string assetPath)
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath).FullName;
+            return Path.GetFullPath(Path.Combine(projectRoot, assetPath));
+        }
+
         public static AssetImporter ResolveImporter(string requestedPath)
         {
             var assetPath = GetPrimaryAssetPath(requestedPath);
@@ -41,8 +48,15 @@ namespace UCP.Bridge
                 throw new ArgumentException("Missing 'path' parameter");
 
             var importer = AssetImporter.GetAtPath(assetPath);
+            if (importer == null && IsProjectAssetPath(assetPath) && File.Exists(ToAbsolutePath(assetPath)))
+            {
+                // A file written to disk moments ago (by a script, a tool, or `files write`)
+                // has no importer until the database sees it; import it rather than failing.
+                AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+                importer = AssetImporter.GetAtPath(assetPath);
+            }
             if (importer == null)
-                throw new ArgumentException($"No asset importer found for: {requestedPath}");
+                throw new ArgumentException($"No asset importer found for: {requestedPath} (not under Assets/ or Packages/, or not imported yet: `ucp asset refresh`)");
 
             return importer;
         }
@@ -306,7 +320,21 @@ namespace UCP.Bridge
                             colorArray.Count >= 4 ? Convert.ToSingle(colorArray[3]) : 1f);
                         break;
                     }
-                    throw new ArgumentException($"Expected an array for '{property.displayName}'");
+                    if (value is Dictionary<string, object> colorObject
+                        && colorObject.TryGetValue("r", out var r) && colorObject.TryGetValue("g", out var g) && colorObject.TryGetValue("b", out var b))
+                    {
+                        // {"r":..,"g":..,"b":..,"a":..} is how `asset read` and `--json` show a colour, so it round-trips.
+                        property.colorValue = new Color(
+                            Convert.ToSingle(r), Convert.ToSingle(g), Convert.ToSingle(b),
+                            colorObject.TryGetValue("a", out var a) ? Convert.ToSingle(a) : 1f);
+                        break;
+                    }
+                    if (value is string colorText && ColorUtility.TryParseHtmlString(colorText, out var parsedColor))
+                    {
+                        property.colorValue = parsedColor;
+                        break;
+                    }
+                    throw new ArgumentException($"Expected [r,g,b,a], {{\"r\":..,\"g\":..,\"b\":..,\"a\":..}}, or \"#RRGGBBAA\" for '{property.displayName}'");
                 case SerializedPropertyType.Enum:
                     if (value is string enumString)
                     {

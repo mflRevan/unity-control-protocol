@@ -59,7 +59,12 @@ namespace UCP.Bridge
 
             foreach (var message in messages)
             {
-                var isWarning = ReadBoolMember(message, "warning", "isWarning");
+                // ShaderMessage carries a `severity` enum (Error/Warning); the bool spellings are
+                // what older editors exposed. Without the enum every warning printed as an error.
+                var severity = ReadMember(message, "severity");
+                var isWarning = severity != null
+                    ? severity.ToString().IndexOf("warn", StringComparison.OrdinalIgnoreCase) >= 0
+                    : ReadBoolMember(message, "warning", "isWarning");
                 if (errorsOnly && isWarning)
                     continue;
 

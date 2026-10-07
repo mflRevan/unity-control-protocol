@@ -52,11 +52,23 @@ async fn run_play(payload: Value, ctx: &Context) -> anyhow::Result<()> {
     let result = loop {
         attempt += 1;
         let (project, lock, mut client) = super::connect_client(ctx).await?;
-        super::enforce_active_scene_guard(
-            &mut client,
-            super::ActiveSceneGuardPolicy::block_if_dirty("enter play mode"),
-        )
-        .await?;
+        // `--no-save` turns the dirty-scene check into a hard refusal; otherwise a dirty scene is
+        // saved first, which is what the bridge's saveDirtyScenes flag promises.
+        let save_dirty = payload
+            .get("saveDirtyScenes")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        if save_dirty {
+            if super::active_scene_is_dirty(&mut client).await {
+                super::save_active_scene(&mut client, ctx).await?;
+            }
+        } else {
+            super::enforce_active_scene_guard(
+                &mut client,
+                super::ActiveSceneGuardPolicy::block_if_dirty("enter play mode"),
+            )
+            .await?;
+        }
 
         let requested = match client.call("play", payload.clone()).await {
             Ok(result) => result,

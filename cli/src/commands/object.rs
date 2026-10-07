@@ -3,36 +3,44 @@ use clap::Subcommand;
 
 use super::{Context, UnityLifecyclePolicy};
 
+/// Build request params from the target selector plus extra fields.
+fn with_target(target: &super::TargetArgs, extra: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+    let mut obj = match extra {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    target.apply(&mut obj)?;
+    Ok(serde_json::Value::Object(obj))
+}
+
 const MAX_FIELD_LINES: usize = 40;
 
-/// Inspect and edit GameObjects, their components, and properties. Objects are addressed by the
-/// short-lived instance id from `ucp scene snapshot` (it changes after reloads/compiles). Reach for
-/// this to read/write component fields or restructure the hierarchy; use `transform` for spatial moves.
+/// Inspect and edit GameObjects, their components, and properties. Address an object by
+/// `--path Root/Child/Leaf` (stable across reloads), `--name` (first match), or the short-lived
+/// `--id` from `ucp scene snapshot`. Reach for this to read/write component fields or restructure
+/// the hierarchy; use `transform` for spatial moves.
 #[derive(Subcommand)]
 pub enum ObjectAction {
     /// List a GameObject's direct children or a deeper child hierarchy
     GetChildren {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Child hierarchy depth to include (1 = direct children only)
         #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..))]
         depth: u32,
     },
     /// List all fields on a GameObject's component
     GetFields {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Component type name (e.g. "Transform", "MeshRenderer")
         #[arg(long)]
         component: String,
     },
     /// Get a specific property value
     GetProperty {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Component type name
         #[arg(long)]
         component: String,
@@ -42,9 +50,8 @@ pub enum ObjectAction {
     },
     /// Set a property value
     SetProperty {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Component type name
         #[arg(long)]
         component: String,
@@ -61,9 +68,8 @@ pub enum ObjectAction {
     },
     /// Set a GameObject's active state
     SetActive {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Active state (true or false)
         #[arg(long, action = clap::ArgAction::Set)]
         active: bool,
@@ -73,9 +79,8 @@ pub enum ObjectAction {
     },
     /// Rename a GameObject
     SetName {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// New name
         #[arg(long)]
         name: String,
@@ -103,18 +108,16 @@ pub enum ObjectAction {
     },
     /// Delete a GameObject
     Delete {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Save the active scene after applying the change
         #[arg(long)]
         save: bool,
     },
     /// Reparent a GameObject
     Reparent {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// New parent instance ID (omit for root)
         #[arg(long, allow_hyphen_values = true)]
         parent: Option<i64>,
@@ -143,9 +146,8 @@ pub enum ObjectAction {
     },
     /// Add a component to a GameObject
     AddComponent {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Component type name
         #[arg(long)]
         component: String,
@@ -155,9 +157,8 @@ pub enum ObjectAction {
     },
     /// Remove a component from a GameObject
     RemoveComponent {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Component type name
         #[arg(long)]
         component: String,
@@ -172,41 +173,32 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
 
     super::enforce_active_scene_guard(&mut client, object_preflight_policy(&action)).await?;
 
-    let mut result = match &action {
-        ObjectAction::GetChildren { id, depth } => {
+    let result: anyhow::Result<serde_json::Value> = async {
+        Ok(match &action {
+        ObjectAction::GetChildren { target, depth } => {
             client
-                .call(
-                    "object/get-children",
-                    serde_json::json!({ "instanceId": id, "depth": depth }),
-                )
+                .call("object/get-children", with_target(target, serde_json::json!({ "depth": depth }))?)
                 .await?
         }
-        ObjectAction::GetFields { id, component } => {
+        ObjectAction::GetFields { target, component } => {
             client
-                .call(
-                    "object/get-fields",
-                    serde_json::json!({ "instanceId": id, "component": component }),
-                )
+                .call("object/get-fields", with_target(target, serde_json::json!({ "component": component }))?)
                 .await?
         }
         ObjectAction::GetProperty {
-            id,
+            target,
             component,
             property,
         } => {
             client
                 .call(
                     "object/get-property",
-                    serde_json::json!({
-                        "instanceId": id,
-                        "component": component,
-                        "property": property
-                    }),
+                    with_target(target, serde_json::json!({ "component": component, "property": property }))?,
                 )
                 .await?
         }
         ObjectAction::SetProperty {
-            id,
+            target,
             component,
             property,
             value,
@@ -217,29 +209,21 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
             client
                 .call(
                     "object/set-property",
-                    serde_json::json!({
-                        "instanceId": id,
-                        "component": component,
-                        "property": property,
-                        "value": parsed
-                    }),
+                    with_target(
+                        target,
+                        serde_json::json!({ "component": component, "property": property, "value": parsed }),
+                    )?,
                 )
                 .await?
         }
-        ObjectAction::SetActive { id, active, .. } => {
+        ObjectAction::SetActive { target, active, .. } => {
             client
-                .call(
-                    "object/set-active",
-                    serde_json::json!({ "instanceId": id, "active": active }),
-                )
+                .call("object/set-active", with_target(target, serde_json::json!({ "active": active }))?)
                 .await?
         }
-        ObjectAction::SetName { id, name, .. } => {
+        ObjectAction::SetName { target, name, .. } => {
             client
-                .call(
-                    "object/set-name",
-                    serde_json::json!({ "instanceId": id, "name": name }),
-                )
+                .call("object/set-name", with_target(target, serde_json::json!({ "name": name }))?)
                 .await?
         }
         ObjectAction::Create {
@@ -257,18 +241,18 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
             }
             client.call("object/create", params).await?
         }
-        ObjectAction::Delete { id, .. } => {
+        ObjectAction::Delete { target, .. } => {
             client
-                .call("object/delete", serde_json::json!({ "instanceId": id }))
+                .call("object/delete", with_target(target, serde_json::json!({}))?)
                 .await?
         }
         ObjectAction::Reparent {
-            id,
+            target,
             parent,
             sibling_index,
             ..
         } => {
-            let mut params = serde_json::json!({ "instanceId": id });
+            let mut params = with_target(target, serde_json::json!({}))?;
             if let Some(p) = parent {
                 params["parent"] = serde_json::json!(p);
             }
@@ -300,23 +284,27 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
             }
             client.call("object/instantiate", params).await?
         }
-        ObjectAction::AddComponent { id, component, .. } => {
+        ObjectAction::AddComponent { target, component, .. } => {
             client
-                .call(
-                    "object/add-component",
-                    serde_json::json!({ "instanceId": id, "type": component }),
-                )
+                .call("object/add-component", with_target(target, serde_json::json!({ "type": component }))?)
                 .await?
         }
-        ObjectAction::RemoveComponent { id, component, .. } => {
+        ObjectAction::RemoveComponent { target, component, .. } => {
             client
-                .call(
-                    "object/remove-component",
-                    serde_json::json!({ "instanceId": id, "type": component }),
-                )
+                .call("object/remove-component", with_target(target, serde_json::json!({ "type": component }))?)
                 .await?
         }
-    };
+        })
+    }
+    .await;
+    let mut result = result.map_err(|error: anyhow::Error| {
+        let text = format!("{error:#}");
+        if text.to_ascii_lowercase().contains("play mode") {
+            anyhow::anyhow!("{text}\n  Hint: this edit is not allowed while playing; run `ucp stop` first.")
+        } else {
+            error
+        }
+    })?;
 
     // In Play Mode, scene/object edits apply only to the running instance and are discarded
     // on exit, and Unity refuses to save scenes during play. Rather than letting the --save
@@ -347,7 +335,8 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
-            ObjectAction::GetChildren { id, .. } => {
+            ObjectAction::GetChildren { target, .. } => {
+                let id = target;
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                 let child_count = result
                     .get("childCount")
@@ -399,10 +388,21 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_json(&result);
             }
             ObjectAction::SetProperty { property, .. } => {
-                output::print_success(&format!("Set property: {property}"));
+                match result.get("value") {
+                    Some(value) if !value.is_null() => {
+                        output::print_success(&format!("Set property: {property} = {value}"))
+                    }
+                    _ => output::print_success(&format!("Set property: {property}")),
+                }
             }
-            ObjectAction::SetActive { id, active, .. } => {
-                output::print_success(&format!("Object {id}: active = {active}"));
+            ObjectAction::SetActive { target, active, .. } => {
+                let in_hierarchy = result.get("activeInHierarchy").and_then(|v| v.as_bool());
+                match in_hierarchy {
+                    Some(effective) if effective != *active => output::print_success(&format!(
+                        "Object {target}: active = {active} (activeInHierarchy = {effective}: a parent is inactive)"
+                    )),
+                    _ => output::print_success(&format!("Object {target}: active = {active}")),
+                }
             }
             ObjectAction::SetName { name, .. } => {
                 output::print_success(&format!("Renamed to: {name}"));
@@ -414,14 +414,14 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                     .unwrap_or(0);
                 output::print_success(&format!("Created '{name}' (id: {id})"));
             }
-            ObjectAction::Delete { id, .. } => {
-                output::print_success(&format!("Deleted object {id}"));
+            ObjectAction::Delete { target, .. } => {
+                output::print_success(&format!("Deleted object {target}"));
             }
-            ObjectAction::Reparent { id, parent, .. } => {
+            ObjectAction::Reparent { target, parent, .. } => {
                 if let Some(p) = parent {
-                    output::print_success(&format!("Reparented {id} → {p}"));
+                    output::print_success(&format!("Reparented {target} → {p}"));
                 } else {
-                    output::print_success(&format!("Moved {id} to root"));
+                    output::print_success(&format!("Moved {target} to root"));
                 }
             }
             ObjectAction::Instantiate { source, .. } => {

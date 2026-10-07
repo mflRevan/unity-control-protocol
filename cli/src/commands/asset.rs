@@ -103,6 +103,14 @@ pub enum AssetAction {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Refresh the asset database (import files written outside Unity), or import one path
+    Refresh {
+        /// Asset or folder path to import; omit to refresh the whole database
+        path: Option<String>,
+        /// Return as soon as the request is accepted instead of waiting for the import to settle
+        #[arg(long)]
+        no_wait: bool,
+    },
     /// Reimport an asset or meta file through Unity
     Reimport {
         /// Asset path or .meta path
@@ -264,6 +272,13 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     }),
                 )
                 .await?
+        }
+        AssetAction::Refresh { path, .. } => {
+            let mut params = serde_json::json!({});
+            if let Some(path) = path {
+                params["path"] = serde_json::json!(path);
+            }
+            client.call("refresh-assets", params).await?
         }
         AssetAction::Reimport { path, recursive } => {
             client
@@ -525,6 +540,13 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
+            AssetAction::Refresh { .. } => {
+                let message = result
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Asset database refreshed");
+                output::print_success(message);
+            }
             AssetAction::Reimport { recursive, .. } => {
                 if *recursive {
                     let requested = result
@@ -603,6 +625,9 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                             "Updated importer setting {path} → {field} and reimported"
                         ));
                     }
+                    if let Some(warning) = result.get("warning").and_then(|v| v.as_str()) {
+                        output::print_warn(warning);
+                    }
                 }
                 ImportSettingsAction::WriteBatch {
                     path, no_reimport, ..
@@ -620,6 +645,9 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
                         output::print_success(&format!(
                             "Updated importer settings {path} → {fields} field(s) and reimported"
                         ));
+                    }
+                    if let Some(warning) = result.get("warning").and_then(|v| v.as_str()) {
+                        output::print_warn(warning);
                     }
                 }
             },
@@ -643,6 +671,7 @@ fn should_wait_for_settle(action: &AssetAction, result: &serde_json::Value) -> b
         | AssetAction::BulkMove { dry_run: false, .. } => true,
         AssetAction::BulkMove { dry_run: true, .. } => false,
         AssetAction::Reimport { .. } => true,
+        AssetAction::Refresh { no_wait, .. } => !*no_wait,
         AssetAction::ImportSettings { action } => match action {
             ImportSettingsAction::Read { .. } => false,
             ImportSettingsAction::Write { no_reimport, .. }

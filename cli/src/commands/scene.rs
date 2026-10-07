@@ -203,9 +203,12 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
 
 fn scene_preflight_policy(action: &SceneAction) -> super::ActiveSceneGuardPolicy {
     match action {
-        SceneAction::Load { .. } => {
+        // The bridge saves dirty scenes (and discards a dirty untitled one) before the load, so
+        // the CLI-side guard only applies when `--no-save` turns that into a hard refusal.
+        SceneAction::Load { no_save: true, .. } => {
             super::ActiveSceneGuardPolicy::block_if_dirty("load another scene")
         }
+        SceneAction::Load { .. } => super::ActiveSceneGuardPolicy::None,
         SceneAction::List
         | SceneAction::Active
         | SceneAction::Save

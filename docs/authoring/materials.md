@@ -69,6 +69,12 @@ ucp material set-property --path "Assets/Materials/Agent.mat" --property _BaseCo
 | `--property <name>`  | Property name (e.g. \_BaseColor, \_Metallic) |
 | `--value <json>`     | New value as JSON                            |
 
+After a write, UCP does what the Inspector does: it re-derives the shader keywords that depend on
+property values (through HDRP's and URP's own helpers when those pipelines are present, property
+drawers otherwise) and saves the asset to disk. The response reports the value read back,
+`keywordsReset` (which helper ran), and `saved`. On URP and HDRP address colours as `_BaseColor`;
+`_Color` is a hidden legacy alias there.
+
 Mutating material commands wait for Unity to finish applying the material/shader-side change before returning.
 
 ### `ucp material keywords`

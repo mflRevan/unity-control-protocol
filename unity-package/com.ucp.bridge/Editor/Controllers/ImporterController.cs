@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 
 namespace UCP.Bridge
@@ -87,7 +88,7 @@ namespace UCP.Bridge
                     parameters["value"]);
                 serializedObject.ApplyModifiedProperties();
 
-                return new Dictionary<string, object>
+                var result = new Dictionary<string, object>
                 {
                     ["status"] = "ok",
                     ["path"] = requestedPath,
@@ -96,6 +97,8 @@ namespace UCP.Bridge
                     ["field"] = fieldName,
                     ["reimport"] = AssetImportSupport.SaveImporterSettings(requestedPath, importer, noReimport)
                 };
+                AddPlatformOverrideNote(result, importer, new[] { fieldName });
+                return result;
             }
             finally
             {
@@ -131,7 +134,7 @@ namespace UCP.Bridge
 
                 serializedObject.ApplyModifiedProperties();
 
-                return new Dictionary<string, object>
+                var result = new Dictionary<string, object>
                 {
                     ["status"] = "ok",
                     ["path"] = requestedPath,
@@ -140,11 +143,60 @@ namespace UCP.Bridge
                     ["fields"] = fields,
                     ["reimport"] = AssetImportSupport.SaveImporterSettings(requestedPath, importer, noReimport)
                 };
+                AddPlatformOverrideNote(result, importer, values.Keys);
+                return result;
             }
             finally
             {
                 serializedObject.Dispose();
             }
+        }
+
+        /// <summary>
+        /// Texture fields that a per-platform override block shadows. A write to the default
+        /// settings leaves such an override in place, which the caller cannot see from the
+        /// response alone, so the affected platforms are reported.
+        /// </summary>
+        private static readonly string[] PlatformOverridableTextureFields =
+        {
+            "m_MaxTextureSize", "m_TextureFormat", "m_CompressionQuality", "m_TextureCompression",
+            "m_CrunchedCompression", "m_ResizeAlgorithm", "m_AlphaSplitEnabled"
+        };
+
+        private static void AddPlatformOverrideNote(Dictionary<string, object> result, AssetImporter importer, IEnumerable<string> fields)
+        {
+            if (!(importer is TextureImporter))
+                return;
+            var affected = fields.Where(f => Array.IndexOf(PlatformOverridableTextureFields, f) >= 0).ToList();
+            if (affected.Count == 0)
+                return;
+            var overrides = new List<object>();
+            var paths = new List<string>();
+            using (var serialized = new SerializedObject(importer))
+            {
+                var platforms = serialized.FindProperty("m_PlatformSettings");
+                if (platforms == null || !platforms.isArray)
+                    return;
+                for (var i = 0; i < platforms.arraySize; i++)
+                {
+                    var entry = platforms.GetArrayElementAtIndex(i);
+                    var overridden = entry.FindPropertyRelative("m_Overridden");
+                    var target = entry.FindPropertyRelative("m_BuildTarget");
+                    if (overridden == null || !overridden.boolValue || target == null)
+                        continue;
+                    var path = $"m_PlatformSettings.Array.data[{i}]";
+                    overrides.Add(new Dictionary<string, object> { ["platform"] = target.stringValue, ["path"] = path });
+                    paths.Add($"{target.stringValue} ({path})");
+                }
+            }
+            if (overrides.Count == 0)
+                return;
+            result["platformOverrides"] = overrides;
+            var plural = overrides.Count == 1 ? "keeps its own override" : "keep their own overrides";
+            result["warning"] = $"{string.Join(", ", affected)} changed the default platform settings only; "
+                + $"{string.Join(", ", paths)} {plural}. Write the per-platform field, e.g. "
+                + $"`--field {((Dictionary<string, object>)overrides[0])["path"]}.{affected[0]}`, "
+                + "or clear it with `.m_Overridden` = false.";
         }
 
         private static Dictionary<string, object> CreateImporterPayload(

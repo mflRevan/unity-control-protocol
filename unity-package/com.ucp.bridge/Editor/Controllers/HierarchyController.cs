@@ -81,11 +81,11 @@ namespace UCP.Bridge
         private static object HandleDelete(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
             string name = go.name;
             var scene = go.scene;
 
@@ -104,11 +104,11 @@ namespace UCP.Bridge
         private static object HandleReparent(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
 
             Undo.SetTransformParent(go.transform, null, "UCP Reparent");
 
@@ -217,13 +217,13 @@ namespace UCP.Bridge
         private static object HandleAddComponent(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("type", out var typeObj) || typeObj == null)
                 throw new ArgumentException("Missing 'type' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
             string typeName = typeObj.ToString();
 
             // Resolve component type
@@ -247,13 +247,13 @@ namespace UCP.Bridge
         private static object HandleRemoveComponent(string paramsJson)
         {
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (p == null || !p.TryGetValue("instanceId", out var idObj))
-                throw new ArgumentException("Missing 'instanceId' parameter");
+            if (p == null)
+                throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
             if (!p.TryGetValue("type", out var typeObj) || typeObj == null)
                 throw new ArgumentException("Missing 'type' parameter");
 
-            long instanceId = Convert.ToInt64(idObj);
-            var go = FindGameObject(instanceId);
+            var go = ObjectLocator.Resolve(p);
+            long instanceId = go.GetId();
             string typeName = typeObj.ToString();
 
             Component target = null;

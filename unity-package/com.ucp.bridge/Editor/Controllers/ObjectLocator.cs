@@ -181,22 +181,32 @@ namespace UCP.Bridge
             var hasBounds = false;
             bounds = new Bounds(target.transform.position, Vector3.zero);
 
+            // Inactive children count: a disabled LOD or a hidden part is still part of the
+            // object's footprint. Renderers with an empty box (particle systems at rest, VFX
+            // graphs, a MeshRenderer whose mesh is not assigned) would collapse the result to
+            // the pivot and are skipped.
             var renderers = includeChildren
-                ? target.GetComponentsInChildren<Renderer>()
+                ? target.GetComponentsInChildren<Renderer>(true)
                 : target.GetComponents<Renderer>();
             foreach (var renderer in renderers)
             {
-                if (!hasBounds) { bounds = renderer.bounds; hasBounds = true; }
-                else bounds.Encapsulate(renderer.bounds);
+                var candidate = renderer.bounds;
+                if (candidate.size.sqrMagnitude <= 0f)
+                    continue;
+                if (!hasBounds) { bounds = candidate; hasBounds = true; }
+                else bounds.Encapsulate(candidate);
             }
 
             var colliders = includeChildren
-                ? target.GetComponentsInChildren<Collider>()
+                ? target.GetComponentsInChildren<Collider>(true)
                 : target.GetComponents<Collider>();
             foreach (var collider in colliders)
             {
-                if (!hasBounds) { bounds = collider.bounds; hasBounds = true; }
-                else bounds.Encapsulate(collider.bounds);
+                var candidate = collider.bounds;
+                if (candidate.size.sqrMagnitude <= 0f)
+                    continue;
+                if (!hasBounds) { bounds = candidate; hasBounds = true; }
+                else bounds.Encapsulate(candidate);
             }
 
             return hasBounds;
