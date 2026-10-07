@@ -428,7 +428,7 @@ $qaRoot = Run-Step -Name 'object-create-root' -UcpArgs @('object', 'create', 'Uc
 $qaRootId = if ($qaRoot) { [long]$qaRoot.Json.data.instanceId } else { 0 }
 
 if ($qaRootId -ne 0) {
-	Run-Step -Name 'object-set-name' -UcpArgs @('object', 'set-name', '--id', "$qaRootId", '--name', 'UcpQaRootRenamed') -Assert {
+	Run-Step -Name 'object-set-name' -UcpArgs @('object', 'set-name', '--id', "$qaRootId", '--to', 'UcpQaRootRenamed') -Assert {
 		param($r)
 		[pscustomobject]@{ Passed = $r.Json.success; Detail = $r.Raw }
 	} | Out-Null
