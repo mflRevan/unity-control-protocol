@@ -79,7 +79,7 @@ If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --he
 
 ```bash
 ucp scene snapshot --filter "Player"
-ucp scene save # save active scene before loading another
+ucp scene save # persist scene edits (load and play save a dirty scene themselves)
 ucp scene load Assets/Scenes/Level1.unity
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene focus --id 46894 --axis 1 0 0
@@ -125,7 +125,7 @@ ucp ui screenshot Assets/UI/Inventory.ucp-ui.json --state populated -o artifacts
 ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui --force --json
 ```
 
-Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check briefly focus a transient Editor window and require a graphics device; lint also works headless.
+Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check render through a transient, unfocused Editor window and require a graphics device; lint also works headless.
 
 ## In-scene authoring & spatial workflows
 

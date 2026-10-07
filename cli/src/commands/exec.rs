@@ -7,7 +7,7 @@ pub struct RecordingOptions {
     pub view: String,
     pub max_edge: u32,
     pub fps: u32,
-    pub bitrate_kbps: u32,
+    pub bitrate_kbps: Option<u32>,
     pub overwrite: bool,
     pub lead: f64,
     pub tail: f64,

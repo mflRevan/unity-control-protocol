@@ -76,7 +76,8 @@ ucp record arm --on signal:checkpoint --duration 3 -o cp.mp4 && ucp record signa
 ucp exec run demo-autopilot --record run.mp4 --record-lead 0.5 --record-tail 1
 ```
 
-- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, 2 Mbps,
+- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, a bitrate
+  that scales with size and frame rate (about 0.2 bits per pixel per frame, at least 2 Mbps),
   H.264 MP4 (or VP8 WebM with `--format webm`). No objects or scripts are injected into the scene.
 - `--view game` records `Camera.main`, not the Game view's camera stack. `--view scene` records
   a fixed vantage that does not follow the player, which is often what you want for judging

@@ -22,7 +22,7 @@ is refused rather than producing a second editor on the same project.
   play-mode poll) fails with "the editor exited" instead of starting a replacement. This is what
   stops a forgotten follower from relaunching the editor after every crash.
 - An editor ucp launched that dies within two minutes is treated as a crash on startup: ordinary
-  commands stop auto-launching and point at `ucp editor log`; `ucp open` and `ucp editor restart`
+  commands stop auto-launching and point at `ucp editor logs`; `ucp open` and `ucp editor restart`
   always proceed.
 - `ucp open` rotates a non-empty `editor.log` to `editor.prev.log`, so the log of the editor that
   just crashed survives the relaunch.
@@ -133,10 +133,10 @@ This is a dangerous escape hatch. Opening a project in a different Unity version
 Use `--dialog-policy` when Unity shows startup prompts such as Safe Mode or recovery dialogs.
 
 ```bash
-ucp --dialog-policy auto start
-ucp --dialog-policy recover start
-ucp --dialog-policy safe-mode start
-ucp --dialog-policy manual start
+ucp --dialog-policy auto open
+ucp --dialog-policy recover open
+ucp --dialog-policy safe-mode open
+ucp --dialog-policy manual open
 ```
 
 Policies:

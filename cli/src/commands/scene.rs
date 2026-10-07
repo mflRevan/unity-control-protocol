@@ -17,7 +17,7 @@ pub enum SceneAction {
         /// Load additively instead of replacing the current open scene setup
         #[arg(long)]
         additive: bool,
-        /// Do not auto-save dirty scenes before loading
+        /// Refuse with a non-zero exit instead of saving when a scene is dirty
         #[arg(long)]
         no_save: bool,
         /// Keep dirty untitled scenes instead of discarding them when auto-save runs
@@ -30,19 +30,19 @@ pub enum SceneAction {
     Save,
     /// Focus the Scene view camera on a GameObject
     Focus {
-        /// Instance ID of the target GameObject
-        #[arg(long, allow_hyphen_values = true)]
-        id: i64,
+        #[command(flatten)]
+        target: super::TargetArgs,
         /// Optional scene camera alignment direction as X Y Z
         #[arg(long, num_args = 3, allow_hyphen_values = true, value_names = ["X", "Y", "Z"])]
         axis: Option<Vec<f32>>,
     },
     /// Capture a lean hierarchy snapshot of the active scene
     Snapshot {
-        /// Filter objects by name substring (e.g. "Camera")
+        /// Keep only objects whose name contains this text; searches the whole hierarchy and
+        /// reports each match with its `path` (ignores --depth)
         #[arg(long)]
         filter: Option<String>,
-        /// Max hierarchy depth to include (0 = root objects only)
+        /// Max hierarchy depth to include when no --filter is given (0 = root objects only)
         #[arg(long, default_value_t = 0)]
         depth: u32,
     },
@@ -90,8 +90,8 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
         }
         SceneAction::Active => client.call("scene/active", serde_json::json!({})).await?,
         SceneAction::Save => super::save_active_scene(&mut client, ctx).await?,
-        SceneAction::Focus { id, axis } => {
-            let mut params = serde_json::json!({ "instanceId": id });
+        SceneAction::Focus { target, axis } => {
+            let mut params = super::object::with_target(target, serde_json::json!({}))?;
             if let Some(axis_values) = axis {
                 params["axis"] = serde_json::json!(axis_values);
             }
@@ -185,9 +185,9 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                     output::print_success(&format!("Active scene already saved: {path}"));
                 }
             }
-            SceneAction::Focus { id, .. } => {
+            SceneAction::Focus { target, .. } => {
                 let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                output::print_success(&format!("Focused Scene view on {name} ({id})"));
+                output::print_success(&format!("Focused Scene view on {name} ({target})"));
             }
             SceneAction::Query { .. } => {
                 let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);

@@ -135,11 +135,11 @@ namespace UCP.Bridge
         private static object HandleFocus(string paramsJson)
         {
             var parameters = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
-            if (parameters == null || !parameters.TryGetValue("instanceId", out var idObj))
-                throw new System.ArgumentException("Missing 'instanceId' parameter");
+            if (parameters == null)
+                throw new System.ArgumentException("Missing parameters: pass instanceId, path, or name");
 
-            var instanceId = System.Convert.ToInt64(idObj);
-            var target = FindGameObject(instanceId);
+            // Same selectors as every object command: instanceId, path, or name.
+            var target = ObjectLocator.Resolve(parameters);
             var bounds = CalculateFocusBounds(target);
             var sceneView = SceneView.lastActiveSceneView ?? EditorWindow.GetWindow<SceneView>();
 
@@ -174,7 +174,7 @@ namespace UCP.Bridge
             return new Dictionary<string, object>
             {
                 ["status"] = "ok",
-                ["instanceId"] = instanceId,
+                ["instanceId"] = target.GetId(),
                 ["name"] = target.name,
                 ["pivot"] = VectorToList(sceneView.pivot),
                 ["cameraPosition"] = VectorToList(cameraPosition),
@@ -268,28 +268,6 @@ namespace UCP.Bridge
             return bounds;
         }
 
-        private static GameObject FindGameObject(long instanceId)
-        {
-            var direct = UnityObjectCompat.ResolveByInstanceId<GameObject>(instanceId);
-            if (direct != null)
-                return direct;
-
-            for (var index = 0; index < SceneManager.sceneCount; index++)
-            {
-                var scene = SceneManager.GetSceneAt(index);
-                if (!scene.isLoaded)
-                    continue;
-
-                foreach (var root in scene.GetRootGameObjects())
-                {
-                    var found = FindInHierarchy(root, instanceId);
-                    if (found != null)
-                        return found;
-                }
-            }
-
-            throw new System.ArgumentException($"GameObject not found: {instanceId}");
-        }
 
         private static GameObject FindInHierarchy(GameObject gameObject, long instanceId)
         {

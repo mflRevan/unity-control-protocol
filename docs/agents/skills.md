@@ -16,12 +16,12 @@ those files, so what an agent reads is exactly what is maintained.
 | skill | covers | raw Markdown |
 |---|---|---|
 | `unity-control-protocol` | the whole surface in one skill; the recommended default | [unity-control-protocol.md](https://unityctl.dev/skills/unity-control-protocol.md) |
-| `ucp-editor-lifecycle` | install, open, adopt, close, `[editor]` state line, compile, play/stop/pause, modal dialogs | [ucp-editor-lifecycle.md](https://unityctl.dev/skills/ucp-editor-lifecycle.md) |
+| `ucp-editor-lifecycle` | install, open, adopt, close, `[editor]` state line, compile, hot-reload, play/stop/pause, modal dialogs | [ucp-editor-lifecycle.md](https://unityctl.dev/skills/ucp-editor-lifecycle.md) |
 | `ucp-scene-authoring` | `scene`, `object`, `transform`, `spatial`, `prefab`: hierarchy, primitives, properties, placement | [ucp-scene-authoring.md](https://unityctl.dev/skills/ucp-scene-authoring.md) |
 | `ucp-assets` | `asset`, `files`, `material`, `references`, `shader`, `script`: assets on disk without breaking GUIDs | [ucp-assets.md](https://unityctl.dev/skills/ucp-assets.md) |
 | `ucp-ui-toolkit` | `ui`: lint, inspect, populate, screenshot, and check UXML/USS (Unity 6+) | [ucp-ui-toolkit.md](https://unityctl.dev/skills/ucp-ui-toolkit.md) |
 | `ucp-visual-feedback` | `screenshot`, `view`, `record`: seeing the scene, composed renders, clips with `--slowdown` | [ucp-visual-feedback.md](https://unityctl.dev/skills/ucp-visual-feedback.md) |
-| `ucp-runtime-debugging` | `logs`, `run-tests`, `exec`, `profiler`, `profile`, `frame`: playtest loops and triage | [ucp-runtime-debugging.md](https://unityctl.dev/skills/ucp-runtime-debugging.md) |
+| `ucp-runtime-debugging` | `logs`, `run-tests`, `exec`, `hot-reload`, `profiler`, `profile`, `frame`: playtest loops and triage | [ucp-runtime-debugging.md](https://unityctl.dev/skills/ucp-runtime-debugging.md) |
 | `ucp-project-config` | `packages`, `settings`, `build`: dependencies, project settings, builds | [ucp-project-config.md](https://unityctl.dev/skills/ucp-project-config.md) |
 | `ucp-version-control` | `vcs`: Unity VCS / Plastic fallback when `cm` is unavailable | [ucp-version-control.md](https://unityctl.dev/skills/ucp-version-control.md) |
 

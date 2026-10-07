@@ -28,7 +28,7 @@ Save the active scene explicitly.
 ucp scene save
 ```
 
-Use this after a series of scene edits when you want later disruptive commands such as `ucp play`, `ucp compile`, `ucp scene load`, `ucp editor restart`, or package/build-target/define changes to proceed without dirty-scene blocking.
+Use this after a series of scene edits when you want later disruptive commands such as `ucp compile`, `ucp run-tests`, `ucp editor restart`, `ucp install`, or package/build-target/define changes to proceed without dirty-scene blocking (`ucp play` and `ucp scene load` save a dirty scene themselves).
 
 ### `ucp scene focus`
 
@@ -36,17 +36,19 @@ Focus the Scene view camera on a GameObject. This is the recommended visual iter
 
 ```bash
 # Frame the object with the current Scene view orientation
-ucp scene focus --id 46894
+ucp scene focus --path "Level/Player"
 
 # Align the Scene view to look from the positive X side
-ucp scene focus --id 46894 --axis 1 0 0
+ucp scene focus --name Player --axis 1 0 0
 
-# Negative axes are supported too
+# Negative axes are supported too; --id works as on every object command
 ucp scene focus --id 46894 --axis 0 0 -1
 ```
 
 | Flag           | Description                                               |
 | -------------- | --------------------------------------------------------- |
+| `--path <path>` | Target by hierarchy path (stable across reloads)         |
+| `--name <name>` | Target by GameObject name (first match)                  |
 | `--id <id>`    | Target GameObject instance ID                             |
 | `--axis X Y Z` | Optional Scene view alignment direction toward the target |
 

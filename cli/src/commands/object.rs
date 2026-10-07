@@ -4,7 +4,7 @@ use clap::Subcommand;
 use super::{Context, UnityLifecyclePolicy};
 
 /// Build request params from the target selector plus extra fields.
-fn with_target(target: &super::TargetArgs, extra: serde_json::Value) -> anyhow::Result<serde_json::Value> {
+pub(crate) fn with_target(target: &super::TargetArgs, extra: serde_json::Value) -> anyhow::Result<serde_json::Value> {
     let mut obj = match extra {
         serde_json::Value::Object(map) => map,
         _ => serde_json::Map::new(),
@@ -77,13 +77,13 @@ pub enum ObjectAction {
         #[arg(long)]
         save: bool,
     },
-    /// Rename a GameObject
+    /// Rename a GameObject (select it with --path, --name, or --id; the new name goes in --to)
     SetName {
         #[command(flatten)]
         target: super::TargetArgs,
-        /// New name
-        #[arg(long)]
-        name: String,
+        /// The new name
+        #[arg(long = "to", value_name = "NEW_NAME")]
+        new_name: String,
         /// Save the active scene after applying the change
         #[arg(long)]
         save: bool,
@@ -221,9 +221,9 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 .call("object/set-active", with_target(target, serde_json::json!({ "active": active }))?)
                 .await?
         }
-        ObjectAction::SetName { target, name, .. } => {
+        ObjectAction::SetName { target, new_name, .. } => {
             client
-                .call("object/set-name", with_target(target, serde_json::json!({ "name": name }))?)
+                .call("object/set-name", with_target(target, serde_json::json!({ "newName": new_name }))?)
                 .await?
         }
         ObjectAction::Create {
@@ -404,8 +404,8 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                     _ => output::print_success(&format!("Object {target}: active = {active}")),
                 }
             }
-            ObjectAction::SetName { name, .. } => {
-                output::print_success(&format!("Renamed to: {name}"));
+            ObjectAction::SetName { new_name, .. } => {
+                output::print_success(&format!("Renamed to: {new_name}"));
             }
             ObjectAction::Create { name, .. } => {
                 let id = result

@@ -24,9 +24,9 @@ bridge so scenes, GameObjects, assets, builds, and tests can be inspected and ch
 or headless agents without touching the Editor UI.\n\
 \n\
 Orientation:\n\
-  - Object commands take an instance id from `ucp scene snapshot`. Ids are short-lived: they change \
-after domain reloads, recompiles, and scene reloads, so re-snapshot before reusing one. Where a \
-command also accepts `--path` or `--name`, those survive reloads.\n\
+  - Object commands address a GameObject by `--path Root/Child` (stable across reloads), `--name`, \
+or `--id` from `ucp scene snapshot`. Ids are short-lived: they change after domain reloads, recompiles, \
+and scene reloads, so prefer paths in scripts and re-snapshot before reusing an id.\n\
   - Run `ucp <command> --help` for any surface to see its subcommands, args, and value hints.\n\
   - Pass `--json` for machine-readable output suitable for parsing.\n\
   - Pass `--timeout 0` to wait indefinitely instead of failing after the default deadline.\n\
@@ -377,9 +377,9 @@ mod tests {
 
         match cli.command {
             commands::Command::Scene {
-                action: commands::scene::SceneAction::Focus { id, axis },
+                action: commands::scene::SceneAction::Focus { target, axis },
             } => {
-                assert_eq!(id, -42);
+                assert_eq!(target.id, Some(-42));
                 assert_eq!(axis.unwrap(), vec![1.0, 0.5, -1.0]);
             }
             _ => panic!("unexpected command variant"),
@@ -741,7 +741,7 @@ mod tests {
             } => {
                 assert_eq!(record.as_deref(), Some("demo.mp4"));
                 assert_eq!(record_view, "game");
-                assert_eq!(record_bitrate_kbps, 1500);
+                assert_eq!(record_bitrate_kbps, Some(1500));
                 assert!(record_overwrite);
             }
             _ => panic!("unexpected command variant"),

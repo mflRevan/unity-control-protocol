@@ -10,6 +10,15 @@ const isCheck = rawArgs.includes('--check');
 const filteredArgs = rawArgs.filter((arg) => arg !== '--check');
 const requestedVersion = filteredArgs[0];
 const requestedProtocol = filteredArgs[1] ?? requestedVersion;
+const semver = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+for (const candidate of [requestedVersion, requestedProtocol]) {
+  // Anything else (a stray `--help`, a typo) would be written into every metadata file.
+  if (candidate !== undefined && !semver.test(candidate)) {
+    console.error(`Usage: node scripts/sync-version.mjs [--check] <version> [protocolVersion]
+'${candidate}' is not a version.`);
+    process.exit(2);
+  }
+}
 
 const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
 if (requestedVersion) {

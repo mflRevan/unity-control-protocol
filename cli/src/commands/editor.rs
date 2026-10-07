@@ -173,6 +173,16 @@ async fn open(ctx: &Context) -> anyhow::Result<()> {
 async fn close(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     if !discard_changes {
+        // Right after tests, a compile, or play mode the bridge is mid-restart; the dirty-scene
+        // check would otherwise fail on a closed connection instead of answering.
+        let _ = crate::bridge_lifecycle::wait_for_bridge(
+            &project,
+            crate::discovery::read_lock_file(&project).ok().as_ref(),
+            ctx.timeout.min(60),
+            ctx.dialog_policy,
+            crate::bridge_lifecycle::WaitMode::RestartOptional,
+        )
+        .await;
         super::enforce_active_scene_guard_for_project(
             &project,
             super::ActiveSceneGuardPolicy::block_if_dirty("close the Unity editor"),
@@ -204,6 +214,16 @@ async fn close(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Res
 async fn restart(ctx: &Context, force: bool, discard_changes: bool) -> anyhow::Result<()> {
     let project = resolve_project_path(ctx)?;
     if !discard_changes {
+        // Right after tests, a compile, or play mode the bridge is mid-restart; the dirty-scene
+        // check would otherwise fail on a closed connection instead of answering.
+        let _ = crate::bridge_lifecycle::wait_for_bridge(
+            &project,
+            crate::discovery::read_lock_file(&project).ok().as_ref(),
+            ctx.timeout.min(60),
+            ctx.dialog_policy,
+            crate::bridge_lifecycle::WaitMode::RestartOptional,
+        )
+        .await;
         super::enforce_active_scene_guard_for_project(
             &project,
             super::ActiveSceneGuardPolicy::block_if_dirty("restart the Unity editor"),

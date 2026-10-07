@@ -45,11 +45,11 @@ ucp object get-children --path Level/Props --depth 2
 ucp scene load Assets/Scenes/Level1.unity            # saves dirty titled scenes first
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene save
-ucp scene focus --id 46894 --axis 1 0 0              # aim the Scene view at an object (for screenshots)
+ucp scene focus --path Level/Player --axis 1 0 0     # aim the Scene view at an object (for screenshots)
 ```
 
-A dirty *untitled* scene blocks `load` on purpose. Save it under a path or pass `--keep-untitled`
-knowing the change is discarded when Unity switches scenes.
+`load` saves a dirty titled scene first and discards a dirty untitled one; pass `--keep-untitled`
+to refuse instead of discarding, or `--no-save` to refuse on any dirty scene (non-zero exit).
 
 ## Create objects that render
 
@@ -78,7 +78,7 @@ ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigge
 ucp object set-property --id 46894 --component MeshRenderer --property m_Materials --value '[{"path":"Assets/Materials/Crate.mat"}]'
 ucp object set-property --id 46894 --component Light --property enabled --value false
 ucp object set-active --id 46894 --active false
-ucp object set-name --id 46894 --name "Crate_A"
+ucp object set-name --path Props/Crate --to "Crate_A"
 ucp object reparent --id 46894 --parent -15774 --sibling-index 0
 ucp object delete --id 46894
 ```

@@ -85,7 +85,7 @@ ucp record capture --duration 5 --view game -o playtest.mp4
 # Surround any CLI/scripted sequence
 ucp record start --view scene -o sequence.mp4
 ucp transform move --name Player --to 0 1 4
-ucp scene focus --name Player
+ucp scene focus --name Player                      # --path and --id work too
 ucp record stop
 
 # Record an IUCPScript call with lead/tail context

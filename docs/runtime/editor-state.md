@@ -7,7 +7,7 @@ whether the scene is dirty, so it can decide to look closer instead of finding o
 later.
 
 ```text
-[editor] edit mode · scene GetStarted_Scene (dirty) · console 0 errors, 8 warnings (+1 error from this command)
+[editor] edit mode · scene GetStarted_Scene (dirty) · console 8 warnings (+1 error from this command)
 ```
 
 The line is built from a summary the bridge attaches to every response it produces on Unity's main
@@ -23,7 +23,7 @@ Always:
 |---|---|
 | `edit mode` / `play mode` / `play mode (paused)` | `EditorApplication.isPlaying` and `isPaused`; `entering play` / `exiting play` while a transition is pending |
 | `scene <name>` | the active scene, with `(dirty)` and `(untitled)` when they apply, and `+N more dirty scenes` when other loaded scenes are dirty |
-| `console N errors, M warnings` | the Console window's badge counts (errors include exceptions); `console clean` when both are zero |
+| `console N errors, M warnings` | the Console window's badge counts (errors include exceptions); only non-zero counts are spelled out (`console 8 warnings`, `console 2 errors`), and `console clean` when both are zero |
 | `(+N errors, +M warnings from this command)` | entries logged after this command's request was dispatched, so a mutation that logs an error is called out on the spot |
 
 Only when true: `COMPILE ERRORS` (`EditorUtility.scriptCompilationFailed`), `compiling`,
@@ -109,8 +109,9 @@ other platforms `ucp editor dialog` reports nothing and commands fall back to th
   unless `-ignoreCompilerErrors` is passed, and `-accept-apiupdate` pre-answers the API updater.
 - Unity remembers "Don't ask again" answers under `EditorPrefs` keys prefixed `DialogOptOut.`,
   and `EditorPrefs["EnterSafeModeDialog"] = false` makes Unity enter Safe Mode silently.
-- Bridge commands never trigger Unity's save prompts themselves: `ucp scene load`, `ucp play`, and
-  `ucp editor close` go through the bridge's modal guard, which saves titled scenes or refuses
-  with an explanation instead of letting Unity ask.
+- Bridge commands never trigger Unity's save prompts themselves: `ucp scene load` and `ucp play`
+  save titled scenes through the bridge's modal guard (and discard a dirty untitled one unless
+  `--keep-untitled`), while `ucp editor close` and `restart` refuse on any dirty scene unless
+  `--discard-changes` is passed, with an explanation instead of letting Unity ask.
 - Scripts run through `ucp exec` bypass that guard. Do not call `EditorSceneManager.SaveScene()`
   on an untitled scene or `EditorUtility.DisplayDialog` from an `IUCPScript`.

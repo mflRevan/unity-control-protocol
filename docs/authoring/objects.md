@@ -174,22 +174,33 @@ ucp object set-active --id 46894 --active true
 Rename a GameObject.
 
 ```bash
-ucp object set-name --id 46894 --name "Player Camera" --save
+ucp object set-name --path "Level/Main Camera" --to "Player Camera" --save
 ```
 
 ### `ucp object create`
 
-Create a new empty GameObject.
+Create a GameObject. Pass `--primitive` for anything that should be visible: a plain create makes
+an empty object with only a Transform, and there is no other supported way to add a built-in mesh
+from the CLI.
 
 ```bash
-# Create at root
+# A visible cube (mesh, renderer, and collider in one step)
+ucp object create "Crate" --primitive Cube --save
+
+# An empty container at root
 ucp object create "MyObject"
 
 # Create as child
 ucp object create "Child" --parent 46894 --save
 ```
 
-New objects are created with a Transform component and become part of the active scene immediately.
+| Flag | Description |
+| ---- | ----------- |
+| `--primitive <Cube\|Sphere\|Capsule\|Cylinder\|Plane\|Quad>` | Build a renderable primitive instead of an empty object |
+| `--parent <id>` | Parent instance ID |
+| `--save` | Save the active scene afterwards |
+
+New objects become part of the active scene immediately.
 
 ### `ucp object delete`
 

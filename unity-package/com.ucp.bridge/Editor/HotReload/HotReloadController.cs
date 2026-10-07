@@ -275,13 +275,47 @@ namespace UCP.Bridge
             public long elapsedMs;
         }
 
-        private static CompileResult Compile(string projectRoot, UnityEditor.Compilation.Assembly target, List<string> files)
+        /// <summary>
+        /// Unity ships Roslyn in two layouts: `Data/DotNetSdkRoslyn/csc.dll` run by
+        /// `Data/NetCoreRuntime/dotnet` (6000.0 through 6000.5), and from 6000.6 a full SDK under
+        /// `Data/DotNetSdk` with `sdk/<version>/Roslyn/bincore/csc.dll` and its own `dotnet`.
+        /// On macOS the same folders live under `Unity.app/Contents`.
+        /// </summary>
+        private static bool TryLocateCompiler(out string dotnet, out string csc, out string data)
         {
             var editorRoot = Path.GetDirectoryName(EditorApplication.applicationPath);
-            var data = Path.Combine(editorRoot, "Data");
-            var dotnet = Path.Combine(data, "NetCoreRuntime", Application.platform == RuntimePlatform.WindowsEditor ? "dotnet.exe" : "dotnet");
-            var csc = Path.Combine(data, "DotNetSdkRoslyn", "csc.dll");
-            if (!File.Exists(dotnet) || !File.Exists(csc))
+            data = Application.platform == RuntimePlatform.OSXEditor
+                ? Path.Combine(EditorApplication.applicationPath, "Contents")
+                : Path.Combine(editorRoot ?? "", "Data");
+            var exe = Application.platform == RuntimePlatform.WindowsEditor ? "dotnet.exe" : "dotnet";
+
+            dotnet = Path.Combine(data, "NetCoreRuntime", exe);
+            csc = Path.Combine(data, "DotNetSdkRoslyn", "csc.dll");
+            if (File.Exists(dotnet) && File.Exists(csc))
+                return true;
+
+            var sdkRoot = Path.Combine(data, "DotNetSdk");
+            var sdkDotnet = Path.Combine(sdkRoot, exe);
+            var sdks = Path.Combine(sdkRoot, "sdk");
+            if (File.Exists(sdkDotnet) && Directory.Exists(sdks))
+            {
+                foreach (var versionDir in Directory.GetDirectories(sdks).OrderByDescending(d => d, StringComparer.Ordinal))
+                {
+                    var candidate = Path.Combine(versionDir, "Roslyn", "bincore", "csc.dll");
+                    if (File.Exists(candidate))
+                    {
+                        dotnet = sdkDotnet;
+                        csc = candidate;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static CompileResult Compile(string projectRoot, UnityEditor.Compilation.Assembly target, List<string> files)
+        {
+            if (!TryLocateCompiler(out var dotnet, out var csc, out var data))
                 throw new InvalidOperationException($"Unity's bundled C# compiler was not found under {data}");
 
             var outDir = Path.Combine(projectRoot, "Temp", "UcpHotReload");

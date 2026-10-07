@@ -2,8 +2,8 @@
 name: ucp-editor-lifecycle
 description: >-
   Bring a Unity project under control with the `ucp` CLI: install the bridge, open or adopt the
-  editor, read the `[editor]` state line every command prints, recompile, enter and leave play
-  mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console
+  editor, read the `[editor]` state line every command prints, recompile or hot-reload method
+  bodies without a domain reload, enter and leave play mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console
   red? is the scene dirty?), when a command reports COMPILE ERRORS or a MODAL, or when the editor
   must be opened, restarted, or closed. For scene content, assets, UI, capture, debugging, or
   project configuration, use the matching ucp-* skill or the unity-control-protocol omni skill.
@@ -90,7 +90,7 @@ ucp compile                # recompile and wait; prints per-assembly CS#### erro
 ucp compile --no-wait      # kick off compilation and return (a later command waits for the reload itself)
 ucp hot-reload apply Assets/Scripts/Foo.cs   # patch edited method bodies in ~1 s, no domain reload, play mode survives
 ucp hot-reload status      # what is patched; `ucp compile` or `hot-reload revert` clears it
-ucp play                   # saves dirty titled scenes first; refuses on a dirty untitled scene
+ucp play                   # saves a dirty scene first (a dirty untitled one is discarded unless --keep-untitled)
 ucp play --log-file play.log
 ucp pause                  # toggles
 ucp stop
@@ -102,9 +102,10 @@ ucp stop
   need a real compile (`needsFullCompile`: fields, types, signatures). While patches are live,
   auto refresh is held so a focus change cannot recompile under you; `ucp compile` makes the
   edits permanent and releases it. Always end with `ucp compile` before tests, builds, or handoff.
-- A dirty untitled scene blocks `play`, `scene load`, and `editor close` on purpose (Unity would
-  otherwise ask where to save). Save it under a path with `ucp scene save` after giving it one, or
-  discard with `--keep-untitled`/`--no-save` variants where offered, or start from a titled scene.
+- `play` and `scene load` save a dirty titled scene first and discard a dirty untitled one
+  (`--keep-untitled` keeps it and refuses instead); `--no-save` refuses on any dirty scene with a
+  non-zero exit. `editor close` and `restart` refuse on any dirty scene; `--discard-changes` is
+  the explicit way past. Unity's own save prompt is never shown.
 - Edits made in play mode are lost on `stop`, exactly as in the editor.
 
 ## Modal dialogs

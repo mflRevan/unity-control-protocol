@@ -162,8 +162,11 @@ namespace UCP.Bridge
             var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
             if (p == null)
                 throw new ArgumentException("Missing target: provide 'instanceId', 'path', or 'name'");
-            if (!p.TryGetValue("name", out var nameObj) || nameObj == null)
-                throw new ArgumentException("Missing 'name' parameter");
+            // The new name travels as 'newName' because 'name' is also the by-name selector;
+            // 'name' alone is still accepted from callers that select by instanceId.
+            if (!p.TryGetValue("newName", out var nameObj) || nameObj == null)
+                if (!p.TryGetValue("name", out nameObj) || nameObj == null)
+                    throw new ArgumentException("Missing 'newName' parameter");
 
             var go = ObjectLocator.Resolve(p);
             long instanceId = go.GetId();

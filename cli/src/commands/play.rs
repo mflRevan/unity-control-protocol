@@ -59,7 +59,9 @@ async fn run_play(payload: Value, ctx: &Context) -> anyhow::Result<()> {
             .and_then(Value::as_bool)
             .unwrap_or(true);
         if save_dirty {
-            if super::active_scene_is_dirty(&mut client).await {
+            // A dirty untitled scene has nowhere to be saved to; the bridge discards it (or
+            // refuses when --keep-untitled asked for that), so only titled scenes are saved here.
+            if let Some((true, false)) = super::active_scene_dirty_state(&mut client).await {
                 super::save_active_scene(&mut client, ctx).await?;
             }
         } else {

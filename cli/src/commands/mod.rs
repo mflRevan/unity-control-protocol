@@ -229,7 +229,7 @@ pub enum Command {
     Close,
     /// Enter play mode
     Play {
-        /// Do not auto-save dirty scenes before entering play mode
+        /// Refuse with a non-zero exit instead of saving when a scene is dirty
         #[arg(long)]
         no_save: bool,
         /// Keep dirty untitled scenes instead of discarding them when auto-save runs
@@ -284,7 +284,7 @@ pub enum Command {
         #[command(subcommand)]
         action: record::RecordAction,
     },
-    /// Stream console logs
+    /// Read buffered console logs, or follow them live with --follow
     Logs {
         #[command(subcommand)]
         action: Option<logs::LogsAction>,
@@ -441,9 +441,10 @@ pub enum ExecAction {
         /// Video frames per second when --record is used
         #[arg(long, default_value_t = 15, value_parser = clap::value_parser!(u32).range(1..=60), requires = "record")]
         record_fps: u32,
-        /// Target recording bitrate in kilobits per second
-        #[arg(long, default_value_t = 2_000, value_parser = clap::value_parser!(u32).range(128..=50_000), requires = "record")]
-        record_bitrate_kbps: u32,
+        /// Target recording bitrate in kilobits per second. Default scales with resolution and
+        /// frame rate (about 0.2 bits per pixel per frame, at least 2000), like `ucp record`
+        #[arg(long, value_parser = clap::value_parser!(u32).range(128..=50_000), requires = "record")]
+        record_bitrate_kbps: Option<u32>,
         /// Replace an existing --record output file
         #[arg(long, requires = "record")]
         record_overwrite: bool,
@@ -468,11 +469,11 @@ pub enum FrameAction {
     },
 }
 
-/// Shared target addressing for spatial/visual commands. A GameObject may be addressed by
-/// instance id (preferred), hierarchy path, or name — tried in that priority order.
+/// Shared target addressing. A GameObject may be addressed by hierarchy path (stable across
+/// reloads, the choice for scripts), by name, or by instance id; an id wins when several are given.
 #[derive(clap::Args, Clone, Debug)]
 pub struct TargetArgs {
-    /// Target instance ID (preferred; get it from `ucp scene snapshot`)
+    /// Target instance ID from `ucp scene snapshot` (short-lived: it changes after reloads; prefer --path in scripts)
     #[arg(long, allow_hyphen_values = true)]
     pub id: Option<i64>,
     /// Target by hierarchy path "Root/Child/Leaf" (survives reloads, unlike an id)
@@ -921,15 +922,16 @@ pub async fn enforce_active_scene_guard(
 }
 
 /// Whether the active scene has unsaved changes; false when the bridge cannot say.
-pub async fn active_scene_is_dirty(client: &mut BridgeClient) -> bool {
+/// `(dirty, untitled)` for the active scene, or `None` when the bridge cannot say.
+pub async fn active_scene_dirty_state(client: &mut BridgeClient) -> Option<(bool, bool)> {
     client
         .call("scene/dirty-summary", serde_json::json!({}))
         .await
         .ok()
         .and_then(|value| serde_json::from_value::<ActiveSceneDirtySummary>(value).ok())
-        .map(|summary| summary.is_dirty)
-        .unwrap_or(false)
+        .map(|summary| (summary.is_dirty, summary.path.trim().is_empty()))
 }
+
 
 pub async fn enforce_active_scene_guard_for_project(
     project: &std::path::Path,
