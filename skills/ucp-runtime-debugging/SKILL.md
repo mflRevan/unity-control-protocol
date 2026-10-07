@@ -115,6 +115,8 @@ ucp logs status                                   # baseline counts
 ucp play --log-file play.log
 # drive the game: exec scripts, record, wait
 ucp logs --level error --count 20
+# fix a method body and keep playing: ~1 s, state kept, no domain reload
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs
 ucp stop
 ucp logs status                                   # the lastPlayWindow block is this session
 ```

@@ -43,6 +43,8 @@ namespace UCP.Bridge
             }));
 
             BridgeServer.NoteCompileRequested();
+            // Hot patches hold auto refresh; an explicit compile supersedes them.
+            HotReloadController.ReleaseHold();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             CompilationPipeline.RequestScriptCompilation();
             TrySyncSolution();
@@ -97,6 +99,13 @@ namespace UCP.Bridge
             // A refresh that finds changed scripts compiles them on the next update, exactly
             // like an explicit compile request.
             BridgeServer.NoteCompileRequested();
+            var p = MiniJson.Deserialize(paramsJson) as Dictionary<string, object>;
+            var path = p != null && p.TryGetValue("path", out var pathObj) && pathObj != null ? pathObj.ToString() : null;
+            if (!string.IsNullOrEmpty(path))
+            {
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ImportRecursive);
+                return new { status = "ok", message = $"Imported {path}", path };
+            }
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             return new { status = "ok", message = "Asset database refreshed" };
         }
