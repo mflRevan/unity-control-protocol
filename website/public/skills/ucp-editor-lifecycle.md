@@ -2,15 +2,15 @@
 name: ucp-editor-lifecycle
 description: >-
   Bring a Unity project under control with the `ucp` CLI: install the bridge, open or adopt the
-  editor, read the `[editor]` state line every command prints, recompile, enter and leave play
-  mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console
+  editor, read the `[editor]` state line every command prints, recompile or hot-reload method
+  bodies without a domain reload, enter and leave play mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console
   red? is the scene dirty?), when a command reports COMPILE ERRORS or a MODAL, or when the editor
   must be opened, restarted, or closed. For scene content, assets, UI, capture, debugging, or
   project configuration, use the matching ucp-* skill or the unity-control-protocol omni skill.
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-editor-lifecycle
 ---
 
@@ -64,8 +64,16 @@ ucp editor status          # pid, executable, project version, requested version
 ucp editor ps              # every Unity process ucp can see (import workers are filtered out)
 ucp editor restart         # in-editor quit, then relaunch; waits for the old process to exit
 ucp editor close           # in-editor quit; --force kills the process if the quit does not return
-ucp editor logs --lines 200
+ucp editor close --discard-changes   # the only way past a dirty scene; the edits are lost
+ucp editor logs --lines 200          # ucp's log, the editor's own -logFile, or Unity's Editor.log
 ```
+
+- An editor opened from Unity Hub or by hand is adopted like one ucp launched; `editor status`
+  says which. ucp refuses to launch a second editor on a project Unity already holds.
+- ucp never pulls the editor window to the front; compiles and reloads finish unfocused.
+- A command bound to an editor that exits fails with "the editor exited" and does not relaunch
+  it; an editor ucp launched that dies within two minutes stops automatic launches until you run
+  `ucp open` yourself. Check `ucp editor logs` (the crashed log is kept as `editor.prev.log`).
 
 - Pick the editor version with `--unity <path/to/Unity.exe>` or `--force-unity-version 6000.4.0f1`
   when the project's `ProjectVersion.txt` is not what you want.
@@ -80,7 +88,9 @@ ucp editor logs --lines 200
 ```bash
 ucp compile                # recompile and wait; prints per-assembly CS#### errors, exits non-zero on failure
 ucp compile --no-wait      # kick off compilation and return (a later command waits for the reload itself)
-ucp play                   # saves dirty titled scenes first; refuses on a dirty untitled scene
+ucp hot-reload apply Assets/Scripts/Foo.cs   # patch edited method bodies in ~1 s, no domain reload, play mode survives
+ucp hot-reload status      # what is patched; `ucp compile` or `hot-reload revert` clears it
+ucp play                   # saves a dirty scene first (a dirty untitled one is discarded unless --keep-untitled)
 ucp play --log-file play.log
 ucp pause                  # toggles
 ucp stop
@@ -88,9 +98,14 @@ ucp stop
 
 - Entering play mode reloads the domain. `ucp play` confirms the transition and reports Unity's
   refusal reason when scripts do not compile. Do not retry blindly; read `ucp compile`.
-- A dirty untitled scene blocks `play`, `scene load`, and `editor close` on purpose (Unity would
-  otherwise ask where to save). Save it under a path with `ucp scene save` after giving it one, or
-  discard with `--keep-untitled`/`--no-save` variants where offered, or start from a titled scene.
+- `hot-reload apply` is for method-body edits while iterating; its response lists the edits that
+  need a real compile (`needsFullCompile`: fields, types, signatures). While patches are live,
+  auto refresh is held so a focus change cannot recompile under you; `ucp compile` makes the
+  edits permanent and releases it. Always end with `ucp compile` before tests, builds, or handoff.
+- `play` and `scene load` save a dirty titled scene first and discard a dirty untitled one
+  (`--keep-untitled` keeps it and refuses instead); `--no-save` refuses on any dirty scene with a
+  non-zero exit. `editor close` and `restart` refuse on any dirty scene; `--discard-changes` is
+  the explicit way past. Unity's own save prompt is never shown.
 - Edits made in play mode are lost on `stop`, exactly as in the editor.
 
 ## Modal dialogs
@@ -126,6 +141,7 @@ ucp connect --timeout 5    # main thread responsive? compiling?
 ucp editor dialog          # anything modal?
 ucp logs status            # console counts and the most repeated messages
 ucp editor logs --lines 100
+ucp editor ps              # editors, and other ucp processes still acting on them
 ucp editor close --force && ucp open
 ```
 

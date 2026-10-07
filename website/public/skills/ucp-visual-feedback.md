@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer; video recording needs an interactive editor with a graphics device.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-visual-feedback
 ---
 
@@ -65,6 +65,7 @@ ucp view orbit --id 46894 --count 8 --elevation 25 --max-edge 384 -o orbit.png
 ucp record capture --duration 5 -o clip.mp4                    # block until the file is final
 ucp record capture --view scene --duration 8 --max-edge 640 -o scene.webm
 ucp record capture --duration 6 --slowdown 6 -o for-the-model.mp4
+ucp record capture --duration 8 --width 1920 --height 1080 --fps 30 -o hq.mp4   # bitrate scales with size; --bitrate-kbps overrides
 ucp record start --duration 30 -o session.mp4 --max-duration 120   # detached; survives this CLI call
 ucp play && ucp stop
 ucp record stop                                                 # finalize (or cancel an armed trigger)
@@ -75,7 +76,8 @@ ucp record arm --on signal:checkpoint --duration 3 -o cp.mp4 && ucp record signa
 ucp exec run demo-autopilot --record run.mp4 --record-lead 0.5 --record-tail 1
 ```
 
-- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, 2 Mbps,
+- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, a bitrate
+  that scales with size and frame rate (about 0.2 bits per pixel per frame, at least 2 Mbps),
   H.264 MP4 (or VP8 WebM with `--format webm`). No objects or scripts are injected into the scene.
 - `--view game` records `Camera.main`, not the Game view's camera stack. `--view scene` records
   a fixed vantage that does not follow the player, which is often what you want for judging

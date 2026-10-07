@@ -12,7 +12,9 @@ If Unity refuses to enter play mode because there are still breaking script erro
 
 If Unity is already in play mode, `ucp play` now fails clearly and points you to `ucp stop` instead of looking like a no-op toggle.
 
-`ucp play` also refuses to proceed when the active scene has unsaved changes. Save explicitly with `ucp scene save`, or use `--save` on the scene-editing command that produced the change.
+A dirty active scene is saved before entering play mode (play mode discards unsaved scene
+edits otherwise). Pass `--no-save` to refuse instead: the command then fails with a non-zero exit
+code and lists the unsaved objects, and nothing enters play mode.
 
 For unattended editor startup flows, pair lifecycle commands with `--dialog-policy` when Unity may raise recovery or Safe Mode prompts. A blocked startup dialog can leave the editor process alive without a live bridge until the prompt is resolved.
 
@@ -84,3 +86,18 @@ ucp play
 ucp screenshot -o test.png
 ucp stop
 ```
+
+## Focus
+
+`ucp play` does not bring the editor window to the front. Unity's Game view defaults to "Play
+Focused", which activates the editor's OS window when play mode starts; ucp switches every open
+Game view to "Play Unfocused" for the session and restores the previous setting when play mode
+ends. Set `UCP_FOCUS_EDITOR=1` to keep Unity's default behaviour (the game then also receives
+keyboard and mouse input immediately, as it would from the Play button).
+
+## Editing code while playing
+
+`ucp hot-reload apply <file.cs>` patches edited method bodies into the running game without
+leaving play mode or reloading the domain; the next frame runs the new code and object state is
+kept. Field, type, and signature changes still need `ucp compile`, which exits play mode. See
+[Scripting](../authoring/scripting.md#hot-reload).

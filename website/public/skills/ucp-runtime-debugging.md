@@ -4,13 +4,13 @@ description: >-
   Find out what the running Unity project is doing and why with `ucp logs`, `ucp run-tests`,
   `ucp exec`, `ucp profiler`, `ucp profile`, and `ucp frame capture`: read and follow console
   logs with filters, run edit-mode or play-mode tests by name pattern, execute registered editor
-  scripts with parameters, profile frames and read hierarchies sorted by self time, and export
-  structured captures. Use for playtesting loops, failure triage, test runs, and performance
-  work. For compile errors and editor state use ucp-editor-lifecycle.
+  scripts with parameters, hot-reload edited method bodies into a running game with `ucp
+  hot-reload`, profile frames and read hierarchies sorted by self time, and export structured
+  captures. Use for playtesting loops, failure triage, test runs, and performance work. For compile errors and editor state use ucp-editor-lifecycle.
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-runtime-debugging
 ---
 
@@ -115,6 +115,8 @@ ucp logs status                                   # baseline counts
 ucp play --log-file play.log
 # drive the game: exec scripts, record, wait
 ucp logs --level error --count 20
+# fix a method body and keep playing: ~1 s, state kept, no domain reload
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs
 ucp stop
 ucp logs status                                   # the lastPlayWindow block is this session
 ```

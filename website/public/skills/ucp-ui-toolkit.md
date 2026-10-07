@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`), the UCP bridge package, and Unity 6000.0 or newer in the target project. inspect/screenshot/check need an interactive editor with a graphics device; lint also works headless.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-ui-toolkit
 ---
 
@@ -137,8 +137,8 @@ ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui
 
 ## Pitfalls
 
-- Render commands briefly open and focus a transient utility window. They refuse to run in batch
-  mode or on the Null graphics device; `lint` still works there.
+- Render commands open a transient utility window without activating the editor. They refuse to
+  run in batch mode or on the Null graphics device; `lint` still works there.
 - Operations are asynchronous in the bridge with a 300 s overall ceiling; the CLI timeout for
   `inspect`, `screenshot`, and `check` defaults to 310 s. A domain reload mid-operation returns a
   structured `editor_shutdown` error, and a lost completion is recovered through `ui/status`.

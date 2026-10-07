@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer. `references` runs natively without an editor on projects using Force Text serialization and visible meta files.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-assets
 ---
 
@@ -24,7 +24,8 @@ and stays on the filesystem where it does not.
 ## Ground rules
 
 - You usually have direct filesystem access. Edit scripts and text assets locally, then run
-  `ucp compile` (scripts) or let `ucp files write` / `ucp asset reimport` trigger the import.
+  `ucp compile` (scripts), `ucp asset refresh [path]` (anything written outside the editor), or
+  let `ucp files write` / `ucp asset reimport` trigger the import.
 - Use `ucp asset move` / `bulk-move` for renames and folder cleanup, never `mv`.
 - Use `ucp asset import-settings` for FBX, texture, audio import options, never hand-edited
   `.meta` files.
@@ -105,7 +106,7 @@ Batch several writes with `--no-reimport`, then reimport once.
 ucp material create Assets/Materials/Crate.mat --shader "Universal Render Pipeline/Lit"
 ucp material get-properties --path Assets/Materials/Crate.mat
 ucp material get-property --path Assets/Materials/Crate.mat --property _BaseColor
-ucp material set-property --path Assets/Materials/Crate.mat --property _BaseColor --value [0.8,0.3,0.1,1]
+ucp material set-property --path Assets/Materials/Crate.mat --property _BaseColor --value [0.8,0.3,0.1,1]   # re-syncs keywords, saves the .mat
 ucp material set-property --path Assets/Materials/Crate.mat --property _Metallic --value 0.4
 ucp material set-property --path Assets/Materials/Crate.mat --property _BaseMap --value '{"path":"Assets/Textures/Crate.png"}'
 ucp material keywords --path Assets/Materials/Crate.mat

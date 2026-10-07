@@ -1,10 +1,19 @@
 # Objects & Components
 
-Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an `--id` flag with the instance ID of the target GameObject (use `ucp scene snapshot` to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
+Inspect and modify GameObjects, components, and their properties in the active scene. Every
+command that targets an existing object takes one selector:
+
+| Selector               | When to use it                                                              |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `--path Root/Child/Leaf` | The hierarchy path; stable across reloads, recompiles, and play mode      |
+| `--name <name>`        | First object with that name; fine for unique names                          |
+| `--id <instanceId>`    | The instance id from `ucp scene snapshot`; changes after every reload       |
+
+The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
 
 Use the object command family when you already know which object you want to inspect or mutate and want a narrow, predictable payload. The common workflow is:
 
-1. Discover an instance ID with `ucp scene snapshot`.
+1. Find the object with `ucp scene snapshot --filter <name>` (searches the whole hierarchy and prints each match's path).
 2. Inspect the target with `ucp object get-children`, `get-fields`, or `get-property`.
 3. Apply a change with one of the mutating commands.
 4. Add `--save` if the scene edit should persist immediately.
@@ -25,7 +34,7 @@ ucp object get-children --id 46894 --depth 2
 
 | Flag                | Description                                  |
 | ------------------- | -------------------------------------------- |
-| `--id <instanceId>` | Instance ID of the target GameObject         |
+| `--path`, `--name`, `--id` | Target selector (see above)                 |
 | `--depth <levels>`  | Child hierarchy depth to include (default 1) |
 
 Instance ids are 64-bit integers. On Unity 6000.0 through 6000.4 they are the familiar small
@@ -103,7 +112,7 @@ ucp object get-fields --id 46894 --component Transform
 
 | Flag                 | Description                                             |
 | -------------------- | ------------------------------------------------------- |
-| `--id <instanceId>`  | Instance ID of the target GameObject                    |
+| `--path`, `--name`, `--id` | Target selector (see above)                      |
 | `--component <type>` | Component type name (e.g. Transform, Camera, Rigidbody) |
 
 ### `ucp object get-property`
@@ -124,13 +133,17 @@ Write a property value. Values are provided as JSON.
 # Set a boolean
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true --save
 
-# Set a number
-ucp object set-property --id 46894 --component Camera --property m_Depth --value "2"
+# Set a number, addressing the object by path
+ucp object set-property --path "Rig/Main Camera" --component Camera --property m_Depth --value "2"
 ```
+
+The response reads the value back after the write (`value`), so a field a script overwrites every
+frame, or a setter that clamps, shows up as a mismatch instead of a silently ignored write. In
+play mode the edit applies to the running instance and is discarded on exit; the output says so.
 
 | Flag                 | Description         |
 | -------------------- | ------------------- |
-| `--id <instanceId>`  | Target instance ID  |
+| `--path`, `--name`, `--id` | Target selector |
 | `--component <type>` | Component type      |
 | `--property <name>`  | Property/field name |
 | `--value <json>`     | Value as JSON       |
@@ -161,22 +174,33 @@ ucp object set-active --id 46894 --active true
 Rename a GameObject.
 
 ```bash
-ucp object set-name --id 46894 --name "Player Camera" --save
+ucp object set-name --path "Level/Main Camera" --to "Player Camera" --save
 ```
 
 ### `ucp object create`
 
-Create a new empty GameObject.
+Create a GameObject. Pass `--primitive` for anything that should be visible: a plain create makes
+an empty object with only a Transform, and there is no other supported way to add a built-in mesh
+from the CLI.
 
 ```bash
-# Create at root
+# A visible cube (mesh, renderer, and collider in one step)
+ucp object create "Crate" --primitive Cube --save
+
+# An empty container at root
 ucp object create "MyObject"
 
 # Create as child
 ucp object create "Child" --parent 46894 --save
 ```
 
-New objects are created with a Transform component and become part of the active scene immediately.
+| Flag | Description |
+| ---- | ----------- |
+| `--primitive <Cube\|Sphere\|Capsule\|Cylinder\|Plane\|Quad>` | Build a renderable primitive instead of an empty object |
+| `--parent <id>` | Parent instance ID |
+| `--save` | Save the active scene afterwards |
+
+New objects become part of the active scene immediately.
 
 ### `ucp object delete`
 

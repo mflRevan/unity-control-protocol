@@ -1,19 +1,19 @@
 # Unity Control Protocol agent skills
 
-Version 0.6.4. Each skill follows the Agent Skills specification (https://agentskills.io/specification).
+Version 0.7.0. Each skill follows the Agent Skills specification (https://agentskills.io/specification).
 Download the raw URL into `<skills dir>/<name>/SKILL.md` to install by hand.
 
 | skill | kind | commands | raw |
 |---|---|---|---|
 | ucp-assets | surface | `asset`, `compile`, `files`, `material`, `object`, `references`, `script`, `shader` | https://unityctl.dev/skills/ucp-assets.md |
-| ucp-editor-lifecycle | surface | `bridge`, `compile`, `connect`, `doctor`, `editor`, `exec`, `install`, `logs`, `open`, `pause`, `play`, `scene`, `stop` | https://unityctl.dev/skills/ucp-editor-lifecycle.md |
+| ucp-editor-lifecycle | surface | `bridge`, `compile`, `connect`, `doctor`, `editor`, `exec`, `hot-reload`, `install`, `logs`, `open`, `pause`, `play`, `scene`, `stop` | https://unityctl.dev/skills/ucp-editor-lifecycle.md |
 | ucp-project-config | surface | `build`, `compile`, `connect`, `install`, `logs`, `packages`, `references`, `run-tests`, `settings` | https://unityctl.dev/skills/ucp-project-config.md |
-| ucp-runtime-debugging | surface | `compile`, `exec`, `frame`, `log`, `logs`, `play`, `profile`, `profiler`, `run-tests`, `shader`, `stop` | https://unityctl.dev/skills/ucp-runtime-debugging.md |
+| ucp-runtime-debugging | surface | `compile`, `exec`, `frame`, `hot-reload`, `log`, `logs`, `play`, `profile`, `profiler`, `run-tests`, `shader`, `stop` | https://unityctl.dev/skills/ucp-runtime-debugging.md |
 | ucp-scene-authoring | surface | `object`, `prefab`, `scene`, `spatial`, `transform`, `view` | https://unityctl.dev/skills/ucp-scene-authoring.md |
 | ucp-ui-toolkit | surface | `ui` | https://unityctl.dev/skills/ucp-ui-toolkit.md |
 | ucp-version-control | surface | `files`, `vcs` | https://unityctl.dev/skills/ucp-version-control.md |
 | ucp-visual-feedback | surface | `exec`, `object`, `play`, `record`, `scene`, `screenshot`, `spatial`, `transform`, `view` | https://unityctl.dev/skills/ucp-visual-feedback.md |
-| unity-control-protocol | omni | `asset`, `bridge`, `build`, `compile`, `connect`, `doctor`, `editor`, `exec`, `files`, `install`, `logs`, `material`, `object`, `open`, `packages`, `play`, `prefab`, `profiler`, `record`, `references`, `run-tests`, `scene`, `screenshot`, `settings`, `spatial`, `stop`, `transform`, `ui`, `vcs`, `view` | https://unityctl.dev/skills/unity-control-protocol.md |
+| unity-control-protocol | omni | `asset`, `bridge`, `build`, `compile`, `connect`, `doctor`, `editor`, `exec`, `files`, `hot-reload`, `install`, `logs`, `material`, `object`, `open`, `packages`, `play`, `prefab`, `profiler`, `record`, `references`, `run-tests`, `scene`, `screenshot`, `settings`, `spatial`, `stop`, `transform`, `ui`, `vcs`, `view` | https://unityctl.dev/skills/unity-control-protocol.md |
 
 ## Install
 
@@ -38,7 +38,7 @@ Work with a Unity project's assets and files through the editor with `ucp asset`
 
 ## ucp-editor-lifecycle
 
-Bring a Unity project under control with the `ucp` CLI: install the bridge, open or adopt the editor, read the `[editor]` state line every command prints, recompile, enter and leave play mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console red? is the scene dirty?), when a command reports COMPILE ERRORS or a MODAL, or when the editor must be opened, restarted, or closed. For scene content, assets, UI, capture, debugging, or project configuration, use the matching ucp-* skill or the unity-control-protocol omni skill.
+Bring a Unity project under control with the `ucp` CLI: install the bridge, open or adopt the editor, read the `[editor]` state line every command prints, recompile or hot-reload method bodies without a domain reload, enter and leave play mode, and recover from modal dialogs. Use when a task starts (is Unity running? is the console red? is the scene dirty?), when a command reports COMPILE ERRORS or a MODAL, or when the editor must be opened, restarted, or closed. For scene content, assets, UI, capture, debugging, or project configuration, use the matching ucp-* skill or the unity-control-protocol omni skill.
 
 - page: https://unityctl.dev/skills/ucp-editor-lifecycle
 - raw: https://unityctl.dev/skills/ucp-editor-lifecycle.md
@@ -52,7 +52,7 @@ Configure a Unity project from the terminal with `ucp packages`, `ucp settings`,
 
 ## ucp-runtime-debugging
 
-Find out what the running Unity project is doing and why with `ucp logs`, `ucp run-tests`, `ucp exec`, `ucp profiler`, `ucp profile`, and `ucp frame capture`: read and follow console logs with filters, run edit-mode or play-mode tests by name pattern, execute registered editor scripts with parameters, profile frames and read hierarchies sorted by self time, and export structured captures. Use for playtesting loops, failure triage, test runs, and performance work. For compile errors and editor state use ucp-editor-lifecycle.
+Find out what the running Unity project is doing and why with `ucp logs`, `ucp run-tests`, `ucp exec`, `ucp profiler`, `ucp profile`, and `ucp frame capture`: read and follow console logs with filters, run edit-mode or play-mode tests by name pattern, execute registered editor scripts with parameters, hot-reload edited method bodies into a running game with `ucp hot-reload`, profile frames and read hierarchies sorted by self time, and export structured captures. Use for playtesting loops, failure triage, test runs, and performance work. For compile errors and editor state use ucp-editor-lifecycle.
 
 - page: https://unityctl.dev/skills/ucp-runtime-debugging
 - raw: https://unityctl.dev/skills/ucp-runtime-debugging.md

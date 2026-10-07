@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://unityctl.dev/skills/ucp-scene-authoring
 ---
 
@@ -25,14 +25,16 @@ Changes are in memory until saved: pass `--save` on a mutating command, or run `
 ucp scene active                                  # name, path, dirty, root count
 ucp scene list                                    # scenes in build settings
 ucp scene snapshot                                # root objects with instance ids (lean on purpose)
-ucp scene snapshot --filter Player --depth 3      # substring filter, deeper hierarchy
+ucp scene snapshot --filter Player                # searches the whole hierarchy, prints each match's path
 ucp scene query 'component=Camera' --fields instanceId,name,active
 ucp scene query 'name=Enemy' --depth 8
-ucp object get-children --id 46894 --depth 2
+ucp object get-children --path Level/Props --depth 2
 ```
 
+- Every `object` command takes `--path Root/Child/Leaf` (stable), `--name` (first match), or
+  `--id` (changes on every reload). Prefer paths in scripts.
 - The snapshot is shallow by default (`--depth 0` = roots) to keep payloads small; deepen only
-  where you need to.
+  where you need to. A `--filter` always searches the full hierarchy.
 - Ids change after recompiles, reloads, scene loads, and test runs. Re-snapshot rather than
   reuse. `transform`, `spatial`, and `view` commands also accept `--path "Root/Child/Leaf"` and
   `--name`, which survive reloads (`--name` is the first match; ambiguous when names repeat).
@@ -43,11 +45,11 @@ ucp object get-children --id 46894 --depth 2
 ucp scene load Assets/Scenes/Level1.unity            # saves dirty titled scenes first
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene save
-ucp scene focus --id 46894 --axis 1 0 0              # aim the Scene view at an object (for screenshots)
+ucp scene focus --path Level/Player --axis 1 0 0     # aim the Scene view at an object (for screenshots)
 ```
 
-A dirty *untitled* scene blocks `load` on purpose. Save it under a path or pass `--keep-untitled`
-knowing the change is discarded when Unity switches scenes.
+`load` saves a dirty titled scene first and discards a dirty untitled one; pass `--keep-untitled`
+to refuse instead of discarding, or `--no-save` to refuse on any dirty scene (non-zero exit).
 
 ## Create objects that render
 
@@ -69,14 +71,14 @@ hand cannot reference Unity's built-in meshes and will not render.
 ```bash
 ucp object add-component --id 46894 --component Rigidbody
 ucp object remove-component --id 46894 --component BoxCollider
-ucp object get-fields --id 46894 --component Rigidbody
-ucp object get-property --id 46894 --component Transform --property m_LocalPosition
-ucp object set-property --id 46894 --component Rigidbody --property m_Mass --value 2.5
+ucp object get-fields --path Player --component Rigidbody
+ucp object get-property --path Player --component Transform --property m_LocalPosition
+ucp object set-property --path Player --component Rigidbody --property m_Mass --value 2.5   # response reads the value back
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
 ucp object set-property --id 46894 --component MeshRenderer --property m_Materials --value '[{"path":"Assets/Materials/Crate.mat"}]'
 ucp object set-property --id 46894 --component Light --property enabled --value false
 ucp object set-active --id 46894 --active false
-ucp object set-name --id 46894 --name "Crate_A"
+ucp object set-name --path Props/Crate --to "Crate_A"
 ucp object reparent --id 46894 --parent -15774 --sibling-index 0
 ucp object delete --id 46894
 ```

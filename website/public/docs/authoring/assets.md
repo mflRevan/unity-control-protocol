@@ -96,6 +96,9 @@ Object reference fields accept:
 
 Invalid references now fail explicitly instead of silently no-oping.
 
+Colour fields accept `[r,g,b,a]` (alpha optional), the `{"r":..,"g":..,"b":..,"a":..}` object that
+`asset read` prints, or an HTML string such as `"#FF8800"`; any other shape is a reported error.
+
 ### `ucp asset write-batch <path>`
 
 Modify multiple serialized fields on an asset in one request.
@@ -202,6 +205,22 @@ ucp asset bulk-move --moves '[
 - Missing-path failures now include a stale-AssetDatabase hint and fuzzy "did you mean" suggestions when nearby asset paths exist.
 - Use `--json` when you want per-entry success/error details for larger refactors.
 
+### `ucp asset refresh [path]`
+
+Make Unity import files that were written to disk outside the editor (by a script, a merge, an
+external tool), or import one path explicitly.
+
+```bash
+ucp asset refresh                        # whole asset database, waits for the import to settle
+ucp asset refresh Assets/Generated       # one file or folder tree
+ucp asset refresh --no-wait              # return as soon as the request is accepted
+```
+
+A refresh that finds changed scripts recompiles them; the `[editor]` state line reports
+`compiling` and `importing assets` while that runs. `import-settings` commands on a freshly
+written file import it first, so the explicit refresh is only needed when nothing else touches
+the file.
+
 ### `ucp asset reimport <path>`
 
 Force Unity to reimport a specific asset. The path may point to either the asset itself or its `.meta` file.
@@ -252,6 +271,17 @@ Importer writes reimport the asset automatically by default so Unity applies the
 | `--field <name>`      | Importer field/property path                                    |
 | `--value <json>`      | Value as JSON                                                   |
 | `--no-reimport`       | Update importer settings without immediately reimporting        |
+
+Texture fields such as `m_MaxTextureSize`, `m_TextureFormat`, and `m_CompressionQuality` write
+the default platform settings. A platform that has its own override (Android, iPhone, Standalone,
+...) keeps it, so the response carries `platformOverrides` (platform and serialized path) and a
+warning naming them. Write the per-platform entry when the change must reach that build target,
+or clear the override:
+
+```bash
+ucp asset import-settings write "Assets/Textures/HUD.png" --field "m_PlatformSettings.Array.data[1].m_MaxTextureSize" --value 1024
+ucp asset import-settings write "Assets/Textures/HUD.png" --field "m_PlatformSettings.Array.data[1].m_Overridden" --value false
+```
 
 ### `ucp asset import-settings write-batch <path>`
 

@@ -1,4 +1,4 @@
-# Unity Control Protocol (UCP) 0.6.4
+# Unity Control Protocol (UCP) 0.7.0
 
 A Rust CLI and an in-editor bridge that expose the Unity Editor as commands: scenes, objects, assets, materials, prefabs, UI Toolkit, play mode, tests, profiler, builds, screenshots and video. Built for humans and AI agents.
 
@@ -363,7 +363,7 @@ ucp --unity "C:/Program Files/Unity/Hub/Editor/6000.3.1f1/Editor/Unity.exe" conn
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.6.4
+  | Protocol: 0.7.0
 ```
 
 By default, `ucp connect` auto-updates stale tracked bridge refs before launching Unity. To warn without mutating the project, use `--bridge-update-policy warn`.
@@ -456,7 +456,35 @@ ucp editor logs --lines 200
 
 ## Editor Lifecycle
 
-UCP now manages the Unity Editor process directly instead of assuming Unity is already open. Any bridge-backed command can auto-start the editor when a project is detected and a Unity executable is available.
+UCP manages the Unity Editor process directly instead of assuming Unity is already open. Any
+bridge-backed command can auto-start the editor when a project is detected and a Unity executable
+is available, and every command attaches to an editor that is already running on the project,
+whichever way it was started.
+
+### Which editor ucp talks to
+
+ucp finds the editor for a project by its command line (`-projectPath` or Unity Hub's
+`-createProject`), and failing that by the pid in the bridge's own lock file. An editor opened
+from the Hub, from a file association, or by hand is adopted exactly like one `ucp open` launched:
+`editor status` says how it was started, `editor close` and `editor restart` work on it, and
+`editor logs` reads Unity's per-user `Editor.log` when the editor has no `-logFile` of its own.
+If Unity holds the project (`Temp/UnityLockfile`) but ucp cannot identify the process, launching
+is refused rather than producing a second editor on the same project.
+
+### When ucp launches an editor
+
+- One invocation launches at most one editor, and only before it has attached to one. A command
+  that is bound to an editor which then exits (a crash during `logs --follow`, a kill during a
+  play-mode poll) fails with "the editor exited" instead of starting a replacement. This is what
+  stops a forgotten follower from relaunching the editor after every crash.
+- An editor ucp launched that dies within two minutes is treated as a crash on startup: ordinary
+  commands stop auto-launching and point at `ucp editor logs`; `ucp open` and `ucp editor restart`
+  always proceed.
+- `ucp open` rotates a non-empty `editor.log` to `editor.prev.log`, so the log of the editor that
+  just crashed survives the relaunch.
+- ucp never brings the editor window to the foreground. The bridge keeps an unfocused editor
+  compiling, importing, and reloading by queueing player-loop updates; set `UCP_FOCUS_EDITOR=1`
+  only if you want the old nudge-to-front behaviour back. `ucp play` also switches the Game views to "Play Unfocused" for the session, since Unity's default "Play Focused" activates the editor window on play; `UCP_FOCUS_EDITOR=1` keeps Unity's default.
 
 ### Commands
 
@@ -478,24 +506,33 @@ Alias for `ucp editor close`.
 ```bash
 ucp close
 ucp editor close --force
+ucp editor close --discard-changes
 ```
 
-UCP first requests a graceful shutdown through the bridge, then falls back to a window-close request, and finally uses forced termination when `--force` is supplied or graceful shutdown times out. If shutdown is still in progress when the timeout expires, the command now reports that the process is still closing instead of claiming success.
+UCP requests a graceful shutdown through the bridge (`EditorApplication.Exit`, which raises no
+save prompt) and uses forced termination when `--force` is supplied or the graceful shutdown does
+not return. It never sends an OS window-close, which on a dirty scene would raise Unity's native
+save dialog with nobody to answer it. If shutdown is still in progress when the timeout expires,
+the command reports that the process is still closing instead of claiming success.
 
-If the active scene has unsaved changes, `close` now blocks first and asks you to save explicitly.
+If the active scene has unsaved changes, `close` blocks first, with or without `--force`, and
+asks you to save. `--discard-changes` is the explicit way to close anyway and lose them.
 
 #### `ucp editor restart`
 
 ```bash
 ucp editor restart
 ucp editor restart --force
+ucp editor restart --discard-changes
 ```
 
-Like `close`, `restart` now refuses to proceed while the active scene is dirty.
+Like `close`, `restart` refuses to proceed while the active scene is dirty unless
+`--discard-changes` is given.
 
 #### `ucp editor status`
 
-Show whether Unity is running for the target project, the detected PID, the resolved Unity executable path, and the editor log path.
+Show whether Unity is running for the target project, how it was launched (by ucp, by Unity Hub,
+or outside ucp), the detected PID, the resolved Unity executable path, and the editor log path.
 
 ```bash
 ucp editor status
@@ -503,7 +540,9 @@ ucp editor status
 
 #### `ucp editor logs`
 
-Print the Unity editor log captured at `.ucp/logs/editor.log`.
+Print the Unity editor log: `.ucp/logs/editor.log` for editors ucp launched, the editor's own
+`-logFile` when it was started with one, and Unity's per-user `Editor.log` for Hub and manual
+launches. The JSON output names the file that was read.
 
 ```bash
 ucp editor logs
@@ -512,7 +551,10 @@ ucp editor logs --lines 400
 
 #### `ucp editor ps`
 
-List Unity editor processes discovered by UCP, including PID, project path, and executable path when available.
+List Unity editor processes discovered by UCP, including PID, project path, executable path, and
+whether Unity Hub launched them, followed by any other `ucp` processes on the machine with their
+age and command line. A `ucp` that outlives its task (a forgotten `logs --follow`, a hung
+command) keeps acting on the editor; `ucp doctor` warns about ones older than ten minutes.
 
 ```bash
 ucp editor ps
@@ -547,10 +589,10 @@ This is a dangerous escape hatch. Opening a project in a different Unity version
 Use `--dialog-policy` when Unity shows startup prompts such as Safe Mode or recovery dialogs.
 
 ```bash
-ucp --dialog-policy auto start
-ucp --dialog-policy recover start
-ucp --dialog-policy safe-mode start
-ucp --dialog-policy manual start
+ucp --dialog-policy auto open
+ucp --dialog-policy recover open
+ucp --dialog-policy safe-mode open
+ucp --dialog-policy manual open
 ```
 
 Policies:
@@ -621,7 +663,7 @@ Save the active scene explicitly.
 ucp scene save
 ```
 
-Use this after a series of scene edits when you want later disruptive commands such as `ucp play`, `ucp compile`, `ucp scene load`, `ucp editor restart`, or package/build-target/define changes to proceed without dirty-scene blocking.
+Use this after a series of scene edits when you want later disruptive commands such as `ucp compile`, `ucp run-tests`, `ucp editor restart`, `ucp install`, or package/build-target/define changes to proceed without dirty-scene blocking (`ucp play` and `ucp scene load` save a dirty scene themselves).
 
 #### `ucp scene focus`
 
@@ -629,17 +671,19 @@ Focus the Scene view camera on a GameObject. This is the recommended visual iter
 
 ```bash
 # Frame the object with the current Scene view orientation
-ucp scene focus --id 46894
+ucp scene focus --path "Level/Player"
 
 # Align the Scene view to look from the positive X side
-ucp scene focus --id 46894 --axis 1 0 0
+ucp scene focus --name Player --axis 1 0 0
 
-# Negative axes are supported too
+# Negative axes are supported too; --id works as on every object command
 ucp scene focus --id 46894 --axis 0 0 -1
 ```
 
 | Flag           | Description                                               |
 | -------------- | --------------------------------------------------------- |
+| `--path <path>` | Target by hierarchy path (stable across reloads)         |
+| `--name <name>` | Target by GameObject name (first match)                  |
 | `--id <id>`    | Target GameObject instance ID                             |
 | `--axis X Y Z` | Optional Scene view alignment direction toward the target |
 
@@ -656,7 +700,7 @@ ucp scene load Assets/Scenes/Lighting.unity --additive
 
 After `scene load`, UCP waits for Unity's scene-processing work to settle before returning so the newly loaded scene is ready for immediate inspection or follow-up edits.
 
-If the active scene has unsaved changes, `scene load` now fails before the transition and reports a concise dirty-scene summary. Save first with `ucp scene save`, or rerun your scene-editing command with `--save`.
+If the active scene has unsaved changes, `scene load` saves it first; a dirty untitled scene is discarded unless `--keep-untitled` is passed. With `--no-save` the command refuses instead, with a concise dirty-scene summary and a non-zero exit code, so nothing is written behind your back.
 
 | Flag              | Description                                                     |
 | ----------------- | --------------------------------------------------------------- |
@@ -684,8 +728,8 @@ ucp scene snapshot --json
 
 | Flag                 | Description                            |
 | -------------------- | -------------------------------------- |
-| `--filter <pattern>` | Filter objects by name                 |
-| `--depth <n>`        | Maximum hierarchy depth (default: `0`) |
+| `--filter <pattern>` | Case-insensitive name substring; searches the whole hierarchy and prints each match's `path` |
+| `--depth <n>`        | Maximum hierarchy depth without a filter (default: `0`, roots only) |
 | `--json`             | Output as JSON                         |
 
 **Example output:**
@@ -718,11 +762,20 @@ Supported query keys are `name`, `component`, `active`, `tag`, and `layer`. Mult
 
 ## Objects & Components
 
-Inspect and modify GameObjects, components, and their properties in the active scene. Most commands require an `--id` flag with the instance ID of the target GameObject (use `ucp scene snapshot` to discover IDs). The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
+Inspect and modify GameObjects, components, and their properties in the active scene. Every
+command that targets an existing object takes one selector:
+
+| Selector               | When to use it                                                              |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `--path Root/Child/Leaf` | The hierarchy path; stable across reloads, recompiles, and play mode      |
+| `--name <name>`        | First object with that name; fine for unique names                          |
+| `--id <instanceId>`    | The instance id from `ucp scene snapshot`; changes after every reload       |
+
+The snapshot command is intentionally shallow by default; detailed component decomposition lives here.
 
 Use the object command family when you already know which object you want to inspect or mutate and want a narrow, predictable payload. The common workflow is:
 
-1. Discover an instance ID with `ucp scene snapshot`.
+1. Find the object with `ucp scene snapshot --filter <name>` (searches the whole hierarchy and prints each match's path).
 2. Inspect the target with `ucp object get-children`, `get-fields`, or `get-property`.
 3. Apply a change with one of the mutating commands.
 4. Add `--save` if the scene edit should persist immediately.
@@ -743,7 +796,7 @@ ucp object get-children --id 46894 --depth 2
 
 | Flag                | Description                                  |
 | ------------------- | -------------------------------------------- |
-| `--id <instanceId>` | Instance ID of the target GameObject         |
+| `--path`, `--name`, `--id` | Target selector (see above)                 |
 | `--depth <levels>`  | Child hierarchy depth to include (default 1) |
 
 Instance ids are 64-bit integers. On Unity 6000.0 through 6000.4 they are the familiar small
@@ -821,7 +874,7 @@ ucp object get-fields --id 46894 --component Transform
 
 | Flag                 | Description                                             |
 | -------------------- | ------------------------------------------------------- |
-| `--id <instanceId>`  | Instance ID of the target GameObject                    |
+| `--path`, `--name`, `--id` | Target selector (see above)                      |
 | `--component <type>` | Component type name (e.g. Transform, Camera, Rigidbody) |
 
 #### `ucp object get-property`
@@ -842,13 +895,17 @@ Write a property value. Values are provided as JSON.
 # Set a boolean
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true --save
 
-# Set a number
-ucp object set-property --id 46894 --component Camera --property m_Depth --value "2"
+# Set a number, addressing the object by path
+ucp object set-property --path "Rig/Main Camera" --component Camera --property m_Depth --value "2"
 ```
+
+The response reads the value back after the write (`value`), so a field a script overwrites every
+frame, or a setter that clamps, shows up as a mismatch instead of a silently ignored write. In
+play mode the edit applies to the running instance and is discarded on exit; the output says so.
 
 | Flag                 | Description         |
 | -------------------- | ------------------- |
-| `--id <instanceId>`  | Target instance ID  |
+| `--path`, `--name`, `--id` | Target selector |
 | `--component <type>` | Component type      |
 | `--property <name>`  | Property/field name |
 | `--value <json>`     | Value as JSON       |
@@ -879,22 +936,33 @@ ucp object set-active --id 46894 --active true
 Rename a GameObject.
 
 ```bash
-ucp object set-name --id 46894 --name "Player Camera" --save
+ucp object set-name --path "Level/Main Camera" --to "Player Camera" --save
 ```
 
 #### `ucp object create`
 
-Create a new empty GameObject.
+Create a GameObject. Pass `--primitive` for anything that should be visible: a plain create makes
+an empty object with only a Transform, and there is no other supported way to add a built-in mesh
+from the CLI.
 
 ```bash
-# Create at root
+# A visible cube (mesh, renderer, and collider in one step)
+ucp object create "Crate" --primitive Cube --save
+
+# An empty container at root
 ucp object create "MyObject"
 
 # Create as child
 ucp object create "Child" --parent 46894 --save
 ```
 
-New objects are created with a Transform component and become part of the active scene immediately.
+| Flag | Description |
+| ---- | ----------- |
+| `--primitive <Cube\|Sphere\|Capsule\|Cylinder\|Plane\|Quad>` | Build a renderable primitive instead of an empty object |
+| `--parent <id>` | Parent instance ID |
+| `--save` | Save the active scene afterwards |
+
+New objects become part of the active scene immediately.
 
 #### `ucp object delete`
 
@@ -1164,6 +1232,9 @@ Object reference fields accept:
 
 Invalid references now fail explicitly instead of silently no-oping.
 
+Colour fields accept `[r,g,b,a]` (alpha optional), the `{"r":..,"g":..,"b":..,"a":..}` object that
+`asset read` prints, or an HTML string such as `"#FF8800"`; any other shape is a reported error.
+
 #### `ucp asset write-batch <path>`
 
 Modify multiple serialized fields on an asset in one request.
@@ -1270,6 +1341,22 @@ ucp asset bulk-move --moves '[
 - Missing-path failures now include a stale-AssetDatabase hint and fuzzy "did you mean" suggestions when nearby asset paths exist.
 - Use `--json` when you want per-entry success/error details for larger refactors.
 
+#### `ucp asset refresh [path]`
+
+Make Unity import files that were written to disk outside the editor (by a script, a merge, an
+external tool), or import one path explicitly.
+
+```bash
+ucp asset refresh                        # whole asset database, waits for the import to settle
+ucp asset refresh Assets/Generated       # one file or folder tree
+ucp asset refresh --no-wait              # return as soon as the request is accepted
+```
+
+A refresh that finds changed scripts recompiles them; the `[editor]` state line reports
+`compiling` and `importing assets` while that runs. `import-settings` commands on a freshly
+written file import it first, so the explicit refresh is only needed when nothing else touches
+the file.
+
 #### `ucp asset reimport <path>`
 
 Force Unity to reimport a specific asset. The path may point to either the asset itself or its `.meta` file.
@@ -1320,6 +1407,17 @@ Importer writes reimport the asset automatically by default so Unity applies the
 | `--field <name>`      | Importer field/property path                                    |
 | `--value <json>`      | Value as JSON                                                   |
 | `--no-reimport`       | Update importer settings without immediately reimporting        |
+
+Texture fields such as `m_MaxTextureSize`, `m_TextureFormat`, and `m_CompressionQuality` write
+the default platform settings. A platform that has its own override (Android, iPhone, Standalone,
+...) keeps it, so the response carries `platformOverrides` (platform and serialized path) and a
+warning naming them. Write the per-platform entry when the change must reach that build target,
+or clear the override:
+
+```bash
+ucp asset import-settings write "Assets/Textures/HUD.png" --field "m_PlatformSettings.Array.data[1].m_MaxTextureSize" --value 1024
+ucp asset import-settings write "Assets/Textures/HUD.png" --field "m_PlatformSettings.Array.data[1].m_Overridden" --value false
+```
 
 #### `ucp asset import-settings write-batch <path>`
 
@@ -1406,7 +1504,7 @@ ucp ui screenshot Assets/UI/Inventory.uxml --width 1280 --height 720 -o artifact
 
 Without `--out`, the bridge retains the PNG under `Library/UCP/UiCaptures` and returns its path and pixel hash. `--out` copies that artifact without overwriting an existing file unless `--force` is explicit. Width and height must be supplied together; if omitted, a scenario's viewport is preserved and direct UXML uses `960x640`.
 
-The capture backend briefly opens and focuses a transient utility window, then closes it and restores the previously focused window. It does not load or dirty a scene. `ui inspect`, `ui screenshot`, and `ui check` default to a 310-second CLI timeout so the bridge can report its 300-second overall limit, including sequential multi-state runs. Other commands retain a 30-second default. An explicit global `--timeout` overrides these defaults; `--timeout 0` disables the CLI deadline but does not disable the bridge ceiling. On a result timeout, the CLI makes one status lookup (up to five additional seconds) to recover a completed result or report the last known state. A CLI timeout does not cancel the operation. Editor reload/quit interrupts active and queued operations with `editor_shutdown`; if the connection closes before that notification arrives, the CLI reports that completion could not be confirmed.
+The capture backend opens a transient utility window without activating the editor, renders into it, and closes it again. It does not load or dirty a scene. `ui inspect`, `ui screenshot`, and `ui check` default to a 310-second CLI timeout so the bridge can report its 300-second overall limit, including sequential multi-state runs. Other commands retain a 30-second default. An explicit global `--timeout` overrides these defaults; `--timeout 0` disables the CLI deadline but does not disable the bridge ceiling. On a result timeout, the CLI makes one status lookup (up to five additional seconds) to recover a completed result or report the last known state. A CLI timeout does not cancel the operation. Editor reload/quit interrupts active and queued operations with `editor_shutdown`; if the connection closes before that notification arrives, the CLI reports that completion could not be confirmed.
 
 #### `ucp ui check <target>`
 
@@ -1582,6 +1680,12 @@ ucp material set-property --path "Assets/Materials/Agent.mat" --property _BaseCo
 | `--path <assetPath>` | Path to the material asset                   |
 | `--property <name>`  | Property name (e.g. \_BaseColor, \_Metallic) |
 | `--value <json>`     | New value as JSON                            |
+
+After a write, UCP does what the Inspector does: it re-derives the shader keywords that depend on
+property values (through HDRP's and URP's own helpers when those pipelines are present, property
+drawers otherwise) and saves the asset to disk. The response reports the value read back,
+`keywordsReset` (which helper ran), and `saved`. On URP and HDRP address colours as `_BaseColor`;
+`_Color` is a hidden legacy alias there.
 
 Mutating material commands wait for Unity to finish applying the material/shader-side change before returning.
 
@@ -1994,6 +2098,62 @@ public class SetupScene : IUCPScript
 
 Scripts are discovered automatically and can be executed remotely by name. `ucp compile` now performs a synchronous asset refresh before requesting compilation, which covers the common raw-file workflow: write a new `.cs` file, run `ucp compile`, then immediately call it with `ucp exec run`.
 
+### Hot reload
+
+`ucp compile` is the safe path after an edit, but it costs a full compile and domain reload:
+several seconds on a small project, half a minute or more on a large one, and play mode is torn
+down. `ucp hot-reload` patches edited method bodies into the running editor instead, in about a
+second, in edit mode or play mode, without a domain reload.
+
+```bash
+# edit Assets/Scripts/EnemyAI.cs, then:
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs Assets/Scripts/Spawner.cs   # several files at once
+ucp hot-reload status                                                      # what is patched right now
+ucp hot-reload revert                                                      # drop every patch
+ucp compile                                                                # make the edits permanent
+```
+
+`apply` compiles the given files on their own, against the assemblies the editor already has
+loaded, with Unity's bundled C# compiler. Every method in the result whose declaring type still
+has the same field layout is then detoured onto the new body (a Harmony prefix that runs the new
+code and skips the old). Objects keep their state, play mode keeps running, and the next
+`Update` already executes the edit.
+
+What hot reload handles:
+
+- method bodies, instance and static, including properties, operators, lambdas, async methods,
+  local functions, and iterators
+- new private methods, as long as only other patched code calls them
+- several files, in several script assemblies, in one call
+
+What still needs `ucp compile` (the response lists these under `needsFullCompile`, with a reason):
+
+- adding, removing, reordering, or retyping instance fields, or adding static fields
+- new types, renamed or removed members, changed signatures, generic types and methods
+- constructor and field-initializer changes
+- edits in files you did not pass, and anything that other, unpatched code must see (a new
+  public method called from a file you did not hand to `apply`)
+
+While patches are live, Unity's auto refresh is held so a window focus does not trigger the
+recompile that would wipe them; `status` reports `autoRefreshHeld`. `ucp compile` (or
+`hot-reload revert`) releases the hold. The patches live in the managed domain, so a domain
+reload drops them: when that reload is not a rebuild (entering play mode with domain reload on,
+a manual reload), the bridge re-applies them from the same files and logs that it did; when the
+reload came from a real compile, the edits are compiled in and the patch list is dropped.
+
+Rules of thumb for an agent loop:
+
+- Iterating on behaviour (tuning a value, fixing a branch, changing what a method does): `apply`.
+- Changing shape (fields, types, signatures): `compile`.
+- Before handing off, running tests, or building: `compile`, so nothing depends on a patch.
+- A failed `apply` compile exits non-zero and prints the `CS####` lines; the editor is unchanged.
+
+Patched code runs from a small side assembly, so stack traces name that assembly, reflection
+over a patched type still sees the original members, and `typeof(X).Assembly` of patched code is
+not the script assembly. Hot reload needs the Mono scripting backend the Unity editor uses today
+and ships with Lib.Harmony 2.2.2 as an editor-only plugin inside the bridge package.
+
 #### `ucp script doctor`
 
 Diagnose generated C# project files and stale script references.
@@ -2027,7 +2187,9 @@ If Unity refuses to enter play mode because there are still breaking script erro
 
 If Unity is already in play mode, `ucp play` now fails clearly and points you to `ucp stop` instead of looking like a no-op toggle.
 
-`ucp play` also refuses to proceed when the active scene has unsaved changes. Save explicitly with `ucp scene save`, or use `--save` on the scene-editing command that produced the change.
+A dirty active scene is saved before entering play mode (play mode discards unsaved scene
+edits otherwise). Pass `--no-save` to refuse instead: the command then fails with a non-zero exit
+code and lists the unsaved objects, and nothing enters play mode.
 
 For unattended editor startup flows, pair lifecycle commands with `--dialog-policy` when Unity may raise recovery or Safe Mode prompts. A blocked startup dialog can leave the editor process alive without a live bridge until the prompt is resolved.
 
@@ -2099,6 +2261,21 @@ ucp play
 ucp screenshot -o test.png
 ucp stop
 ```
+
+### Focus
+
+`ucp play` does not bring the editor window to the front. Unity's Game view defaults to "Play
+Focused", which activates the editor's OS window when play mode starts; ucp switches every open
+Game view to "Play Unfocused" for the session and restores the previous setting when play mode
+ends. Set `UCP_FOCUS_EDITOR=1` to keep Unity's default behaviour (the game then also receives
+keyboard and mouse input immediately, as it would from the Play button).
+
+### Editing code while playing
+
+`ucp hot-reload apply <file.cs>` patches edited method bodies into the running game without
+leaving play mode or reloading the domain; the next frame runs the new code and object state is
+kept. Field, type, and signature changes still need `ucp compile`, which exits play mode. See
+[Scripting](../authoring/scripting.md#hot-reload).
 
 
 ---
@@ -2180,7 +2357,10 @@ requested color, or transparent when the color has zero alpha.
 
 Record a lightweight, silent Game or Scene view video without adding objects or scripts to the
 scene. The defaults are tuned for agent vision: 960px on the longest edge, source aspect ratio
-preserved, 15fps, 2Mbps, and H.264/MP4 on Windows and macOS or VP8/WebM on Linux.
+preserved, 15fps, and H.264/MP4 on Windows and macOS or VP8/WebM on Linux. The bitrate scales
+with resolution and frame rate (about 0.2 bits per pixel per frame, at least 2 Mbps; 1080p30 lands
+near 12 Mbps) so moving water or sky does not smear into macroblocks; `--bitrate-kbps` overrides
+it, and the response reports the value used.
 
 ```bash
 # One bounded clip; waits for the finalized file
@@ -2189,7 +2369,7 @@ ucp record capture --duration 5 --view game -o playtest.mp4
 # Surround any CLI/scripted sequence
 ucp record start --view scene -o sequence.mp4
 ucp transform move --name Player --to 0 1 4
-ucp scene focus --name Player
+ucp scene focus --name Player                      # --path and --id work too
 ucp record stop
 
 # Record an IUCPScript call with lead/tail context
@@ -2328,7 +2508,7 @@ whether the scene is dirty, so it can decide to look closer instead of finding o
 later.
 
 ```text
-[editor] edit mode · scene GetStarted_Scene (dirty) · console 0 errors, 8 warnings (+1 error from this command)
+[editor] edit mode · scene GetStarted_Scene (dirty) · console 8 warnings (+1 error from this command)
 ```
 
 The line is built from a summary the bridge attaches to every response it produces on Unity's main
@@ -2344,7 +2524,7 @@ Always:
 |---|---|
 | `edit mode` / `play mode` / `play mode (paused)` | `EditorApplication.isPlaying` and `isPaused`; `entering play` / `exiting play` while a transition is pending |
 | `scene <name>` | the active scene, with `(dirty)` and `(untitled)` when they apply, and `+N more dirty scenes` when other loaded scenes are dirty |
-| `console N errors, M warnings` | the Console window's badge counts (errors include exceptions); `console clean` when both are zero |
+| `console N errors, M warnings` | the Console window's badge counts (errors include exceptions); only non-zero counts are spelled out (`console 8 warnings`, `console 2 errors`), and `console clean` when both are zero |
 | `(+N errors, +M warnings from this command)` | entries logged after this command's request was dispatched, so a mutation that logs an error is called out on the spot |
 
 Only when true: `COMPILE ERRORS` (`EditorUtility.scriptCompilationFailed`), `compiling`,
@@ -2430,9 +2610,10 @@ other platforms `ucp editor dialog` reports nothing and commands fall back to th
   unless `-ignoreCompilerErrors` is passed, and `-accept-apiupdate` pre-answers the API updater.
 - Unity remembers "Don't ask again" answers under `EditorPrefs` keys prefixed `DialogOptOut.`,
   and `EditorPrefs["EnterSafeModeDialog"] = false` makes Unity enter Safe Mode silently.
-- Bridge commands never trigger Unity's save prompts themselves: `ucp scene load`, `ucp play`, and
-  `ucp editor close` go through the bridge's modal guard, which saves titled scenes or refuses
-  with an explanation instead of letting Unity ask.
+- Bridge commands never trigger Unity's save prompts themselves: `ucp scene load` and `ucp play`
+  save titled scenes through the bridge's modal guard (and discard a dirty untitled one unless
+  `--keep-untitled`), while `ucp editor close` and `restart` refuse on any dirty scene unless
+  `--discard-changes` is passed, with an explanation instead of letting Unity ask.
 - Scripts run through `ucp exec` bypass that guard. Do not call `EditorSceneManager.SaveScene()`
   on an untitled scene or `EditorUtility.DisplayDialog` from an `IUCPScript`.
 
@@ -2790,7 +2971,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.6.4
+  Version: 0.7.0
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 
@@ -3132,12 +3313,12 @@ those files, so what an agent reads is exactly what is maintained.
 | skill | covers | raw Markdown |
 |---|---|---|
 | `unity-control-protocol` | the whole surface in one skill; the recommended default | [unity-control-protocol.md](https://unityctl.dev/skills/unity-control-protocol.md) |
-| `ucp-editor-lifecycle` | install, open, adopt, close, `[editor]` state line, compile, play/stop/pause, modal dialogs | [ucp-editor-lifecycle.md](https://unityctl.dev/skills/ucp-editor-lifecycle.md) |
+| `ucp-editor-lifecycle` | install, open, adopt, close, `[editor]` state line, compile, hot-reload, play/stop/pause, modal dialogs | [ucp-editor-lifecycle.md](https://unityctl.dev/skills/ucp-editor-lifecycle.md) |
 | `ucp-scene-authoring` | `scene`, `object`, `transform`, `spatial`, `prefab`: hierarchy, primitives, properties, placement | [ucp-scene-authoring.md](https://unityctl.dev/skills/ucp-scene-authoring.md) |
 | `ucp-assets` | `asset`, `files`, `material`, `references`, `shader`, `script`: assets on disk without breaking GUIDs | [ucp-assets.md](https://unityctl.dev/skills/ucp-assets.md) |
 | `ucp-ui-toolkit` | `ui`: lint, inspect, populate, screenshot, and check UXML/USS (Unity 6+) | [ucp-ui-toolkit.md](https://unityctl.dev/skills/ucp-ui-toolkit.md) |
 | `ucp-visual-feedback` | `screenshot`, `view`, `record`: seeing the scene, composed renders, clips with `--slowdown` | [ucp-visual-feedback.md](https://unityctl.dev/skills/ucp-visual-feedback.md) |
-| `ucp-runtime-debugging` | `logs`, `run-tests`, `exec`, `profiler`, `profile`, `frame`: playtest loops and triage | [ucp-runtime-debugging.md](https://unityctl.dev/skills/ucp-runtime-debugging.md) |
+| `ucp-runtime-debugging` | `logs`, `run-tests`, `exec`, `hot-reload`, `profiler`, `profile`, `frame`: playtest loops and triage | [ucp-runtime-debugging.md](https://unityctl.dev/skills/ucp-runtime-debugging.md) |
 | `ucp-project-config` | `packages`, `settings`, `build`: dependencies, project settings, builds | [ucp-project-config.md](https://unityctl.dev/skills/ucp-project-config.md) |
 | `ucp-version-control` | `vcs`: Unity VCS / Plastic fallback when `cm` is unavailable | [ucp-version-control.md](https://unityctl.dev/skills/ucp-version-control.md) |
 
@@ -3229,7 +3410,8 @@ and stays on the filesystem where it does not.
 ### Ground rules
 
 - You usually have direct filesystem access. Edit scripts and text assets locally, then run
-  `ucp compile` (scripts) or let `ucp files write` / `ucp asset reimport` trigger the import.
+  `ucp compile` (scripts), `ucp asset refresh [path]` (anything written outside the editor), or
+  let `ucp files write` / `ucp asset reimport` trigger the import.
 - Use `ucp asset move` / `bulk-move` for renames and folder cleanup, never `mv`.
 - Use `ucp asset import-settings` for FBX, texture, audio import options, never hand-edited
   `.meta` files.
@@ -3310,7 +3492,7 @@ Batch several writes with `--no-reimport`, then reimport once.
 ucp material create Assets/Materials/Crate.mat --shader "Universal Render Pipeline/Lit"
 ucp material get-properties --path Assets/Materials/Crate.mat
 ucp material get-property --path Assets/Materials/Crate.mat --property _BaseColor
-ucp material set-property --path Assets/Materials/Crate.mat --property _BaseColor --value [0.8,0.3,0.1,1]
+ucp material set-property --path Assets/Materials/Crate.mat --property _BaseColor --value [0.8,0.3,0.1,1]   # re-syncs keywords, saves the .mat
 ucp material set-property --path Assets/Materials/Crate.mat --property _Metallic --value 0.4
 ucp material set-property --path Assets/Materials/Crate.mat --property _BaseMap --value '{"path":"Assets/Textures/Crate.png"}'
 ucp material keywords --path Assets/Materials/Crate.mat
@@ -3432,8 +3614,16 @@ ucp editor status          # pid, executable, project version, requested version
 ucp editor ps              # every Unity process ucp can see (import workers are filtered out)
 ucp editor restart         # in-editor quit, then relaunch; waits for the old process to exit
 ucp editor close           # in-editor quit; --force kills the process if the quit does not return
-ucp editor logs --lines 200
+ucp editor close --discard-changes   # the only way past a dirty scene; the edits are lost
+ucp editor logs --lines 200          # ucp's log, the editor's own -logFile, or Unity's Editor.log
 ```
+
+- An editor opened from Unity Hub or by hand is adopted like one ucp launched; `editor status`
+  says which. ucp refuses to launch a second editor on a project Unity already holds.
+- ucp never pulls the editor window to the front; compiles and reloads finish unfocused.
+- A command bound to an editor that exits fails with "the editor exited" and does not relaunch
+  it; an editor ucp launched that dies within two minutes stops automatic launches until you run
+  `ucp open` yourself. Check `ucp editor logs` (the crashed log is kept as `editor.prev.log`).
 
 - Pick the editor version with `--unity <path/to/Unity.exe>` or `--force-unity-version 6000.4.0f1`
   when the project's `ProjectVersion.txt` is not what you want.
@@ -3448,7 +3638,9 @@ ucp editor logs --lines 200
 ```bash
 ucp compile                # recompile and wait; prints per-assembly CS#### errors, exits non-zero on failure
 ucp compile --no-wait      # kick off compilation and return (a later command waits for the reload itself)
-ucp play                   # saves dirty titled scenes first; refuses on a dirty untitled scene
+ucp hot-reload apply Assets/Scripts/Foo.cs   # patch edited method bodies in ~1 s, no domain reload, play mode survives
+ucp hot-reload status      # what is patched; `ucp compile` or `hot-reload revert` clears it
+ucp play                   # saves a dirty scene first (a dirty untitled one is discarded unless --keep-untitled)
 ucp play --log-file play.log
 ucp pause                  # toggles
 ucp stop
@@ -3456,9 +3648,14 @@ ucp stop
 
 - Entering play mode reloads the domain. `ucp play` confirms the transition and reports Unity's
   refusal reason when scripts do not compile. Do not retry blindly; read `ucp compile`.
-- A dirty untitled scene blocks `play`, `scene load`, and `editor close` on purpose (Unity would
-  otherwise ask where to save). Save it under a path with `ucp scene save` after giving it one, or
-  discard with `--keep-untitled`/`--no-save` variants where offered, or start from a titled scene.
+- `hot-reload apply` is for method-body edits while iterating; its response lists the edits that
+  need a real compile (`needsFullCompile`: fields, types, signatures). While patches are live,
+  auto refresh is held so a focus change cannot recompile under you; `ucp compile` makes the
+  edits permanent and releases it. Always end with `ucp compile` before tests, builds, or handoff.
+- `play` and `scene load` save a dirty titled scene first and discard a dirty untitled one
+  (`--keep-untitled` keeps it and refuses instead); `--no-save` refuses on any dirty scene with a
+  non-zero exit. `editor close` and `restart` refuse on any dirty scene; `--discard-changes` is
+  the explicit way past. Unity's own save prompt is never shown.
 - Edits made in play mode are lost on `stop`, exactly as in the editor.
 
 ### Modal dialogs
@@ -3494,6 +3691,7 @@ ucp connect --timeout 5    # main thread responsive? compiling?
 ucp editor dialog          # anything modal?
 ucp logs status            # console counts and the most repeated messages
 ucp editor logs --lines 100
+ucp editor ps              # editors, and other ucp processes still acting on them
 ucp editor close --force && ucp open
 ```
 
@@ -3735,6 +3933,8 @@ ucp logs status                                   # baseline counts
 ucp play --log-file play.log
 # drive the game: exec scripts, record, wait
 ucp logs --level error --count 20
+# fix a method body and keep playing: ~1 s, state kept, no domain reload
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs
 ucp stop
 ucp logs status                                   # the lastPlayWindow block is this session
 ```
@@ -3783,14 +3983,16 @@ Changes are in memory until saved: pass `--save` on a mutating command, or run `
 ucp scene active                                  # name, path, dirty, root count
 ucp scene list                                    # scenes in build settings
 ucp scene snapshot                                # root objects with instance ids (lean on purpose)
-ucp scene snapshot --filter Player --depth 3      # substring filter, deeper hierarchy
+ucp scene snapshot --filter Player                # searches the whole hierarchy, prints each match's path
 ucp scene query 'component=Camera' --fields instanceId,name,active
 ucp scene query 'name=Enemy' --depth 8
-ucp object get-children --id 46894 --depth 2
+ucp object get-children --path Level/Props --depth 2
 ```
 
+- Every `object` command takes `--path Root/Child/Leaf` (stable), `--name` (first match), or
+  `--id` (changes on every reload). Prefer paths in scripts.
 - The snapshot is shallow by default (`--depth 0` = roots) to keep payloads small; deepen only
-  where you need to.
+  where you need to. A `--filter` always searches the full hierarchy.
 - Ids change after recompiles, reloads, scene loads, and test runs. Re-snapshot rather than
   reuse. `transform`, `spatial`, and `view` commands also accept `--path "Root/Child/Leaf"` and
   `--name`, which survive reloads (`--name` is the first match; ambiguous when names repeat).
@@ -3801,11 +4003,11 @@ ucp object get-children --id 46894 --depth 2
 ucp scene load Assets/Scenes/Level1.unity            # saves dirty titled scenes first
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene save
-ucp scene focus --id 46894 --axis 1 0 0              # aim the Scene view at an object (for screenshots)
+ucp scene focus --path Level/Player --axis 1 0 0     # aim the Scene view at an object (for screenshots)
 ```
 
-A dirty *untitled* scene blocks `load` on purpose. Save it under a path or pass `--keep-untitled`
-knowing the change is discarded when Unity switches scenes.
+`load` saves a dirty titled scene first and discards a dirty untitled one; pass `--keep-untitled`
+to refuse instead of discarding, or `--no-save` to refuse on any dirty scene (non-zero exit).
 
 ### Create objects that render
 
@@ -3827,14 +4029,14 @@ hand cannot reference Unity's built-in meshes and will not render.
 ```bash
 ucp object add-component --id 46894 --component Rigidbody
 ucp object remove-component --id 46894 --component BoxCollider
-ucp object get-fields --id 46894 --component Rigidbody
-ucp object get-property --id 46894 --component Transform --property m_LocalPosition
-ucp object set-property --id 46894 --component Rigidbody --property m_Mass --value 2.5
+ucp object get-fields --path Player --component Rigidbody
+ucp object get-property --path Player --component Transform --property m_LocalPosition
+ucp object set-property --path Player --component Rigidbody --property m_Mass --value 2.5   # response reads the value back
 ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
 ucp object set-property --id 46894 --component MeshRenderer --property m_Materials --value '[{"path":"Assets/Materials/Crate.mat"}]'
 ucp object set-property --id 46894 --component Light --property enabled --value false
 ucp object set-active --id 46894 --active false
-ucp object set-name --id 46894 --name "Crate_A"
+ucp object set-name --path Props/Crate --to "Crate_A"
 ucp object reparent --id 46894 --parent -15774 --sibling-index 0
 ucp object delete --id 46894
 ```
@@ -4065,8 +4267,8 @@ ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui
 
 ### Pitfalls
 
-- Render commands briefly open and focus a transient utility window. They refuse to run in batch
-  mode or on the Null graphics device; `lint` still works there.
+- Render commands open a transient utility window without activating the editor. They refuse to
+  run in batch mode or on the Null graphics device; `lint` still works there.
 - Operations are asynchronous in the bridge with a 300 s overall ceiling; the CLI timeout for
   `inspect`, `screenshot`, and `check` defaults to 310 s. A domain reload mid-operation returns a
   structured `editor_shutdown` error, and a lost completion is recovered through `ui/status`.
@@ -4171,6 +4373,7 @@ ucp view orbit --id 46894 --count 8 --elevation 25 --max-edge 384 -o orbit.png
 ucp record capture --duration 5 -o clip.mp4                    # block until the file is final
 ucp record capture --view scene --duration 8 --max-edge 640 -o scene.webm
 ucp record capture --duration 6 --slowdown 6 -o for-the-model.mp4
+ucp record capture --duration 8 --width 1920 --height 1080 --fps 30 -o hq.mp4   # bitrate scales with size; --bitrate-kbps overrides
 ucp record start --duration 30 -o session.mp4 --max-duration 120   # detached; survives this CLI call
 ucp play && ucp stop
 ucp record stop                                                 # finalize (or cancel an armed trigger)
@@ -4181,7 +4384,8 @@ ucp record arm --on signal:checkpoint --duration 3 -o cp.mp4 && ucp record signa
 ucp exec run demo-autopilot --record run.mp4 --record-lead 0.5 --record-tail 1
 ```
 
-- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, 2 Mbps,
+- Defaults: silent video, 960 px longest edge with the source aspect preserved, 15 fps, a bitrate
+  that scales with size and frame rate (about 0.2 bits per pixel per frame, at least 2 Mbps),
   H.264 MP4 (or VP8 WebM with `--format webm`). No objects or scripts are injected into the scene.
 - `--view game` records `Camera.main`, not the Game view's camera stack. `--view scene` records
   a fixed vantage that does not follow the player, which is often what you want for judging
@@ -4290,7 +4494,7 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 
 ### Core agent guidance
 
-- Prefer direct workspace edits when you already have normal filesystem access always followed by `ucp compile`.
+- Prefer direct workspace edits when you already have normal filesystem access, followed by `ucp hot-reload apply <files>` when you changed method bodies (about a second, keeps play mode) or `ucp compile` when you changed fields, types, or signatures (the `apply` response says which under `needsFullCompile`). Finish with `ucp compile` before tests, builds, or handoff.
 - Use `ucp files ...` as a sandboxed fallback for bridge-mediated project file I/O.
 - Run `ucp scene snapshot` before object or prefab work to discover instance IDs.
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
@@ -4316,7 +4520,7 @@ If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --he
 
 ```bash
 ucp scene snapshot --filter "Player"
-ucp scene save # save active scene before loading another
+ucp scene save # persist scene edits (load and play save a dirty scene themselves)
 ucp scene load Assets/Scenes/Level1.unity
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene focus --id 46894 --axis 1 0 0
@@ -4332,8 +4536,8 @@ ucp compile
 Use `ucp object --help`, `ucp asset --help`, `ucp material --help`, and `ucp prefab --help` for the full command set.
 
 ```bash
-ucp object get-fields --id 46894 --component Transform
-ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
+ucp object get-fields --path "Main Camera" --component Transform      # --path/--name/--id on every object command
+ucp object set-property --path "Main Camera" --component BoxCollider --property m_IsTrigger --value true
 
 ucp asset search -t Material --max 10
 ucp asset search -n '^SCN_[0-9]+$' --regex
@@ -4362,7 +4566,7 @@ ucp ui screenshot Assets/UI/Inventory.ucp-ui.json --state populated -o artifacts
 ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui --force --json
 ```
 
-Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check briefly focus a transient Editor window and require a graphics device; lint also works headless.
+Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check render through a transient, unfocused Editor window and require a graphics device; lint also works headless.
 
 ### In-scene authoring & spatial workflows
 
@@ -4510,7 +4714,8 @@ Use this for bridge-native authoring loops: assemble hierarchy in-scene, attach 
 ```bash
 # Preferred when you already have workspace access
 <edit scripts/files locally>
-ucp compile
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs   # method-body edits: ~1 s, no domain reload, play mode survives
+ucp compile                                      # fields/types/signatures changed, or before tests, builds, handoff
 
 # Fallback when you want bridge-mediated writes
 ucp files write Assets/Scripts/EnemyAI.cs --content "..."
@@ -4520,7 +4725,7 @@ ucp asset import-settings write "Assets/Models/Enemy.fbx" --field m_GlobalScale 
 ucp asset reimport "Assets/Models/Enemy.fbx"
 ```
 
-UCP is unique here because it can bridge Unity-aware apply steps: `ucp compile` handles recompilation after local edits, while `ucp files write` / `patch` automatically reimport eligible assets and `.meta` files unless you intentionally defer with `--no-reimport`.
+UCP is unique here because it can bridge Unity-aware apply steps: `ucp hot-reload apply` patches edited method bodies into the live editor and `ucp compile` handles full recompilation after local edits, while `ucp files write` / `patch` automatically reimport eligible assets and `.meta` files unless you intentionally defer with `--no-reimport`.
 
 #### Package install and selective import iteration
 

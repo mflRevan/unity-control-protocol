@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.6.4'
+  version: '0.7.0'
   homepage: https://github.com/mflRevan/unity-control-protocol
 ---
 
@@ -53,7 +53,7 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 
 ## Core agent guidance
 
-- Prefer direct workspace edits when you already have normal filesystem access always followed by `ucp compile`.
+- Prefer direct workspace edits when you already have normal filesystem access, followed by `ucp hot-reload apply <files>` when you changed method bodies (about a second, keeps play mode) or `ucp compile` when you changed fields, types, or signatures (the `apply` response says which under `needsFullCompile`). Finish with `ucp compile` before tests, builds, or handoff.
 - Use `ucp files ...` as a sandboxed fallback for bridge-mediated project file I/O.
 - Run `ucp scene snapshot` before object or prefab work to discover instance IDs.
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
@@ -79,7 +79,7 @@ If unsure, inspect the full surface with `ucp scene --help` and `ucp editor --he
 
 ```bash
 ucp scene snapshot --filter "Player"
-ucp scene save # save active scene before loading another
+ucp scene save # persist scene edits (load and play save a dirty scene themselves)
 ucp scene load Assets/Scenes/Level1.unity
 ucp scene load Assets/Scenes/Lighting.unity --additive
 ucp scene focus --id 46894 --axis 1 0 0
@@ -95,8 +95,8 @@ ucp compile
 Use `ucp object --help`, `ucp asset --help`, `ucp material --help`, and `ucp prefab --help` for the full command set.
 
 ```bash
-ucp object get-fields --id 46894 --component Transform
-ucp object set-property --id 46894 --component BoxCollider --property m_IsTrigger --value true
+ucp object get-fields --path "Main Camera" --component Transform      # --path/--name/--id on every object command
+ucp object set-property --path "Main Camera" --component BoxCollider --property m_IsTrigger --value true
 
 ucp asset search -t Material --max 10
 ucp asset search -n '^SCN_[0-9]+$' --regex
@@ -125,7 +125,7 @@ ucp ui screenshot Assets/UI/Inventory.ucp-ui.json --state populated -o artifacts
 ucp ui check Assets/UI/Inventory.ucp-ui.json --all-states --out-dir artifacts/ui --force --json
 ```
 
-Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check briefly focus a transient Editor window and require a graphics device; lint also works headless.
+Use ordinary UXML `DataBinding` paths. Scenario data is JSON, and the harness adapts those paths to dictionary keys. Use `repeat` for small eager grids and harness-managed `list-view` collections for large virtualized lists. Width and height are an explicit pair; omit both to preserve a scenario viewport. Inspection, screenshot, and check render through a transient, unfocused Editor window and require a graphics device; lint also works headless.
 
 ## In-scene authoring & spatial workflows
 
@@ -273,7 +273,8 @@ Use this for bridge-native authoring loops: assemble hierarchy in-scene, attach 
 ```bash
 # Preferred when you already have workspace access
 <edit scripts/files locally>
-ucp compile
+ucp hot-reload apply Assets/Scripts/EnemyAI.cs   # method-body edits: ~1 s, no domain reload, play mode survives
+ucp compile                                      # fields/types/signatures changed, or before tests, builds, handoff
 
 # Fallback when you want bridge-mediated writes
 ucp files write Assets/Scripts/EnemyAI.cs --content "..."
@@ -283,7 +284,7 @@ ucp asset import-settings write "Assets/Models/Enemy.fbx" --field m_GlobalScale 
 ucp asset reimport "Assets/Models/Enemy.fbx"
 ```
 
-UCP is unique here because it can bridge Unity-aware apply steps: `ucp compile` handles recompilation after local edits, while `ucp files write` / `patch` automatically reimport eligible assets and `.meta` files unless you intentionally defer with `--no-reimport`.
+UCP is unique here because it can bridge Unity-aware apply steps: `ucp hot-reload apply` patches edited method bodies into the live editor and `ucp compile` handles full recompilation after local edits, while `ucp files write` / `patch` automatically reimport eligible assets and `.meta` files unless you intentionally defer with `--no-reimport`.
 
 ### Package install and selective import iteration
 
