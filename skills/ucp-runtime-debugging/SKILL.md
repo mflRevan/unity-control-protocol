@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.7.0'
+  version: '0.7.1'
   homepage: https://unityctl.dev/skills/ucp-runtime-debugging
 ---
 

@@ -83,3 +83,27 @@ First in-scene-authoring eval (`deepseek-v4-flash-free`, "arrange three pillars"
    visibly rotating collectibles "stationary" because their centers stayed fixed. It identified
    the rotation when asked to compare face orientation and shadows across frames. Avoid a single
    binary "moving or stationary" prompt when validating animation.
+10. **Measure token cost, not just success.** The 0.7.1 baseline (Sonnet, 100 `ucp` calls on the
+    demo project) spent 455k tokens of CLI output, 419k of them on one `view isolate` without `-o`
+    that printed a base64 PNG. Nothing a weak or strong model does will surface that; only the
+    per-call tally does. Run every new surface through `token-budget/` before shipping it.
+
+## Token budget comparison (`token-budget/`)
+
+Before/after measurement of what the CLI puts into an agent's context, with the same model and
+the same prompt on both sides:
+
+1. Copy `token-budget/shim.env.example` to `token-budget/shim.env` and point `UCP_SHIM_REAL` at
+   the binary under test (keep a copy of the old release for the baseline), `UCP_SHIM_LOG` at an
+   empty directory per run, and `UCP_PROJECT` at the project.
+2. Hand the agent `tasks/long-workflow.md` (or any task) with the instruction to invoke
+   `<repo>/scripts/agent-eval/token-budget/ucp` instead of `ucp`. The shim replays stdout/stderr
+   unchanged and records each call's args, exit code, wall time, and both streams.
+3. `python token-budget/tally.py <log-dir> -v` prints per-call and total tokens (cl100k_base via
+   `tiktoken`), the number and cost of `--help` probes, and failed calls. Compare the two runs.
+4. `python token-budget/measure.py <ucp.exe> <commands.txt> <out-dir>` runs a fixed list of
+   commands (prefix a line with `@json ` to run it both plain and with `--json`) and ranks them by
+   output tokens; use it to find the next offender before any agent run.
+
+Results for 0.7.0 -> 0.7.1 are in the changelog.
+

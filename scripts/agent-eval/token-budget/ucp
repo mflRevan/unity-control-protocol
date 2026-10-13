@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Logging shim: runs the real ucp, replays its output, and records every call for token accounting.
+# UCP_SHIM_REAL and UCP_SHIM_LOG are read from the run config file next to this script.
+cfg="$(dirname "$0")/shim.env"; . "$cfg"
+export UCP_PROJECT
+mkdir -p "$UCP_SHIM_LOG"
+n=$(( $(ls "$UCP_SHIM_LOG" | grep -c '\.out$') + 1 ))
+n=$(printf '%03d' "$n")
+t0=$(date +%s%N)
+"$UCP_SHIM_REAL" "$@" >"$UCP_SHIM_LOG/$n.out" 2>"$UCP_SHIM_LOG/$n.err"
+code=$?
+t1=$(date +%s%N)
+cat "$UCP_SHIM_LOG/$n.out"
+cat "$UCP_SHIM_LOG/$n.err" >&2
+printf '%s\t%s\t%.1f\t%s\n' "$n" "$code" "$(( (t1 - t0) / 1000000 ))" "$*" >> "$UCP_SHIM_LOG/calls.tsv"
+exit $code

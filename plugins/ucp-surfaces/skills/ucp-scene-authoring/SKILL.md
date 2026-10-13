@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer.
 metadata:
   author: mflRevan
-  version: '0.7.0'
+  version: '0.7.1'
   homepage: https://unityctl.dev/skills/ucp-scene-authoring
 ---
 
@@ -57,8 +57,8 @@ to refuse instead of discarding, or `--no-save` to refuse on any dirty scene (no
 ucp object create Crate --primitive Cube               # mesh + collider in one call
 ucp object create Floor --primitive Plane
 ucp object create Enemies                              # EMPTY container, nothing to see
-ucp object create Head --primitive Sphere --parent -15774
-ucp object instantiate Assets/Prefabs/Enemy.prefab --name Enemy_01 --parent -15774
+ucp object create Head --primitive Sphere --parent Player/Body   # --parent takes a path, name, or id
+ucp object instantiate Assets/Prefabs/Enemy.prefab --name Enemy_01 --parent Enemies
 ucp object instantiate -4231 --name Copy                # a bare integer clones a scene object
 ```
 
@@ -103,7 +103,7 @@ ucp transform rotate --id 46894 --euler 0 90 0 --relative
 ucp transform scale --id 46894 --uniform 2
 ucp transform scale --id 46894 --scale 1 2 1 --relative
 ucp transform look-at --id 46894 --at 0 0 0          # world point
-ucp transform look-at --id 46894 --target-id 46910 --up 0 1 0
+ucp transform look-at --path Turret --target Enemies/Enemy_01 --up 0 1 0   # --target: path, name, or id
 ```
 
 Prefer these over `set-property m_LocalPosition`: they handle world/local, relative offsets, and
@@ -149,7 +149,7 @@ ucp transform move --name Crate --to 2 5 0
 ucp spatial ground --name Crate                       # rests on the floor now
 ucp transform rotate --name Crate --euler 0 30 0
 ucp spatial bounds --name Crate
-ucp view capture --target-name Crate --max-edge 768 -o crate.png   # see it (ucp-visual-feedback)
+ucp view capture --name Crate --max-edge 768 -o crate.png   # see it (ucp-visual-feedback)
 ucp scene save
 ```
 

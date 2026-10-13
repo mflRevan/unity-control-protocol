@@ -37,3 +37,5 @@ test_*.py
 # Unity version matrix results
 .matrix-results/
 !website/public/og.png
+scripts/agent-eval/token-budget/shim.env
+scripts/agent-eval/token-budget/log-*/

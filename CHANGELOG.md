@@ -1,5 +1,89 @@
 # Changelog
 
+## [0.7.1] - 2026-10-13
+
+Token efficiency release: every command's default output was measured on a real project
+(the Fantasy Kingdom demo) and cut to the shortest form that still carries the handles an
+agent needs for its next command. The same scripted workflow, driven by the same model with
+the same prompt before and after, is the yardstick (see `scripts/agent-eval/token-budget/`).
+
+### Changed
+
+- `--json` output is compact (one line); `UCP_JSON_PRETTY=1` restores indentation. On a
+  400-object snapshot that alone is 37% fewer tokens.
+- `--help` on a subcommand no longer repeats the nine global options; they are listed once at
+  the end of `ucp --help`. A leaf help screen went from ~340 to ~25 tokens, so an agent
+  probing twenty of them saves about 6k tokens.
+- `scene snapshot`, `scene query`, and `object get-children` print an indented tree
+  (`Name #id tag:X [N children] · Component, Component`) instead of pretty JSON; their JSON
+  entries carry `active`, `tag`, `layer`, `childCount`, and `depth` only when not the default,
+  and `scene query` entries now include `path`. The demo scene's root snapshot went from
+  1,700 to 270 tokens; at depth 1 from 45,000 to 7,600.
+- `transform get`, `spatial raycast|overlap|bounds|ground|nearest`, `object get-property`, and
+  `record status` print one or two lines of rounded numbers instead of JSON.
+- Mutating commands no longer attach the whole `logs status` payload (`logStatus`) to their
+  JSON result; the `editor` appendix already carries the console counts. `compile` JSON lists
+  `messages` once instead of nesting a second diagnostics object; `run-tests` JSON lists only
+  the tests that did not pass; `stop` JSON is the bridge's own payload.
+- `screenshot`, `view capture|isolate|orbit` always save a PNG (to `--output` or
+  `.ucp/captures/<command>-<time>.png` in the project) and print its path. Base64 on stdout is
+  opt-in with `--base64`: one accidental `view isolate` without `-o` put 419k tokens of PNG into
+  an agent's context in the baseline run.
+- `logs` / `logs tail` read the newest 20 buffered entries by default; following live is
+  `--follow` only (a bare `ucp logs` used to block forever). Entries print as
+  `#id level HH:MM:SS message` instead of a padded column and a full ISO timestamp.
+- Progress notices (`[*] Waiting for ...`, `Saving active scene...`, `Triggering
+  recompilation...`) appear only when the wait takes longer than 1.5 s.
+- `packages list` / `packages dependencies` collapse the ~30 built-in engine modules to a
+  count; `packages list --json` drops descriptions, registries, resolved paths, and dependency
+  graphs unless `--full` (11k to 2k tokens on the demo project).
+- `shader errors` reports the project's own shaders and counts package diagnostics
+  (`--all` lists them); `build targets --json` lists installed platforms (`--all` for every
+  platform); `profiler status --json` drops the capability matrix and the category catalogue;
+  `editor status` no longer lists every installed Unity version and its JSON is flat.
+- `asset search` skips the Transform/MeshRenderer/MeshFilter nodes of model files unless a
+  `--type` asks for them (a search for "Tower" went from 81 to 27 hits), and takes the name
+  as a bare argument (`ucp asset search Stone -t Material`).
+- The `--id/--path/--name` help lines are shorter; `pause` reports `Paused play mode` or
+  `Resumed play mode`.
+
+### Added
+
+- `--parent` on `object create|reparent|instantiate` accepts a hierarchy path or a name as well
+  as an instance id; `transform look-at --target <PATH|NAME|ID>`; `view capture --path/--name/
+  --id` (the old `--target-id/--target-name` still work); `transform move --position`,
+  `transform rotate --to`, and `transform scale --to` as aliases for the flags agents guess.
+- `screenshot --json` reports the saved file (it printed nothing when `--output` was given).
+- `view capture|isolate|orbit` take the object as a bare argument (`ucp view isolate Orb`), the
+  form agents try first; `asset search` lists the sub-assets of one file on one line and drops
+  the per-line type tag when `--type` already says it.
+- `scripts/agent-eval/token-budget/`: a logging `ucp` shim and a tally script that count the
+  tokens every CLI call produced during an agent run, for before/after comparisons.
+
+### Measured
+
+Same task (`scripts/agent-eval/tasks/long-workflow.md`), same model (Claude Sonnet), same
+prompt, on the Fantasy Kingdom demo project:
+
+| | 0.7.0 | 0.7.1 |
+|---|---|---|
+| `ucp` calls | 100 | 86 |
+| CLI output tokens (raw) | 455,863 | 28,389 |
+| CLI output tokens, excluding the one base64 dump | 36,420 | 28,389 |
+| `--help` probes / their tokens | 23 / 12,579 | 23 / 4,625 |
+| agent tool calls / total agent tokens | 31 / 77,855 | 24 / 66,121 |
+| CLI wall time | 82 s | 42 s |
+
+### Fixed
+
+- A failed request (a missing file, a wrong property name) is no longer logged as a Unity
+  console error, so the `[editor]` state line stops reporting an agent's own typos as project
+  errors.
+- `run-tests` right after another test run (or a compile) no longer fails with "the bridge
+  closed the connection during scene/dirty-summary": the preflight waits for the bridge to
+  come back and asks again, and the command waits for the post-run domain reload before
+  returning so the next command finds a stable bridge.
+
 ## [0.7.0] - 2026-10-07
 
 ### Added

@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`) and the UCP bridge package in the target Unity project. Unity 2021.3 or newer; video recording needs an interactive editor with a graphics device.
 metadata:
   author: mflRevan
-  version: '0.7.0'
+  version: '0.7.1'
   homepage: https://unityctl.dev/skills/ucp-visual-feedback
 ---
 
@@ -22,13 +22,14 @@ whether the camera overshoots, or whether the character's feet slide. Capture, l
 ## Ground rules
 
 - Frame what you want to judge. A raw Game view screenshot shows whatever the player camera sees;
-  `view capture --target-id` and `view isolate` frame a specific object from its bounds.
+  `view capture --path/--name/--id` and `view isolate` frame a specific object from its bounds.
 - Keep images small for model consumption: `--max-edge 768` is plenty for a decision, and
   composites (`isolate`, `orbit`) put several angles into one image.
 - Use a recording, not a burst of screenshots, when the question is about motion or transient
   state. Add `--slowdown` when a model, not a person, will watch it.
-- Outputs go where you say (`-o path.png`); without `-o`, screenshots print base64 to stdout and
-  recordings land under `.ucp/recordings/`.
+- Outputs go where you say (`-o path.png`); without `-o`, images land under `.ucp/captures/` and
+  recordings under `.ucp/recordings/`, and the command prints the path. Base64 on stdout is
+  opt-in (`--base64`) and costs hundreds of thousands of tokens: never use it in an agent loop.
 
 ## Screenshots
 
@@ -46,7 +47,7 @@ Scene-view screenshots repeatable across a before/after pair.
 
 ```bash
 ucp view capture -o main.png                                  # main camera, the whole scene
-ucp view capture --target-name Crate --max-edge 768 -o crate.png   # temporary camera framed on the object, scene still visible
+ucp view capture --name Crate --max-edge 768 -o crate.png   # temporary camera framed on the object, scene still visible
 ucp view capture --camera 47010 -o cinematic.png              # render from a specific camera object
 ucp view isolate --id 46894 -o crate-grid.png                 # Front/Right/Back/Top composite, object alone
 ucp view isolate --name Crate --views front,right --max-edge 512 -o crate.png   # writes crate-front.png, crate-right.png
@@ -103,7 +104,7 @@ contact, timing, smoothness, or settling. Leave it at 1 for clips a person will 
 - Ask about one axis at a time: translation, rotation, bobbing, contact. "Is it moving?" invites
   a wrong answer when an object rotates in place.
 - Compare, don't describe: capture before and after the change with the same framing (`scene
-  focus` + `--view scene`, or the same `view capture --target-id`), then ask which is correct
+  focus` + `--view scene`, or the same `view capture --path`), then ask which is correct
   and why.
 - For "which of these two clips is right", a forced choice with both clips is far more reliable
   than a single-clip verdict.
@@ -115,7 +116,7 @@ Verify a placement:
 ```bash
 ucp transform move --name Crate --to 2 3 0
 ucp spatial ground --name Crate
-ucp view capture --target-name Crate --max-edge 768 -o crate.png
+ucp view capture --name Crate --max-edge 768 -o crate.png
 ```
 
 Judge a camera-follow tweak:

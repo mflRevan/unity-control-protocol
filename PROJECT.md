@@ -203,6 +203,16 @@ The CLI prints the bridge's editor-state summary once per command (`editor_state
 handshake heartbeat to detect a blocked main thread before sending a request; only dialogs it
 recognises by title are answered automatically, everything else fails fast and names the dialog.
 
+Output is a token budget (0.7.1): the default text mode prints one line per fact with the handle
+the next command needs (`Name #id`, a path), rounds numbers, implies defaults (active, `Untagged`,
+`Default` layer, built-in modules, package shaders) and keeps deeper detail one flag away
+(`--json`, `--depth`, `--all`, `--full`). `--json` is compact unless `UCP_JSON_PRETTY=1`. Shared
+renderers live in `commands/text.rs`; progress notices use `output::delayed_notice` so they only
+print when a wait exceeds 1.5 s; no command writes an image or other blob to stdout unless asked
+with `--base64` (`commands::default_capture_path` picks `.ucp/captures/<kind>-<time>.png`).
+Subcommand help hides the global options (`hide = true`), which `GLOBAL_OPTIONS_HELP` lists once
+at the root. Measure any new surface with `scripts/agent-eval/token-budget/` before shipping it.
+
 ### Unity Bridge
 
 The Unity package should continue to emphasize:

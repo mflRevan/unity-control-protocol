@@ -8,7 +8,7 @@ Use `ucp --help` and `ucp <command> --help` for the current exhaustive surface. 
 
 | Flag                            | Description                                               |
 | ------------------------------- | --------------------------------------------------------- |
-| `--json`                        | Output results as JSON                                    |
+| `--json`                        | Output results as JSON (compact; `UCP_JSON_PRETTY=1` indents) |
 | `--project <path>`              | Path to a Unity project (defaults to current directory)   |
 | `--unity <path>`                | Override the Unity Editor executable UCP should launch    |
 | `--force-unity-version <ver>`   | Force a specific installed Unity editor version           |
@@ -16,6 +16,10 @@ Use `ucp --help` and `ucp <command> --help` for the current exhaustive surface. 
 | `--dialog-policy <mode>`        | Handle Unity startup dialogs during launch waits          |
 | `--timeout <s>`                 | Request timeout in seconds (default: 30)                  |
 | `--verbose`                     | Enable verbose output                                     |
+
+The global flags are listed once, at the end of `ucp --help`; subcommand help screens show only
+their own arguments. `UCP_EDITOR_STATE=0` drops the trailing `[editor]` state line (and the
+`editor` JSON member) described in [Editor State](/docs/runtime/editor-state).
 
 ## Execution Model
 
@@ -34,13 +38,29 @@ That lifecycle is what makes UCP useful in agent and CI workflows: the caller ca
 
 Without `--json`, commands use human mode: terminal-friendly summaries optimized for interactive use and bounded enough to avoid overwhelming a terminal or an agent context window.
 
-Human mode is intentionally curated:
+Human mode is intentionally curated, and tuned for the token budget of an agent reading it:
 
-- broad reads such as logs, snapshots, settings, and references are truncated or grouped
-- long-running mutation commands append the same curated `ucp logs status` summary when it is useful
-- repetitive results are collapsed into patterns where possible instead of printing hundreds of nearly identical lines
+- every result is the shortest text that still carries the handles for the next command: an
+  object is `Name #id` on one line, a transform is one line of rounded numbers, a hierarchy is an
+  indented tree, a hit is `hit Name #id at (x, y, z) distance d`
+- defaults are implied, not printed: active objects, `Untagged`, the `Default` layer, built-in
+  engine modules in `packages list`, package shaders in `shader errors`, platforms that are not
+  installed in `build targets`
+- broad reads such as logs, snapshots, settings, and references are bounded (newest 20 logs,
+  root objects only, 50 assets) and say how to widen the read (`--count`, `--depth`, `--all`)
+- progress notices (`[*] Waiting for ...`) only appear when a wait takes longer than about
+  1.5 seconds
+- images are never written to stdout: `screenshot` and `view` save a PNG (to `--output`, or
+  `.ucp/captures/` in the project) and print its path; `--base64` opts into the old behaviour
+- every command that touched the bridge ends with one `[editor]` line describing the state it left
+  the editor in, so the console, play mode, and scene dirtiness never need a second request
 
 With `--json`, the CLI returns structured output suitable for scripts, agents, and CI automation.
+It is compact (one line) because an agent reads it just as well as the indented form and pays
+about 40% fewer tokens for it; set `UCP_JSON_PRETTY=1` for a human. The same default-elision
+applies: a snapshot entry lists `active`, `tag`, `layer`, and `childCount` only when they are not
+the default, package entries carry descriptions and resolved paths only with `--full`, and test
+results list the tests that did not pass.
 
 ## Recommended Workflows
 
