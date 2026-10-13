@@ -1,0 +1,5 @@
+# Incremental compilation caches never get pruned across version bumps: 91 stale sessions
+# (16 GB) had piled up in target/debug/incremental by 0.7.0. Full rebuilds of this crate take
+# well under a minute, so trade the few seconds per edit for a bounded target directory.
+[build]
+incremental = false
