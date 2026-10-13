@@ -99,9 +99,9 @@ pub enum ObjectAction {
         /// deliberately want an empty container GameObject.
         #[arg(long)]
         primitive: Option<String>,
-        /// Parent instance ID
-        #[arg(long, allow_hyphen_values = true)]
-        parent: Option<i64>,
+        /// Parent object: hierarchy path, name, or instance id
+        #[arg(long, allow_hyphen_values = true, value_name = "PATH|NAME|ID")]
+        parent: Option<String>,
         /// Save the active scene after applying the change
         #[arg(long)]
         save: bool,
@@ -118,9 +118,9 @@ pub enum ObjectAction {
     Reparent {
         #[command(flatten)]
         target: super::TargetArgs,
-        /// New parent instance ID (omit for root)
-        #[arg(long, allow_hyphen_values = true)]
-        parent: Option<i64>,
+        /// New parent: hierarchy path, name, or instance id (omit for root)
+        #[arg(long, allow_hyphen_values = true, value_name = "PATH|NAME|ID")]
+        parent: Option<String>,
         /// Sibling index
         #[arg(long)]
         sibling_index: Option<i64>,
@@ -137,9 +137,9 @@ pub enum ObjectAction {
         /// Optional name for the new instance
         #[arg(long)]
         name: Option<String>,
-        /// Parent instance ID
-        #[arg(long, allow_hyphen_values = true)]
-        parent: Option<i64>,
+        /// Parent object: hierarchy path, name, or instance id
+        #[arg(long, allow_hyphen_values = true, value_name = "PATH|NAME|ID")]
+        parent: Option<String>,
         /// Save the active scene after applying the change
         #[arg(long)]
         save: bool,
@@ -237,7 +237,7 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 params["primitive"] = serde_json::json!(prim);
             }
             if let Some(p) = parent {
-                params["parent"] = serde_json::json!(p);
+                params["parent"] = parent_param(p);
             }
             client.call("object/create", params).await?
         }
@@ -254,7 +254,7 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
         } => {
             let mut params = with_target(target, serde_json::json!({}))?;
             if let Some(p) = parent {
-                params["parent"] = serde_json::json!(p);
+                params["parent"] = parent_param(p);
             }
             if let Some(s) = sibling_index {
                 params["siblingIndex"] = serde_json::json!(s);
@@ -280,7 +280,7 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                 params["name"] = serde_json::json!(n);
             }
             if let Some(p) = parent {
-                params["parent"] = serde_json::json!(p);
+                params["parent"] = parent_param(p);
             }
             client.call("object/instantiate", params).await?
         }
@@ -384,8 +384,17 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
                     }
                 }
             }
-            ObjectAction::GetProperty { .. } => {
-                output::print_json(&result);
+            ObjectAction::GetProperty { component, property, .. } => {
+                let kind = result
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .map(|t| format!(" ({t})"))
+                    .unwrap_or_default();
+                let value = result
+                    .get("value")
+                    .map(super::text::value)
+                    .unwrap_or_else(|| "null".to_string());
+                output::print_success(&format!("{component}.{property}{kind} = {value}"));
             }
             ObjectAction::SetProperty { property, .. } => {
                 match result.get("value") {
@@ -445,6 +454,16 @@ pub async fn run(action: ObjectAction, ctx: &Context) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// `--parent` takes the same three addresses as `--path`/`--name`/`--id`: an integer is an
+/// instance id, anything else a hierarchy path (a bare name is the path of a root object, and
+/// the bridge falls back to a name search).
+fn parent_param(parent: &str) -> serde_json::Value {
+    match parent.trim().parse::<i64>() {
+        Ok(id) => serde_json::json!(id),
+        Err(_) => serde_json::json!(parent),
+    }
 }
 
 fn object_lifecycle_policy(action: &ObjectAction) -> UnityLifecyclePolicy {

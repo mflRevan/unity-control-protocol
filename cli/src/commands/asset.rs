@@ -13,6 +13,9 @@ const MAX_ASSET_FIELDS: usize = 40;
 pub enum AssetAction {
     /// Search for assets by type and/or name
     Search {
+        /// Name filter (same as --name): `ucp asset search Stone --type Material`
+        #[arg(value_name = "NAME", conflicts_with = "name")]
+        query: Option<String>,
         /// Asset type filter (e.g. "Texture2D", "Material", "Prefab")
         #[arg(long, short = 't')]
         r#type: Option<String>,
@@ -168,6 +171,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
 
     let mut result = match &action {
         AssetAction::Search {
+            query,
             r#type,
             name,
             regex,
@@ -178,7 +182,7 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
             if let Some(t) = r#type {
                 params["type"] = serde_json::json!(t);
             }
-            if let Some(n) = name {
+            if let Some(n) = query.as_ref().or(name.as_ref()) {
                 params["name"] = serde_json::json!(n);
             }
             if *regex {
@@ -360,30 +364,51 @@ pub async fn run(action: AssetAction, ctx: &Context) -> anyhow::Result<()> {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
-            AssetAction::Search { regex, .. } => {
+            AssetAction::Search { regex, r#type, .. } => {
                 let total = result.get("total").and_then(|v| v.as_i64()).unwrap_or(0);
                 let returned = result.get("returned").and_then(|v| v.as_i64()).unwrap_or(0);
-                if *regex {
+                // With a type filter the type goes in the header once, not on every line.
+                let kind = r#type.as_deref().map(|t| format!("{t} ")).unwrap_or_default();
+                let how = if *regex { " via regex" } else { "" };
+                if returned < total {
                     output::print_success(&format!(
-                        "Found {total} asset(s) via regex search (showing {returned})"
+                        "Found {total} {kind}asset(s){how}, showing {returned} (raise --max for more)"
                     ));
                 } else {
-                    output::print_success(&format!("Found {total} asset(s) (showing {returned})"));
+                    output::print_success(&format!("Found {total} {kind}asset(s){how}"));
                 }
                 if let Some(results) = result.get("results").and_then(|v| v.as_array()) {
-                    for r in results {
+                    // Sub-assets of one file (the materials inside an .fbx, the sprites of an
+                    // atlas) share a line: `[Material] Assets/X.fbx :: blinn1, standardSurface2`.
+                    let mut index = 0;
+                    while index < results.len() {
+                        let r = &results[index];
                         let path = r.get("path").and_then(|v| v.as_str()).unwrap_or("?");
                         let atype = r.get("type").and_then(|v| v.as_str()).unwrap_or("?");
-                        let name = r.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                         let path_name = Path::new(path)
                             .file_stem()
                             .and_then(|v| v.to_str())
                             .unwrap_or("");
-                        if name != "?" && !name.is_empty() && name != path_name {
-                            eprintln!("  [{atype}] {path} :: {name}");
-                        } else {
-                            eprintln!("  [{atype}] {path}");
+                        let mut names: Vec<&str> = Vec::new();
+                        let mut end = index;
+                        while end < results.len()
+                            && results[end].get("path").and_then(|v| v.as_str()) == Some(path)
+                            && results[end].get("type").and_then(|v| v.as_str()) == Some(atype)
+                        {
+                            if let Some(name) = results[end].get("name").and_then(|v| v.as_str()) {
+                                if !name.is_empty() && name != path_name {
+                                    names.push(name);
+                                }
+                            }
+                            end += 1;
                         }
+                        let prefix = if r#type.is_some() { String::new() } else { format!("[{atype}] ") };
+                        if names.is_empty() {
+                            eprintln!("  {prefix}{path}");
+                        } else {
+                            eprintln!("  {prefix}{path} :: {}", names.join(", "));
+                        }
+                        index = end;
                     }
                 }
             }

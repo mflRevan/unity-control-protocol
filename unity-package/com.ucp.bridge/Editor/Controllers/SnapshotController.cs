@@ -45,8 +45,6 @@ namespace UCP.Bridge
             {
                 ["scene"] = scene.path,
                 ["sceneName"] = scene.name,
-                ["playMode"] = Application.isPlaying,
-                ["timestamp"] = System.DateTime.UtcNow.ToString("o"),
                 ["objects"] = objects,
                 ["stats"] = new Dictionary<string, object>
                 {
@@ -55,6 +53,27 @@ namespace UCP.Bridge
                     ["rootCount"] = roots.Length
                 }
             };
+        }
+
+        /// <summary>
+        /// The per-object fields that are only worth sending when they differ from the default:
+        /// an inactive object, a tag other than Untagged, a layer other than Default, and a
+        /// non-zero child count. Every object in a 400-node scene used to carry all of them.
+        /// </summary>
+        internal static void AddNonDefaultState(Dictionary<string, object> entry, GameObject go)
+        {
+            if (!go.activeSelf)
+                entry["active"] = false;
+            if (!go.CompareTag("Untagged"))
+                entry["tag"] = go.tag;
+            if (go.layer != 0)
+            {
+                entry["layer"] = go.layer;
+                entry["layerName"] = LayerMask.LayerToName(go.layer);
+            }
+            var childCount = go.transform.childCount;
+            if (childCount > 0)
+                entry["childCount"] = childCount;
         }
 
         /// <summary>"Root/Child/Leaf": the address that survives reloads, unlike an instance id.</summary>
@@ -103,14 +122,9 @@ namespace UCP.Bridge
                 ["instanceId"] = go.GetId(),
                 ["name"] = go.name,
                 ["path"] = HierarchyPath(go),
-                ["active"] = go.activeSelf,
-                ["tag"] = go.tag,
-                ["layer"] = go.layer,
-                ["layerName"] = LayerMask.LayerToName(go.layer),
-                ["depth"] = depth,
-                ["childCount"] = go.transform.childCount,
                 ["components"] = compList,
             };
+            AddNonDefaultState(entry, go);
 
             if (children.Count > 0)
                 entry["children"] = children;
@@ -192,23 +206,18 @@ namespace UCP.Bridge
                     ref componentCount));
             }
 
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 ["instanceId"] = instanceId,
                 ["name"] = go.name,
-                ["active"] = go.activeSelf,
-                ["tag"] = go.tag,
-                ["layer"] = go.layer,
-                ["layerName"] = LayerMask.LayerToName(go.layer),
+                ["path"] = HierarchyPath(go),
                 ["childCount"] = go.transform.childCount,
                 ["requestedDepth"] = maxDepth,
                 ["children"] = children,
-                ["stats"] = new Dictionary<string, object>
-                {
-                    ["objectCount"] = objectCount,
-                    ["componentCount"] = componentCount
-                }
             };
+            if (!go.activeSelf)
+                result["active"] = false;
+            return result;
         }
 
         private static void ListObjectsRecursive(GameObject go, List<object> list, int depth, int maxDepth)
@@ -245,7 +254,10 @@ namespace UCP.Bridge
             var entry = new Dictionary<string, object>();
             AddField(entry, fields, "instanceId", go.GetId());
             AddField(entry, fields, "name", go.name);
-            AddField(entry, fields, "active", go.activeSelf);
+            AddField(entry, fields, "path", HierarchyPath(go));
+            // The default field set reports `active` only for inactive objects.
+            if (!go.activeSelf || !fields.Contains("path"))
+                AddField(entry, fields, "active", go.activeSelf);
             AddField(entry, fields, "activeInHierarchy", go.activeInHierarchy);
             AddField(entry, fields, "tag", go.tag);
             AddField(entry, fields, "layer", go.layer);
@@ -264,7 +276,7 @@ namespace UCP.Bridge
 
         private static HashSet<string> ParseFields(string raw)
         {
-            var source = string.IsNullOrEmpty(raw) ? "instanceId,name,active,components" : raw;
+            var source = string.IsNullOrEmpty(raw) ? "instanceId,name,path,active,components" : raw;
             return new HashSet<string>(
                 source.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(field => field.Trim()),
@@ -490,18 +502,15 @@ namespace UCP.Bridge
 
         private static Dictionary<string, object> CreateGameObjectEntry(GameObject go, int depth, ref int componentCount)
         {
-            return new Dictionary<string, object>
+            var entry = new Dictionary<string, object>
             {
                 ["instanceId"] = go.GetId(),
                 ["name"] = go.name,
-                ["active"] = go.activeSelf,
-                ["tag"] = go.tag,
-                ["layer"] = go.layer,
-                ["layerName"] = LayerMask.LayerToName(go.layer),
-                ["childCount"] = go.transform.childCount,
+                ["path"] = HierarchyPath(go),
                 ["components"] = GetComponentTypes(go, ref componentCount),
-                ["depth"] = depth
             };
+            AddNonDefaultState(entry, go);
+            return entry;
         }
 
         private static List<object> GetComponentTypes(GameObject go)

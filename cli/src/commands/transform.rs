@@ -13,7 +13,7 @@ pub enum TransformAction {
         #[command(flatten)]
         target: TargetArgs,
         /// Destination/offset as three numbers: X Y Z
-        #[arg(long, num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
+        #[arg(long, alias = "position", num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
         to: Vec<f64>,
         /// Coordinate space: world or local
         #[arg(long, default_value = "world")]
@@ -31,7 +31,7 @@ pub enum TransformAction {
         #[command(flatten)]
         target: TargetArgs,
         /// Euler angles in degrees: X Y Z
-        #[arg(long, num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
+        #[arg(long, alias = "to", alias = "rotation", num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
         euler: Vec<f64>,
         /// Coordinate space: world or local
         #[arg(long, default_value = "world")]
@@ -49,7 +49,7 @@ pub enum TransformAction {
         #[command(flatten)]
         target: TargetArgs,
         /// Non-uniform scale: X Y Z
-        #[arg(long, num_args = 3, value_names = ["X", "Y", "Z"], conflicts_with = "uniform")]
+        #[arg(long, alias = "to", num_args = 3, value_names = ["X", "Y", "Z"], conflicts_with = "uniform")]
         scale: Vec<f64>,
         /// Uniform scale applied to all three axes
         #[arg(long)]
@@ -62,15 +62,18 @@ pub enum TransformAction {
         save: bool,
     },
     /// Orient an object to face a point or another object. Provide `--at X Y Z` for a world
-    /// point, or `--target-id` for another object.
+    /// point, or `--target <PATH|NAME|ID>` for another object.
     LookAt {
         #[command(flatten)]
         target: TargetArgs,
         /// World point to face: X Y Z
         #[arg(long, num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
         at: Vec<f64>,
-        /// Face another object by instance id instead of a point
-        #[arg(long, allow_hyphen_values = true, conflicts_with = "at")]
+        /// Face another object: its hierarchy path, name, or instance id
+        #[arg(long = "target", allow_hyphen_values = true, conflicts_with = "at", value_name = "PATH|NAME|ID")]
+        face: Option<String>,
+        /// Face another object by instance id (same as --target with an id)
+        #[arg(long, allow_hyphen_values = true, conflicts_with = "at", hide = true)]
         target_id: Option<i64>,
         /// Up vector hint: X Y Z (default 0 1 0)
         #[arg(long, num_args = 3, value_names = ["X", "Y", "Z"], allow_hyphen_values = true)]
@@ -173,6 +176,7 @@ fn build_request(
         TransformAction::LookAt {
             target,
             at,
+            face,
             target_id,
             up,
             save,
@@ -180,10 +184,15 @@ fn build_request(
             target.apply(&mut obj)?;
             if let Some(tid) = target_id {
                 obj.insert("targetId".into(), serde_json::json!(tid));
+            } else if let Some(face) = face {
+                match face.trim().parse::<i64>() {
+                    Ok(id) => obj.insert("targetId".into(), serde_json::json!(id)),
+                    Err(_) => obj.insert("targetPath".into(), serde_json::json!(face)),
+                };
             } else if at.len() == 3 {
                 obj.insert("target".into(), vec3_json(at));
             } else {
-                anyhow::bail!("provide --at X Y Z or --target-id");
+                anyhow::bail!("provide --at X Y Z or --target <PATH|NAME|ID>");
             }
             if up.len() == 3 {
                 obj.insert("up".into(), vec3_json(up));
@@ -203,14 +212,29 @@ fn build_request(
 
 fn print_human(action: &TransformAction, result: &serde_json::Value) {
     match action {
-        TransformAction::Get { .. } => output::print_json(result),
+        TransformAction::Get { .. } => {
+            // A bulk read (`--ids`) comes back as a list; one object as a flat payload.
+            if let Some(items) = result.get("transforms").and_then(|v| v.as_array()) {
+                output::print_success(&format!("{} transform(s)", items.len()));
+                for item in items {
+                    let (header, lines) = super::text::transform_get_lines(item);
+                    eprintln!("  {header}");
+                    for line in lines {
+                        eprintln!("  {line}");
+                    }
+                }
+                return;
+            }
+            let (header, lines) = super::text::transform_get_lines(result);
+            output::print_success(&header);
+            for line in lines {
+                eprintln!("{line}");
+            }
+        }
         _ => {
+            let summary = super::text::transform_summary(result);
             let name = result.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-            let pos = result
-                .get("position")
-                .map(|v| v.to_string())
-                .unwrap_or_default();
-            output::print_success(&format!("{name}: position {pos}"));
+            output::print_success(&format!("{name}: {summary}"));
         }
     }
 }

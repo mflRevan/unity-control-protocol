@@ -30,6 +30,9 @@ pub enum PackagesAction {
         /// Include indirect dependencies
         #[arg(long)]
         all: bool,
+        /// With --json: keep descriptions, registries, resolved paths, and dependency graphs
+        #[arg(long)]
+        full: bool,
     },
     /// Search available Unity packages
     Search {
@@ -197,7 +200,7 @@ struct UnitypackageEntryState {
 
 pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
     match action {
-        PackagesAction::List { offline, all } => {
+        PackagesAction::List { offline, all, full } => {
             run_bridge_action(
                 "packages/list",
                 serde_json::json!({ "offline": offline, "includeIndirect": all }),
@@ -205,7 +208,7 @@ pub async fn run(action: PackagesAction, ctx: &Context) -> anyhow::Result<()> {
                 ctx,
                 |result, json| {
                     if json {
-                        output::print_json(&output::success_json(result));
+                        output::print_json(&output::success_json(lean_package_list(result, full)));
                     } else {
                         print_package_list(&result, all);
                     }
@@ -895,6 +898,10 @@ fn normalize_asset_path(path: &str) -> String {
     path.trim().replace('\\', "/").trim_matches('/').to_string()
 }
 
+fn is_builtin_module(name: &str) -> bool {
+    name.starts_with("com.unity.modules.")
+}
+
 fn print_package_list(result: &serde_json::Value, include_indirect: bool) {
     let packages = result
         .get("packages")
@@ -902,14 +909,27 @@ fn print_package_list(result: &serde_json::Value, include_indirect: bool) {
         .cloned()
         .unwrap_or_default();
     let count = packages.len();
+    // The ~30 built-in engine modules are the same in every project; one count says it all.
+    let modules = packages
+        .iter()
+        .filter(|p| p.get("name").and_then(|v| v.as_str()).is_some_and(is_builtin_module))
+        .count();
+    let modules_note = if modules > 0 {
+        format!(" ({modules} built-in modules not listed)")
+    } else {
+        String::new()
+    };
     if include_indirect {
         output::print_success(&format!(
-            "{count} package(s) including indirect dependencies"
+            "{count} package(s) including indirect dependencies{modules_note}"
         ));
     } else {
-        output::print_success(&format!("{count} direct package(s)"));
+        output::print_success(&format!("{count} direct package(s){modules_note}"));
     }
     for package in packages {
+        if package.get("name").and_then(|v| v.as_str()).is_some_and(is_builtin_module) {
+            continue;
+        }
         let name = package
             .get("name")
             .and_then(|value| value.as_str())
@@ -929,6 +949,27 @@ fn print_package_list(result: &serde_json::Value, include_indirect: bool) {
         let marker = if direct { "*" } else { "-" };
         eprintln!("  [{marker}] {name} {version} ({source})");
     }
+}
+
+/// The list payload without the per-package description, registry, resolved path, and
+/// dependency graph: 11k tokens of prose for a 40-package project. `--full` keeps them.
+fn lean_package_list(mut result: serde_json::Value, full: bool) -> serde_json::Value {
+    if full {
+        return result;
+    }
+    if let Some(packages) = result.get_mut("packages").and_then(|v| v.as_array_mut()) {
+        for package in packages {
+            if let Some(obj) = package.as_object_mut() {
+                obj.retain(|key, _| {
+                    matches!(
+                        key.as_str(),
+                        "name" | "version" | "displayName" | "source" | "directDependency" | "versions"
+                    )
+                });
+            }
+        }
+    }
+    result
 }
 
 fn print_package_search(result: &serde_json::Value) {
@@ -1008,8 +1049,20 @@ fn print_dependencies(result: &serde_json::Value) {
         .and_then(|value| value.as_array())
         .cloned()
         .unwrap_or_default();
-    output::print_success(&format!("{} manifest dependenc(ies)", dependencies.len()));
+    let modules = dependencies
+        .iter()
+        .filter(|d| d.get("name").and_then(|v| v.as_str()).is_some_and(is_builtin_module))
+        .count();
+    let note = if modules > 0 {
+        format!(" ({modules} built-in modules not listed)")
+    } else {
+        String::new()
+    };
+    output::print_success(&format!("{} manifest dependenc(ies){note}", dependencies.len()));
     for dependency in dependencies {
+        if dependency.get("name").and_then(|v| v.as_str()).is_some_and(is_builtin_module) {
+            continue;
+        }
         let name = dependency
             .get("name")
             .and_then(|value| value.as_str())

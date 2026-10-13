@@ -42,10 +42,9 @@ namespace UCP.Bridge
             Undo.RegisterCreatedObjectUndo(go, "UCP Create GameObject");
 
             // Optional parent
-            if (p != null && p.TryGetValue("parent", out var parentObj))
+            if (p != null && p.TryGetValue("parent", out var parentObj) && parentObj != null)
             {
-                long parentId = Convert.ToInt64(parentObj);
-                var parent = FindGameObject(parentId);
+                var parent = ResolveParent(parentObj);
                 go.transform.SetParent(parent.transform, false);
             }
 
@@ -114,8 +113,7 @@ namespace UCP.Bridge
 
             if (p.TryGetValue("parent", out var parentObj) && parentObj != null)
             {
-                long parentId = Convert.ToInt64(parentObj);
-                var parent = FindGameObject(parentId);
+                var parent = ResolveParent(parentObj);
                 Undo.SetTransformParent(go.transform, parent.transform, "UCP Reparent");
             }
             // else: parent = null means move to root
@@ -183,8 +181,7 @@ namespace UCP.Bridge
             // Optional parent
             if (p.TryGetValue("parent", out var parentObj) && parentObj != null)
             {
-                long parentId = Convert.ToInt64(parentObj);
-                var parent = FindGameObject(parentId);
+                var parent = ResolveParent(parentObj);
                 instance.transform.SetParent(parent.transform, false);
             }
 
@@ -342,6 +339,29 @@ namespace UCP.Bridge
                 return unityType;
 
             return null;
+        }
+
+        /// <summary>
+        /// A `parent` parameter is an instance id (number) or a hierarchy path (string); a bare
+        /// string that is not a path of a root object falls back to a name search, so agents can
+        /// say `--parent EvalProps` as naturally as `--parent -4231`.
+        /// </summary>
+        private static GameObject ResolveParent(object parentObj)
+        {
+            if (parentObj is string text)
+            {
+                if (long.TryParse(text.Trim(), out var parsed))
+                    return FindGameObject(parsed);
+                try
+                {
+                    return ObjectLocator.Resolve(new Dictionary<string, object> { ["path"] = text });
+                }
+                catch (ArgumentException)
+                {
+                    return ObjectLocator.Resolve(new Dictionary<string, object> { ["name"] = text });
+                }
+            }
+            return FindGameObject(Convert.ToInt64(parentObj));
         }
 
         private static GameObject FindGameObject(long instanceId)

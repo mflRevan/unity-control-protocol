@@ -140,7 +140,7 @@ pub async fn run(action: RecordAction, ctx: &Context) -> anyhow::Result<()> {
             if ctx.json {
                 output::print_json(&output::success_json(result));
             } else {
-                output::print_json(&result);
+                output::print_success(&super::text::record_status_line(&result));
             }
             Ok(())
         }

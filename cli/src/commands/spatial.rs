@@ -119,9 +119,53 @@ pub async fn run(action: SpatialAction, ctx: &Context) -> anyhow::Result<()> {
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        output::print_json(&result);
+        print_human(&action, &result);
     }
     Ok(())
+}
+
+fn print_human(action: &SpatialAction, result: &serde_json::Value) {
+    use super::text;
+    match action {
+        SpatialAction::Raycast { max_distance, .. } => {
+            if text::flag(result, "hit") == Some(true) {
+                output::print_success(&format!("Raycast {}", text::hit_line(result)));
+            } else {
+                let limit = max_distance
+                    .map(|d| format!(" within {}", text::fnum(d)))
+                    .unwrap_or_default();
+                output::print_success(&format!("Raycast hit nothing{limit}"));
+            }
+        }
+        SpatialAction::Overlap { .. } => {
+            let (header, lines) = text::object_list_lines(result, "hits", "collider(s) overlap");
+            output::print_success(&header);
+            for line in lines {
+                eprintln!("{line}");
+            }
+        }
+        SpatialAction::Bounds { .. } => output::print_success(&text::bounds_line(result)),
+        SpatialAction::Ground { no_apply, .. } => {
+            if text::flag(result, "hit") != Some(true) {
+                output::print_success("No ground surface found below");
+                return;
+            }
+            let mut line = format!("Ground {}", text::hit_line(result));
+            match (text::vec(result.get("restPosition")), no_apply) {
+                (Some(rest), _) => line.push_str(&format!("; moved to {rest}")),
+                (None, true) => line.push_str(" (not applied)"),
+                (None, false) => {}
+            }
+            output::print_success(&line);
+        }
+        SpatialAction::Nearest { .. } => {
+            let (header, lines) = text::object_list_lines(result, "objects", "nearest object(s)");
+            output::print_success(&header);
+            for line in lines {
+                eprintln!("{line}");
+            }
+        }
+    }
 }
 
 fn build_request(

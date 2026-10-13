@@ -89,14 +89,16 @@ namespace UCP.Bridge
                     if (results.Count >= maxResults)
                         continue;
 
-                    results.Add(new Dictionary<string, object>
+                    var entry = new Dictionary<string, object>
                     {
                         ["guid"] = guids[i],
                         ["path"] = assetPath,
                         ["type"] = GetDisplayType(assetPath, asset),
                         ["name"] = asset.name,
-                        ["isSubAsset"] = AssetDatabase.IsSubAsset(asset)
-                    });
+                    };
+                    if (AssetDatabase.IsSubAsset(asset))
+                        entry["isSubAsset"] = true;
+                    results.Add(entry);
                 }
             }
 
@@ -707,10 +709,22 @@ namespace UCP.Bridge
             foreach (var candidate in candidates)
             {
                 if (candidate == null) continue;
+                // A model file carries one GameObject and a Transform/MeshFilter/MeshRenderer per
+                // node; a name search for "Tower" is after the asset, not those. They are still
+                // reachable with an explicit --type.
+                if (string.IsNullOrEmpty(typeFilter) && IsModelNode(candidate))
+                    continue;
                 if (!MatchesName(candidate, assetPath, nameFilter, nameRegex)) continue;
                 if (!MatchesType(candidate, assetPath, typeFilter)) continue;
                 yield return candidate;
             }
+        }
+
+        private static bool IsModelNode(UnityEngine.Object candidate)
+        {
+            if (candidate is Component)
+                return true;
+            return candidate is GameObject && AssetDatabase.IsSubAsset(candidate);
         }
 
         private static bool MatchesName(UnityEngine.Object asset, string assetPath, string nameFilter, Regex nameRegex)

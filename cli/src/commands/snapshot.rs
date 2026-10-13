@@ -16,7 +16,11 @@ pub async fn run(filter: Option<String>, depth: u32, ctx: &Context) -> anyhow::R
     if ctx.json {
         output::print_json(&output::success_json(result));
     } else {
-        output::print_json(&result);
+        let (header, lines) = super::text::snapshot_lines(&result, filter.as_deref(), depth);
+        output::print_success(&header);
+        for line in lines {
+            eprintln!("{line}");
+        }
     }
 
     Ok(())

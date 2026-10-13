@@ -229,14 +229,16 @@ pub enum ProfilerFramesAction {
 pub async fn run(action: ProfilerAction, ctx: &Context) -> anyhow::Result<()> {
     match action {
         ProfilerAction::Status => {
-            render_call(
-                ctx,
-                "profiler/status",
-                json!({}),
-                render_status,
-                "Profiler status retrieved",
-            )
-            .await
+            let mut result = call_bridge(ctx, "profiler/status", json!({}), None).await?;
+            // The capability matrix and the full category catalogue are static per editor
+            // version; `profiler config get` still reports the categories.
+            if let Some(obj) = result.as_object_mut() {
+                obj.remove("capabilities");
+                if let Some(config) = obj.get_mut("config").and_then(Value::as_object_mut) {
+                    config.remove("availableCategories");
+                }
+            }
+            render_result(ctx, &result, render_status, "Profiler status retrieved")
         }
         ProfilerAction::Config { action } => match action {
             ProfilerConfigAction::Get => {

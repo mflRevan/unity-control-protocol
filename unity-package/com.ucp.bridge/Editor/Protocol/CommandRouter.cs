@@ -41,7 +41,12 @@ namespace UCP.Bridge
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[UCP] Error handling '{method}': {ex}");
+                // The failure goes back to the caller in the response. Logging it as a console
+                // error made every failed request (a missing file, a bad property name) count as
+                // a project error in the editor-state line the CLI appends to every command, so
+                // an agent's own typos looked like broken scripts. The full exception still goes
+                // to the editor log, as a plain entry.
+                Debug.Log($"[UCP] '{method}' failed: {ex}");
                 return JsonRpcResponse.Error(id, ErrorCodes.InternalError, ex.Message);
             }
         }

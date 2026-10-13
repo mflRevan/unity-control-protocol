@@ -20,18 +20,57 @@ impl fmt::Display for TestRunFailure {
 
 impl std::error::Error for TestRunFailure {}
 
-pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::Result<()> {
-    let (_, _, mut client) = super::connect_client(ctx).await?;
-
-    super::enforce_active_scene_guard(
-        &mut client,
-        super::ActiveSceneGuardPolicy::block_if_dirty("run Unity tests"),
-    )
-    .await?;
-
-    if !ctx.json {
-        output::print_info(&format!("Running {mode}-mode tests..."));
+/// Keeps only the tests that did not pass, and the console summary only when it has something
+/// to say (errors or exceptions during the run).
+fn lean_test_result(mut result: Value) -> Value {
+    if let Some(tests) = result.get_mut("tests").and_then(Value::as_array_mut) {
+        tests.retain(|t| t.get("status").and_then(Value::as_str) != Some("passed"));
     }
+    let logs_matter = result
+        .get("logs")
+        .map(super::log_status_has_failures)
+        .unwrap_or(false);
+    if !logs_matter {
+        if let Some(obj) = result.as_object_mut() {
+            obj.remove("logs");
+        }
+    }
+    result
+}
+
+pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::Result<()> {
+    let (project, lock, mut client) = super::connect_client(ctx).await?;
+
+    // Right after a previous run (or a compile) the bridge may still be restarting; the first
+    // request then dies with the connection instead of answering. Wait and ask once more.
+    let guard = super::ActiveSceneGuardPolicy::block_if_dirty("run Unity tests");
+    if let Err(error) = super::enforce_active_scene_guard(&mut client, guard).await {
+        let lost = matches!(
+            error.downcast_ref::<crate::error::UcpError>(),
+            Some(crate::error::UcpError::BridgeConnectionLost { .. })
+        );
+        if !lost {
+            return Err(error);
+        }
+        client.close().await;
+        crate::bridge_lifecycle::wait_for_bridge(
+            &project,
+            Some(&lock),
+            ctx.timeout.min(60).max(5),
+            ctx.dialog_policy,
+            crate::bridge_lifecycle::WaitMode::RestartOptional,
+        )
+        .await?;
+        let (_, _, reconnected) = super::connect_client(ctx).await?;
+        client = reconnected;
+        super::enforce_active_scene_guard(
+            &mut client,
+            super::ActiveSceneGuardPolicy::block_if_dirty("run Unity tests"),
+        )
+        .await?;
+    }
+
+    let start_notice = output::delayed_notice(&format!("Starting {mode}-mode tests..."), ctx.json);
 
     let mut params = serde_json::json!({ "mode": mode });
     if let Some(f) = &filter {
@@ -40,12 +79,15 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
 
     let start_result = client.call("tests/run", params).await?;
 
+    drop(start_notice);
     // Tests run asynchronously in Unity. Wait for the tests/result notification.
-    if let Some(status) = start_result.get("status").and_then(|v| v.as_str()) {
-        if status == "started" && !ctx.json {
-            output::print_info("Tests started, waiting for results...");
-        }
-    }
+    let _running_notice = match start_result.get("status").and_then(|v| v.as_str()) {
+        Some("started") => output::delayed_notice(
+            &format!("{mode}-mode tests running; waiting for results..."),
+            ctx.json,
+        ),
+        _ => output::DelayedNotice::silent(),
+    };
 
     let wait_timeout = Duration::from_secs(ctx.timeout.max(1));
 
@@ -67,6 +109,17 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
     };
 
     client.close().await;
+
+    // The test runner's cleanup reloads the domain right after it reports; the next command
+    // would otherwise connect to a bridge that closes on it. Let it come back first.
+    let _ = crate::bridge_lifecycle::wait_for_bridge(
+        &project,
+        Some(&lock),
+        ctx.timeout.min(60).max(5),
+        ctx.dialog_policy,
+        crate::bridge_lifecycle::WaitMode::RestartOptional,
+    )
+    .await;
 
     let summary = result
         .get("summary")
@@ -102,6 +155,9 @@ pub async fn run(mode: &str, filter: Option<String>, ctx: &Context) -> anyhow::R
     }
 
     if ctx.json {
+        // The summary carries the counts; listing every passed test (6k tokens for a 170-test
+        // project) tells the caller nothing it can act on. Failures and skips stay, in full.
+        let result = lean_test_result(result);
         if failed == 0 {
             output::print_json(&output::success_json(result));
             return Ok(());

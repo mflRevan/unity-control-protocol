@@ -33,52 +33,69 @@ and scene reloads, so prefer paths in scripts and re-snapshot before reusing an 
 \n\
 Full docs (human + machine-readable): https://unityctl.dev - per-page Markdown mirrors and \
 https://unityctl.dev/llms.txt are available for AI agents.",
-    version,
-    propagate_version = true
+    after_help = GLOBAL_OPTIONS_HELP,
+    after_long_help = GLOBAL_OPTIONS_HELP,
+    version
 )]
 struct Cli {
     #[command(subcommand)]
     command: commands::Command,
 
     /// Unity project path (auto-detected if omitted)
-    #[arg(long, global = true, env = "UCP_PROJECT")]
+    #[arg(long, global = true, env = "UCP_PROJECT", hide = true)]
     project: Option<String>,
 
     /// Bridge port (read from lock file if omitted)
-    #[arg(long, global = true, env = "UCP_PORT")]
+    #[arg(long, global = true, env = "UCP_PORT", hide = true)]
     port: Option<u16>,
 
     /// Path to the Unity Editor executable to use when UCP launches the editor
-    #[arg(long, global = true, env = "UCP_UNITY")]
+    #[arg(long, global = true, env = "UCP_UNITY", hide = true)]
     unity: Option<String>,
 
     /// Force UCP to launch the project with a specific installed Unity editor version
-    #[arg(long, global = true, env = "UCP_FORCE_UNITY_VERSION")]
+    #[arg(long, global = true, env = "UCP_FORCE_UNITY_VERSION", hide = true)]
     force_unity_version: Option<String>,
 
     /// Output as JSON
-    #[arg(long, global = true)]
+    #[arg(long, global = true, hide = true)]
     json: bool,
 
     /// Command timeout in seconds (default: 310 for UI renders, 30 otherwise); 0 waits indefinitely
-    #[arg(long, global = true)]
+    #[arg(long, global = true, hide = true)]
     timeout: Option<u64>,
 
     /// Enable verbose logging
-    #[arg(long, short, global = true)]
+    #[arg(long, short, global = true, hide = true)]
     verbose: bool,
 
     /// Policy for an outdated bridge package reference: auto (update silently),
     /// warn (report but proceed), off (ignore)
-    #[arg(long, global = true, env = "UCP_BRIDGE_UPDATE_POLICY", value_enum)]
+    #[arg(long, global = true, env = "UCP_BRIDGE_UPDATE_POLICY", value_enum, hide = true)]
     bridge_update_policy: Option<config::BridgeUpdatePolicy>,
 
     /// Policy for Unity startup dialogs (Safe Mode, recovery): auto (resolve the
     /// usual way), manual (leave for a human), ignore (dismiss), recover (accept
     /// recovery), safe-mode (enter Safe Mode), cancel (decline)
-    #[arg(long, global = true, env = "UCP_DIALOG_POLICY", value_enum)]
+    #[arg(long, global = true, env = "UCP_DIALOG_POLICY", value_enum, hide = true)]
     dialog_policy: Option<config::StartupDialogPolicy>,
 }
+
+// Hidden from clap's generated listings and documented once here: clap would otherwise repeat
+// all nine global options in every one of the ~150 subcommand help screens, which is most of
+// what an agent reads when it probes `--help`.
+const GLOBAL_OPTIONS_HELP: &str = "\
+Global options (accepted by every command, before or after the subcommand):
+  --json                      Machine-readable output (compact; UCP_JSON_PRETTY=1 indents)
+  --timeout <SECONDS>         Deadline for the command (default 30; UI renders 310); 0 waits forever
+  --project <PATH>            Unity project (auto-detected; env UCP_PROJECT)
+  --port <PORT>               Bridge port (from the lock file; env UCP_PORT)
+  --unity <EXE>               Unity Editor executable for launches (env UCP_UNITY)
+  --force-unity-version <V>   Launch with a specific installed editor version (env UCP_FORCE_UNITY_VERSION)
+  --bridge-update-policy <P>  auto | warn | off for an outdated bridge package (env UCP_BRIDGE_UPDATE_POLICY)
+  --dialog-policy <P>         auto | manual | ignore | recover | safe-mode | cancel for startup dialogs (env UCP_DIALOG_POLICY)
+  -v, --verbose               Debug logging on stderr
+  UCP_EDITOR_STATE=0          Drops the trailing [editor] state line / `editor` JSON member";
 
 impl Cli {
     fn effective_timeout(&self) -> u64 {

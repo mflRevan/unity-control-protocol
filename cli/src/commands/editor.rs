@@ -313,7 +313,24 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
     let status = editor_runtime::status(&project, ctx);
 
     if ctx.json {
-        output::print_json(&output::success_json(serde_json::to_value(status)?));
+        // Flat and without nulls: the session block repeated four fields, and the version
+        // inventory belongs to `ucp doctor`.
+        let mut payload = serde_json::json!({
+            "running": status.running,
+            "pid": status.pid,
+            "launchedBy": status.launched_by,
+            "executablePath": status.executable_path.clone().or(status.resolved_unity_path.clone()),
+            "projectVersion": status.project_version,
+            "requestedVersion": status.requested_version,
+            "logPath": status.log_path,
+            "startedAt": status.session.as_ref().map(|s| s.started_at.clone()),
+            "resolutionWarning": status.resolution_warning,
+            "resolutionError": status.resolution_error,
+        });
+        if let Some(obj) = payload.as_object_mut() {
+            obj.retain(|_, v| !v.is_null());
+        }
+        output::print_json(&output::success_json(payload));
         return Ok(());
     }
 
@@ -340,13 +357,9 @@ fn status(ctx: &Context) -> anyhow::Result<()> {
         eprintln!("  Project Unity version: {version}");
     }
     if let Some(version) = status.requested_version.as_deref() {
-        eprintln!("  Requested Unity version: {version}");
-    }
-    if !status.installed_versions.is_empty() {
-        eprintln!(
-            "  Installed Unity versions: {}",
-            status.installed_versions.join(", ")
-        );
+        if status.project_version.as_deref() != Some(version) {
+            eprintln!("  Requested Unity version: {version}");
+        }
     }
     eprintln!("  Log: {}", status.log_path);
     if let Some(warning) = status.resolution_warning.as_deref() {

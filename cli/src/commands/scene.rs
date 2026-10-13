@@ -190,9 +190,11 @@ pub async fn run(action: SceneAction, ctx: &Context) -> anyhow::Result<()> {
                 output::print_success(&format!("Focused Scene view on {name} ({target})"));
             }
             SceneAction::Query { .. } => {
-                let count = result.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
-                output::print_success(&format!("Scene query returned {count} object(s)"));
-                output::print_json(&result);
+                let (header, lines) = super::text::query_lines(&result);
+                output::print_success(&header);
+                for line in lines {
+                    eprintln!("{line}");
+                }
             }
             SceneAction::Snapshot { .. } => unreachable!(),
         }

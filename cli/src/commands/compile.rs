@@ -38,9 +38,7 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
     )
     .await?;
 
-    if !ctx.json {
-        output::print_info("Triggering recompilation...");
-    }
+    let trigger_notice = output::delayed_notice("Triggering recompilation...", ctx.json);
 
     // A synchronous AssetDatabase.Refresh can take well over the default --timeout on
     // large projects; don't bound this call. Domain-reload waiting is handled below.
@@ -49,6 +47,7 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
         .await?;
     let request_id = trigger.get("requestId").and_then(|v| v.as_i64());
     client.close().await;
+    drop(trigger_notice);
 
     if no_wait {
         if ctx.json {
@@ -92,14 +91,19 @@ pub async fn run(no_wait: bool, ctx: &Context) -> anyhow::Result<()> {
     let failed = error_count > 0;
     let mut result = serde_json::json!({
         "status": if failed { "failed" } else { "ok" },
-        "message": if failed { "Compilation failed" } else { "Compilation completed" },
         "bridge": bridge_status,
         "errorCount": error_count,
         "warningCount": warning_count,
-        "diagnosticsAvailable": diagnostics.is_some(),
     });
-    if let Some(d) = &diagnostics {
-        result["diagnostics"] = d.clone();
+    match &diagnostics {
+        // The per-assembly messages are the payload; the counts already sit at the top level.
+        Some(d) => {
+            result["messages"] = d.get("messages").cloned().unwrap_or_else(|| serde_json::json!([]));
+            if d.get("truncated").and_then(|v| v.as_bool()).unwrap_or(false) {
+                result["truncated"] = serde_json::json!(true);
+            }
+        }
+        None => result["diagnosticsAvailable"] = serde_json::json!(false),
     }
     let result = super::attach_lifecycle_log_status(result, &lifecycle);
 

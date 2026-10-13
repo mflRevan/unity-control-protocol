@@ -36,8 +36,63 @@ pub fn print_state(msg: &str) {
     eprintln!("{}", style(msg).dim());
 }
 
+/// JSON goes out compact: an agent reads it just as well as the pretty form and pays about 40%
+/// fewer tokens for it. `UCP_JSON_PRETTY=1` restores indentation for humans.
 pub fn print_json(value: &serde_json::Value) {
-    println!("{}", render_json(value, true));
+    println!("{}", render_json(value, pretty_json()));
+}
+
+pub fn pretty_json() -> bool {
+    std::env::var("UCP_JSON_PRETTY")
+        .map(|v| {
+            let v = v.trim().to_ascii_lowercase();
+            !(v.is_empty() || v == "0" || v == "off" || v == "false" || v == "no")
+        })
+        .unwrap_or(false)
+}
+
+/// A progress notice that only appears when the wait it describes actually takes a while.
+/// Most waits finish within a second, and a "[*] Waiting..." line on every mutation is noise
+/// an agent pays for; one that shows up after `delay` tells it something real is happening.
+pub struct DelayedNotice {
+    handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl DelayedNotice {
+    pub fn info(message: &str, delay: std::time::Duration) -> Self {
+        let message = message.to_string();
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            print_info(&message);
+        });
+        Self {
+            handle: Some(handle),
+        }
+    }
+
+    /// A notice that never prints (JSON mode).
+    pub fn silent() -> Self {
+        Self { handle: None }
+    }
+}
+
+impl Drop for DelayedNotice {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+        }
+    }
+}
+
+/// The delay before a wait notice is worth printing.
+pub const NOTICE_DELAY: std::time::Duration = std::time::Duration::from_millis(1500);
+
+pub fn delayed_notice(message: &str, json: bool) -> DelayedNotice {
+    if json {
+        DelayedNotice::silent()
+    } else {
+        DelayedNotice::info(message, NOTICE_DELAY)
+    }
 }
 
 pub fn print_json_compact(value: &serde_json::Value) {

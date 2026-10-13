@@ -28,6 +28,7 @@ pub mod shader;
 pub mod snapshot;
 pub mod spatial;
 pub mod tests;
+pub mod text;
 pub mod transform;
 pub mod ui;
 pub mod vcs;
@@ -272,9 +273,12 @@ pub enum Command {
         /// Height in pixels
         #[arg(long, default_value = "1080")]
         height: u32,
-        /// Output file path (base64 to stdout if omitted)
+        /// Save the PNG here (default: .ucp/captures/screenshot-<time>.png in the project)
         #[arg(short, long)]
         output: Option<String>,
+        /// Print the PNG as base64 on stdout instead of saving a file
+        #[arg(long, conflicts_with = "output")]
+        base64: bool,
     },
     /// Record lightweight Game or Scene view video for agents and scripted workflows
     #[command(
@@ -473,13 +477,13 @@ pub enum FrameAction {
 /// reloads, the choice for scripts), by name, or by instance id; an id wins when several are given.
 #[derive(clap::Args, Clone, Debug)]
 pub struct TargetArgs {
-    /// Target instance ID from `ucp scene snapshot` (short-lived: it changes after reloads; prefer --path in scripts)
+    /// Instance id from `scene snapshot` (changes after reloads; prefer --path)
     #[arg(long, allow_hyphen_values = true)]
     pub id: Option<i64>,
-    /// Target by hierarchy path "Root/Child/Leaf" (survives reloads, unlike an id)
+    /// Hierarchy path Root/Child/Leaf (stable across reloads)
     #[arg(long)]
     pub path: Option<String>,
-    /// Target by GameObject name (first match; ambiguous if names repeat)
+    /// GameObject name (first match)
     #[arg(long)]
     pub name: Option<String>,
 }
@@ -522,6 +526,25 @@ impl std::fmt::Display for TargetArgs {
 }
 
 /// Convert a fixed 3-element `--flag x y z` vector into a JSON array.
+/// Where an image or clip goes when the caller gave no `--output`: `.ucp/captures/` inside the
+/// project, named after the command and the time, so nothing ever lands on stdout by accident.
+pub fn default_capture_path(
+    project: &std::path::Path,
+    kind: &str,
+    extension: &str,
+) -> anyhow::Result<String> {
+    let dir = project.join(".ucp").join("captures");
+    std::fs::create_dir_all(&dir)?;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let mut path = dir.join(format!("{kind}-{stamp}.{extension}"));
+    let mut n = 1;
+    while path.exists() {
+        n += 1;
+        path = dir.join(format!("{kind}-{stamp}-{n}.{extension}"));
+    }
+    Ok(path.to_string_lossy().replace('\\', "/"))
+}
+
 pub fn vec3_json(v: &[f64]) -> serde_json::Value {
     serde_json::json!([v[0], v[1], v[2]])
 }
@@ -539,9 +562,7 @@ pub async fn ensure_bridge_ready(ctx: &Context) -> anyhow::Result<(PathBuf, Lock
     let mut lock = discovery::read_lock_file(&project).ok();
 
     if start_outcome.started || lock.is_none() {
-        if !ctx.json {
-            output::print_info("Waiting for Unity bridge...");
-        }
+        let _notice = output::delayed_notice("Waiting for Unity bridge...", ctx.json);
 
         let wait_outcome = bridge_lifecycle::wait_for_bridge(
             &project,
@@ -778,9 +799,7 @@ pub async fn await_unity_lifecycle(
         } => (progress_message, failure_context, min_timeout_secs, true),
     };
 
-    if !ctx.json {
-        output::print_info(progress_message);
-    }
+    let _notice = output::delayed_notice(progress_message, ctx.json);
 
     let timeout_secs = ctx.timeout.max(min_timeout_secs);
     let mut bridge_status = None;
@@ -870,13 +889,14 @@ async fn fetch_lifecycle_log_status(project: &std::path::Path) -> Option<serde_j
     status
 }
 
+/// Mutating commands used to append the whole `logs status` payload to their JSON result. The
+/// `editor` appendix now carries the console counts (including what this command added), so the
+/// payload is no longer attached: it cost 100-400 tokens of mostly zero counters per command.
+/// The outcome stays available to callers that print a console summary on failure.
 pub fn attach_lifecycle_log_status(
-    mut result: serde_json::Value,
-    outcome: &UnityLifecycleOutcome,
+    result: serde_json::Value,
+    _outcome: &UnityLifecycleOutcome,
 ) -> serde_json::Value {
-    if let Some(status) = &outcome.log_status {
-        result["logStatus"] = status.clone();
-    }
     result
 }
 
@@ -973,9 +993,7 @@ pub async fn save_active_scene(
     client: &mut BridgeClient,
     ctx: &Context,
 ) -> anyhow::Result<serde_json::Value> {
-    if !ctx.json {
-        output::print_info("Saving active scene...");
-    }
+    let _notice = output::delayed_notice("Saving active scene...", ctx.json);
 
     match client
         .call("scene/save-active", serde_json::json!({}))
@@ -1115,7 +1133,8 @@ pub async fn run(cmd: Command, ctx: Context) -> anyhow::Result<()> {
             width,
             height,
             output,
-        } => screenshot::run(&view, width, height, output, &ctx).await,
+            base64,
+        } => screenshot::run(&view, width, height, output, base64, &ctx).await,
         Command::Record { action } => record::run(action, &ctx).await,
         Command::Logs { action, args } => logs::run(action, args, &ctx).await,
         Command::Log { action, args } => logs::run(action, args, &ctx).await,

@@ -9,7 +9,11 @@ use super::{Context, UnityLifecyclePolicy};
 #[derive(Subcommand)]
 pub enum BuildAction {
     /// List available build targets
-    Targets,
+    Targets {
+        /// Also list platforms that are not installed in this editor
+        #[arg(long)]
+        all: bool,
+    },
     /// Get the active build target
     ActiveTarget,
     /// Switch active build target
@@ -49,7 +53,16 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
     super::enforce_active_scene_guard(&mut client, build_preflight_policy(&action)).await?;
 
     let mut result = match &action {
-        BuildAction::Targets => client.call("build/targets", serde_json::json!({})).await?,
+        BuildAction::Targets { all } => {
+            let mut result = client.call("build/targets", serde_json::json!({})).await?;
+            // Every platform Unity knows is a long list; the installed ones are the usable ones.
+            if !all {
+                if let Some(targets) = result.get_mut("targets").and_then(|v| v.as_array_mut()) {
+                    targets.retain(|t| t.get("installed").and_then(|v| v.as_bool()).unwrap_or(false));
+                }
+            }
+            result
+        }
         BuildAction::ActiveTarget => {
             client
                 .call("build/active-target", serde_json::json!({}))
@@ -111,7 +124,7 @@ pub async fn run(action: BuildAction, ctx: &Context) -> anyhow::Result<()> {
         output::print_json(&output::success_json(result));
     } else {
         match &action {
-            BuildAction::Targets => {
+            BuildAction::Targets { .. } => {
                 let active = result.get("active").and_then(|v| v.as_str()).unwrap_or("?");
                 output::print_success(&format!("Active target: {active}"));
                 if let Some(targets) = result.get("targets").and_then(|v| v.as_array()) {
@@ -205,7 +218,7 @@ fn build_preflight_policy(action: &BuildAction) -> super::ActiveSceneGuardPolicy
         BuildAction::SetDefines { .. } => {
             super::ActiveSceneGuardPolicy::block_if_dirty("change scripting define symbols")
         }
-        BuildAction::Targets
+        BuildAction::Targets { .. }
         | BuildAction::ActiveTarget
         | BuildAction::Scenes
         | BuildAction::SetScenes { .. }
@@ -219,7 +232,7 @@ fn build_lifecycle_policy(
     result: &serde_json::Value,
 ) -> UnityLifecyclePolicy {
     match action {
-        BuildAction::Targets
+        BuildAction::Targets { .. }
         | BuildAction::ActiveTarget
         | BuildAction::Scenes
         | BuildAction::Start { .. }

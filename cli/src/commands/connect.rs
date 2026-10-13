@@ -6,10 +6,6 @@ use super::Context;
 pub async fn run(ctx: &Context) -> anyhow::Result<()> {
     let (_, _, mut client) = super::connect_client(ctx).await?;
 
-    if !ctx.json {
-        output::print_info("Connecting to bridge...");
-    }
-
     let mut info = client.handshake().await?;
     client.close().await;
 

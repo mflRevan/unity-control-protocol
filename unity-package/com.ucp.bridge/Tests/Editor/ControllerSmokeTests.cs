@@ -324,10 +324,15 @@ namespace UCP.Bridge.Tests
 
             var entry = (Dictionary<string, object>)objects[0];
             Assert.That(entry["name"], Is.EqualTo("Root"));
-            Assert.That(Convert.ToInt32(entry["depth"]), Is.EqualTo(0));
+            Assert.That(entry["path"], Is.EqualTo("Root"));
             Assert.That(Convert.ToInt32(entry["childCount"]), Is.EqualTo(1));
             Assert.That(entry.ContainsKey("components"), Is.True);
-            Assert.That(entry.ContainsKey("layerName"), Is.True);
+            // Default state is implied: an active, untagged object on the Default layer carries
+            // none of active/tag/layer/layerName/depth.
+            Assert.That(entry.ContainsKey("depth"), Is.False);
+            Assert.That(entry.ContainsKey("active"), Is.False);
+            Assert.That(entry.ContainsKey("tag"), Is.False);
+            Assert.That(entry.ContainsKey("layerName"), Is.False);
             Assert.That(entry.ContainsKey("children"), Is.False);
             Assert.That(entry.ContainsKey("position"), Is.False);
             Assert.That(entry.ContainsKey("rotation"), Is.False);

@@ -8,13 +8,15 @@ use std::collections::HashSet;
 use super::Context;
 
 const MAX_MESSAGE_PREVIEW: usize = 160;
+const DEFAULT_TAIL_COUNT: u32 = 20;
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct LogsArgs {
     /// Filter by level: info, warn, error
     #[arg(long)]
     pub level: Option<String>,
-    /// Read up to N buffered logs when searching or tailing, or stop after N live logs when following
+    /// Read up to N buffered logs when searching or tailing (default 20), or stop after N live
+    /// logs when following
     #[arg(long)]
     pub count: Option<u32>,
     /// Search buffered logs by regex pattern
@@ -35,17 +37,18 @@ pub struct LogsArgs {
     /// Restrict buffered reads to log ids higher than this value
     #[arg(long, value_name = "ID")]
     pub after_id: Option<u64>,
-    /// Follow live log notifications instead of reading buffered history
+    /// Stream live log notifications instead of reading buffered history (blocks until
+    /// --count entries arrived or Ctrl+C)
     #[arg(long)]
     pub follow: bool,
 }
 
-/// Read or stream the editor's console (Debug.Log) buffer. Entries are filtered by level, channel,
-/// or expression (e.g. level>=warning); with `--follow` it streams live instead of reading history.
-/// Reach for this to see what the editor printed during a command, build, or test run.
+/// Read the editor's console (Debug.Log) buffer: the newest 20 entries by default, filtered by
+/// level, channel, or expression (e.g. level>=warning). `--follow` streams live instead and
+/// blocks. Reach for this to see what the editor printed during a command, build, or test run.
 #[derive(Subcommand, Clone, Debug)]
 pub enum LogsAction {
-    /// Tail buffered logs or follow live logs when --follow is set
+    /// Read the newest buffered logs (default 20); `--follow` streams live instead
     Tail {
         #[command(flatten)]
         args: LogsArgs,
@@ -186,12 +189,9 @@ async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
 
     let (_, _, mut client) = super::connect_client(ctx).await?;
 
-    let wants_live_follow = args.follow
-        || (args.id.is_none()
-            && args.pattern.is_none()
-            && args.count.is_none()
-            && args.before_id.is_none()
-            && args.after_id.is_none());
+    // Following is opt-in: a bare `ucp logs` used to block forever on a live stream, which an
+    // agent reads as a hang.
+    let wants_live_follow = args.follow;
 
     if let Some(log_id) = args.id {
         let result = client
@@ -224,9 +224,7 @@ async fn run_query(args: LogsArgs, ctx: &Context) -> anyhow::Result<()> {
     if let Some(level) = args.level.as_deref() {
         params["level"] = serde_json::json!(level);
     }
-    if let Some(count) = args.count {
-        params["count"] = serde_json::json!(count);
-    }
+    params["count"] = serde_json::json!(args.count.unwrap_or(DEFAULT_TAIL_COUNT));
     if let Some(pattern) = args.pattern.as_deref() {
         params["pattern"] = serde_json::json!(pattern);
     }
@@ -532,14 +530,18 @@ fn print_log_list(result: &serde_json::Value, used_pattern: bool) {
         return;
     }
 
-    output::print_success(&format!("Found {total} log(s) (showing {returned})"));
+    if returned < total {
+        output::print_success(&format!("{total} buffered log(s), newest {returned} shown"));
+    } else {
+        output::print_success(&format!("{total} buffered log(s)"));
+    }
     for log in logs {
         eprintln!("{}", render_log_summary(&log));
     }
 
     if truncated {
         output::print_info(
-            "More buffered logs matched than were returned. Increase `--count`, narrow the filters, or inspect a specific entry with `ucp logs --id <id>`.",
+            "More matched than shown: raise --count, narrow the filters, or read one entry with --id <id>.",
         );
     }
 }
@@ -553,13 +555,23 @@ fn render_log_summary(log: &serde_json::Value) -> String {
         .or_else(|| log.get("message"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let message = preview_text(message, MAX_MESSAGE_PREVIEW);
+    // One line per entry: the id (for --id reads), a short level, the clock time, and the
+    // message with embedded newlines flattened. The full ISO timestamp cost a dozen tokens a line.
+    let message = preview_text(message.trim(), MAX_MESSAGE_PREVIEW).replace(['\r', '\n'], " ");
     let styled_level = match level {
-        "error" | "exception" => style(format!("[{level:>9}] ")).red(),
-        "warning" | "warn" => style(format!("[{level:>9}] ")).yellow(),
-        _ => style(format!("[{level:>9}] ")).dim(),
+        "error" | "exception" => style(format!("{level:<4}")).red(),
+        "warning" | "warn" => style("warn".to_string()).yellow(),
+        _ => style(format!("{level:<4}")).dim(),
     };
-    format!("  #{id:<5} {styled_level}{timestamp} {message}")
+    format!("  #{id} {styled_level} {} {message}", clock_time(timestamp))
+}
+
+/// "17:53:39" from an ISO timestamp; anything else is returned untouched.
+fn clock_time(timestamp: &str) -> &str {
+    match timestamp.find('T') {
+        Some(t) if timestamp.len() >= t + 9 => &timestamp[t + 1..t + 9],
+        _ => timestamp,
+    }
 }
 
 fn log_identity(log: &serde_json::Value) -> String {

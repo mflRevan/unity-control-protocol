@@ -13,11 +13,14 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
     }
 
     let (_, _, mut client) = super::connect_client(ctx).await?;
-    let mut result = client.call(method, payload).await?;
-    if method == "stop" {
-        let log_status = crate::commands::logs::fetch_status(&mut client).await?;
-        result["logStatus"] = log_status;
-    }
+    let result = client.call(method, payload).await?;
+    // Only the console summary is read here (printed when the session left errors behind);
+    // the JSON result stays the bridge's own payload.
+    let log_status = if method == "stop" {
+        crate::commands::logs::fetch_status(&mut client).await.ok()
+    } else {
+        None
+    };
     client.close().await;
 
     if ctx.json {
@@ -28,14 +31,19 @@ pub async fn run(method: &str, payload: Value, ctx: &Context) -> anyhow::Result<
     match (method, status) {
         ("stop", "already_stopped") => output::print_success("Already in edit mode"),
         ("stop", _) => output::print_success("Exited play mode"),
-        ("pause", _) => output::print_success("Toggled pause"),
+        ("pause", _) => {
+            let paused = result.get("paused").and_then(Value::as_bool);
+            output::print_success(match paused {
+                Some(true) => "Paused play mode",
+                Some(false) => "Resumed play mode",
+                None => "Toggled pause",
+            })
+        }
         _ => output::print_success("Done"),
     }
-    if method == "stop" {
-        if let Some(log_status) = result.get("logStatus") {
-            if super::log_status_has_failures(log_status) {
-                crate::commands::logs::print_status(log_status, ctx);
-            }
+    if let Some(log_status) = log_status {
+        if super::log_status_has_failures(&log_status) {
+            crate::commands::logs::print_status(&log_status, ctx);
         }
     }
     Ok(())
