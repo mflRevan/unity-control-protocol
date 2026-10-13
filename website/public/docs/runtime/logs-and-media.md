@@ -47,7 +47,7 @@ sees it; `ucp view` places a temporary camera so a vision model gets exactly the
 ```bash
 # Frame the main camera, or a chosen camera, without touching the scene
 ucp view capture -o frame.png
-ucp view capture --target-name Windmill -o windmill-in-context.png
+ucp view capture --name Windmill -o windmill-in-context.png
 
 # One object alone, auto-framed from its bounds; one file per requested angle
 ucp view isolate --name Windmill --views front,right,top --max-edge 900 -o windmill.png
@@ -161,7 +161,10 @@ Use the logs command in three modes:
 # Summarize the current buffered log state
 ucp logs status
 
-# Stream all new logs
+# Newest 20 buffered entries (the default; nothing blocks)
+ucp logs
+
+# Stream all new logs (blocks until Ctrl+C or --count entries)
 ucp logs --follow
 
 # Stream only new errors
@@ -192,7 +195,7 @@ ucp stop
 
 | Flag                          | Description                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `--follow`                    | Follow live incoming logs instead of querying buffered history                             |
+| `--follow`                    | Stream live logs instead of reading history; blocks until `--count` entries or Ctrl+C      |
 | `--level <info\|warn\|error>` | Filter by log severity threshold                                                           |
 | `--channel <text>`            | Filter by coarse channel/category text in the message or stack trace                       |
 | `--filter <expr>`             | Convenience filter expression such as `level>=warning`, `channel=Shader`, or `text=depth`  |

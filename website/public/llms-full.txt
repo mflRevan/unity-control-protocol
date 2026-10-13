@@ -1,4 +1,4 @@
-# Unity Control Protocol (UCP) 0.7.0
+# Unity Control Protocol (UCP) 0.7.1
 
 A Rust CLI and an in-editor bridge that expose the Unity Editor as commands: scenes, objects, assets, materials, prefabs, UI Toolkit, play mode, tests, profiler, builds, screenshots and video. Built for humans and AI agents.
 
@@ -240,7 +240,7 @@ Use `ucp --help` and `ucp <command> --help` for the current exhaustive surface. 
 
 | Flag                            | Description                                               |
 | ------------------------------- | --------------------------------------------------------- |
-| `--json`                        | Output results as JSON                                    |
+| `--json`                        | Output results as JSON (compact; `UCP_JSON_PRETTY=1` indents) |
 | `--project <path>`              | Path to a Unity project (defaults to current directory)   |
 | `--unity <path>`                | Override the Unity Editor executable UCP should launch    |
 | `--force-unity-version <ver>`   | Force a specific installed Unity editor version           |
@@ -248,6 +248,10 @@ Use `ucp --help` and `ucp <command> --help` for the current exhaustive surface. 
 | `--dialog-policy <mode>`        | Handle Unity startup dialogs during launch waits          |
 | `--timeout <s>`                 | Request timeout in seconds (default: 30)                  |
 | `--verbose`                     | Enable verbose output                                     |
+
+The global flags are listed once, at the end of `ucp --help`; subcommand help screens show only
+their own arguments. `UCP_EDITOR_STATE=0` drops the trailing `[editor]` state line (and the
+`editor` JSON member) described in [Editor State](https://unityctl.dev/docs/runtime/editor-state.md).
 
 ### Execution Model
 
@@ -266,13 +270,29 @@ That lifecycle is what makes UCP useful in agent and CI workflows: the caller ca
 
 Without `--json`, commands use human mode: terminal-friendly summaries optimized for interactive use and bounded enough to avoid overwhelming a terminal or an agent context window.
 
-Human mode is intentionally curated:
+Human mode is intentionally curated, and tuned for the token budget of an agent reading it:
 
-- broad reads such as logs, snapshots, settings, and references are truncated or grouped
-- long-running mutation commands append the same curated `ucp logs status` summary when it is useful
-- repetitive results are collapsed into patterns where possible instead of printing hundreds of nearly identical lines
+- every result is the shortest text that still carries the handles for the next command: an
+  object is `Name #id` on one line, a transform is one line of rounded numbers, a hierarchy is an
+  indented tree, a hit is `hit Name #id at (x, y, z) distance d`
+- defaults are implied, not printed: active objects, `Untagged`, the `Default` layer, built-in
+  engine modules in `packages list`, package shaders in `shader errors`, platforms that are not
+  installed in `build targets`
+- broad reads such as logs, snapshots, settings, and references are bounded (newest 20 logs,
+  root objects only, 50 assets) and say how to widen the read (`--count`, `--depth`, `--all`)
+- progress notices (`[*] Waiting for ...`) only appear when a wait takes longer than about
+  1.5 seconds
+- images are never written to stdout: `screenshot` and `view` save a PNG (to `--output`, or
+  `.ucp/captures/` in the project) and print its path; `--base64` opts into the old behaviour
+- every command that touched the bridge ends with one `[editor]` line describing the state it left
+  the editor in, so the console, play mode, and scene dirtiness never need a second request
 
 With `--json`, the CLI returns structured output suitable for scripts, agents, and CI automation.
+It is compact (one line) because an agent reads it just as well as the indented form and pays
+about 40% fewer tokens for it; set `UCP_JSON_PRETTY=1` for a human. The same default-elision
+applies: a snapshot entry lists `active`, `tag`, `layer`, and `childCount` only when they are not
+the default, package entries carry descriptions and resolved paths only with `--full`, and test
+results list the tests that did not pass.
 
 ### Recommended Workflows
 
@@ -363,7 +383,7 @@ ucp --unity "C:/Program Files/Unity/Hub/Editor/6000.3.1f1/Editor/Unity.exe" conn
 [OK] Connected to Unity bridge
   | Unity 6000.3.1f1
   | Project: MyProject
-  | Protocol: 0.7.0
+  | Protocol: 0.7.1
 ```
 
 By default, `ucp connect` auto-updates stale tracked bridge refs before launching Unity. To warn without mutating the project, use `--bridge-update-policy warn`.
@@ -710,7 +730,7 @@ If the active scene has unsaved changes, `scene load` saves it first; a dirty un
 
 #### `ucp scene snapshot`
 
-Capture a lean hierarchy snapshot of the active scene. By default this returns only root objects with lightweight metadata such as instance ID, name, active state, tags, layers, child counts, and component type names. Use `--depth` to expand into children. Use object-specific commands for full component/property inspection.
+Capture a lean hierarchy snapshot of the active scene as an indented tree: one line per object with its name, instance id, component type names, and anything that is not the default (an inactive object, a tag, a non-Default layer, the number of children a collapsed subtree hides). By default only root objects are listed; `--depth` expands children and `--filter` searches the whole hierarchy. Use object-specific commands for full component/property inspection.
 
 ```bash
 # Root objects only (default depth 0)
@@ -730,16 +750,18 @@ ucp scene snapshot --json
 | -------------------- | -------------------------------------- |
 | `--filter <pattern>` | Case-insensitive name substring; searches the whole hierarchy and prints each match's `path` |
 | `--depth <n>`        | Maximum hierarchy depth without a filter (default: `0`, roots only) |
-| `--json`             | Output as JSON                         |
+| `--json`             | Output as JSON; entries carry `instanceId`, `name`, `path`, `components`, and `active`/`tag`/`layer`/`childCount` only when not the default |
 
 **Example output:**
 
 ```
-[OK] Active scene: SampleScene (3 root objects)
-  Main Camera [46894] children=0 tag=Untagged layer=Default components=Transform, Camera, AudioListener
-  Directional Light [46896] children=0 tag=Untagged layer=Default components=Transform, Light
-  Player [46900] children=4 tag=Player layer=Default components=Transform, Rigidbody, PlayerController
+[OK] SampleScene: 3 root object(s); --depth N expands children, --filter NAME searches
+  Main Camera #46894 tag:MainCamera · Camera, AudioListener
+  Directional Light #46896 · Light
+  Player #46900 tag:Player [4 children] · Rigidbody, PlayerController
 ```
+
+`Transform` is implied on every object and left out of the component list.
 
 #### `ucp scene query`
 
@@ -830,15 +852,14 @@ This returns the same child metadata shape used by `ucp scene snapshot`, but sco
       {
         "instanceId": 46910,
         "name": "Body",
-        "depth": 1,
+        "path": "PlayerRoot/Body",
         "childCount": 1,
         "components": ["Transform", "MeshRenderer"],
         "children": [
           {
             "instanceId": 46911,
             "name": "WeaponSocket",
-            "depth": 2,
-            "childCount": 0,
+            "path": "PlayerRoot/Body/WeaponSocket",
             "components": ["Transform"]
           }
         ]
@@ -952,14 +973,15 @@ ucp object create "Crate" --primitive Cube --save
 # An empty container at root
 ucp object create "MyObject"
 
-# Create as child
+# Create as child (parent by path, name, or instance id)
+ucp object create "Child" --parent Level/Props --save
 ucp object create "Child" --parent 46894 --save
 ```
 
 | Flag | Description |
 | ---- | ----------- |
 | `--primitive <Cube\|Sphere\|Capsule\|Cylinder\|Plane\|Quad>` | Build a renderable primitive instead of an empty object |
-| `--parent <id>` | Parent instance ID |
+| `--parent <path\|name\|id>` | Parent object: a hierarchy path, a name, or an instance id |
 | `--save` | Save the active scene afterwards |
 
 New objects become part of the active scene immediately.
@@ -977,7 +999,8 @@ ucp object delete --id -15774 --save
 Move a GameObject in the hierarchy.
 
 ```bash
-# Move under a parent
+# Move under a parent (path, name, or instance id)
+ucp object reparent --path Props/Crate --parent Level/Props --save
 ucp object reparent --id -15774 --parent 46894 --save
 
 # Move to root
@@ -1149,6 +1172,9 @@ Search for assets by type and/or name.
 ```bash
 # Find all materials
 ucp asset search -t Material
+
+# Name substring as a bare argument (same as -n)
+ucp asset search Stone -t Material
 
 # Find by name
 ucp asset search -n "Player"
@@ -2331,7 +2357,7 @@ sees it; `ucp view` places a temporary camera so a vision model gets exactly the
 ```bash
 # Frame the main camera, or a chosen camera, without touching the scene
 ucp view capture -o frame.png
-ucp view capture --target-name Windmill -o windmill-in-context.png
+ucp view capture --name Windmill -o windmill-in-context.png
 
 # One object alone, auto-framed from its bounds; one file per requested angle
 ucp view isolate --name Windmill --views front,right,top --max-edge 900 -o windmill.png
@@ -2445,7 +2471,10 @@ Use the logs command in three modes:
 # Summarize the current buffered log state
 ucp logs status
 
-# Stream all new logs
+# Newest 20 buffered entries (the default; nothing blocks)
+ucp logs
+
+# Stream all new logs (blocks until Ctrl+C or --count entries)
 ucp logs --follow
 
 # Stream only new errors
@@ -2476,7 +2505,7 @@ ucp stop
 
 | Flag                          | Description                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
-| `--follow`                    | Follow live incoming logs instead of querying buffered history                             |
+| `--follow`                    | Stream live logs instead of reading history; blocks until `--count` entries or Ctrl+C      |
 | `--level <info\|warn\|error>` | Filter by log severity threshold                                                           |
 | `--channel <text>`            | Filter by coarse channel/category text in the message or stack trace                       |
 | `--filter <expr>`             | Convenience filter expression such as `level>=warning`, `channel=Shader`, or `text=depth`  |
@@ -2971,7 +3000,7 @@ ucp settings player
 [OK] PlayerSettings
   Company: DefaultCompany
   Product: Flux
-  Version: 0.7.0
+  Version: 0.7.1
   Defines: UNITY_POST_PROCESSING, ODIN_INSPECTOR
 ```
 
@@ -4015,8 +4044,8 @@ to refuse instead of discarding, or `--no-save` to refuse on any dirty scene (no
 ucp object create Crate --primitive Cube               # mesh + collider in one call
 ucp object create Floor --primitive Plane
 ucp object create Enemies                              # EMPTY container, nothing to see
-ucp object create Head --primitive Sphere --parent -15774
-ucp object instantiate Assets/Prefabs/Enemy.prefab --name Enemy_01 --parent -15774
+ucp object create Head --primitive Sphere --parent Player/Body   # --parent takes a path, name, or id
+ucp object instantiate Assets/Prefabs/Enemy.prefab --name Enemy_01 --parent Enemies
 ucp object instantiate -4231 --name Copy                # a bare integer clones a scene object
 ```
 
@@ -4061,7 +4090,7 @@ ucp transform rotate --id 46894 --euler 0 90 0 --relative
 ucp transform scale --id 46894 --uniform 2
 ucp transform scale --id 46894 --scale 1 2 1 --relative
 ucp transform look-at --id 46894 --at 0 0 0          # world point
-ucp transform look-at --id 46894 --target-id 46910 --up 0 1 0
+ucp transform look-at --path Turret --target Enemies/Enemy_01 --up 0 1 0   # --target: path, name, or id
 ```
 
 Prefer these over `set-property m_LocalPosition`: they handle world/local, relative offsets, and
@@ -4107,7 +4136,7 @@ ucp transform move --name Crate --to 2 5 0
 ucp spatial ground --name Crate                       # rests on the floor now
 ucp transform rotate --name Crate --euler 0 30 0
 ucp spatial bounds --name Crate
-ucp view capture --target-name Crate --max-edge 768 -o crate.png   # see it (ucp-visual-feedback)
+ucp view capture --name Crate --max-edge 768 -o crate.png   # see it (ucp-visual-feedback)
 ucp scene save
 ```
 
@@ -4330,13 +4359,14 @@ whether the camera overshoots, or whether the character's feet slide. Capture, l
 ### Ground rules
 
 - Frame what you want to judge. A raw Game view screenshot shows whatever the player camera sees;
-  `view capture --target-id` and `view isolate` frame a specific object from its bounds.
+  `view capture --path/--name/--id` and `view isolate` frame a specific object from its bounds.
 - Keep images small for model consumption: `--max-edge 768` is plenty for a decision, and
   composites (`isolate`, `orbit`) put several angles into one image.
 - Use a recording, not a burst of screenshots, when the question is about motion or transient
   state. Add `--slowdown` when a model, not a person, will watch it.
-- Outputs go where you say (`-o path.png`); without `-o`, screenshots print base64 to stdout and
-  recordings land under `.ucp/recordings/`.
+- Outputs go where you say (`-o path.png`); without `-o`, images land under `.ucp/captures/` and
+  recordings under `.ucp/recordings/`, and the command prints the path. Base64 on stdout is
+  opt-in (`--base64`) and costs hundreds of thousands of tokens: never use it in an agent loop.
 
 ### Screenshots
 
@@ -4354,7 +4384,7 @@ Scene-view screenshots repeatable across a before/after pair.
 
 ```bash
 ucp view capture -o main.png                                  # main camera, the whole scene
-ucp view capture --target-name Crate --max-edge 768 -o crate.png   # temporary camera framed on the object, scene still visible
+ucp view capture --name Crate --max-edge 768 -o crate.png   # temporary camera framed on the object, scene still visible
 ucp view capture --camera 47010 -o cinematic.png              # render from a specific camera object
 ucp view isolate --id 46894 -o crate-grid.png                 # Front/Right/Back/Top composite, object alone
 ucp view isolate --name Crate --views front,right --max-edge 512 -o crate.png   # writes crate-front.png, crate-right.png
@@ -4411,7 +4441,7 @@ contact, timing, smoothness, or settling. Leave it at 1 for clips a person will 
 - Ask about one axis at a time: translation, rotation, bobbing, contact. "Is it moving?" invites
   a wrong answer when an object rotates in place.
 - Compare, don't describe: capture before and after the change with the same framing (`scene
-  focus` + `--view scene`, or the same `view capture --target-id`), then ask which is correct
+  focus` + `--view scene`, or the same `view capture --path`), then ask which is correct
   and why.
 - For "which of these two clips is right", a forced choice with both clips is far more reliable
   than a single-clip verdict.
@@ -4423,7 +4453,7 @@ Verify a placement:
 ```bash
 ucp transform move --name Crate --to 2 3 0
 ucp spatial ground --name Crate
-ucp view capture --target-name Crate --max-edge 768 -o crate.png
+ucp view capture --name Crate --max-edge 768 -o crate.png
 ```
 
 Judge a camera-follow tweak:
@@ -4496,7 +4526,7 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 
 - Prefer direct workspace edits when you already have normal filesystem access, followed by `ucp hot-reload apply <files>` when you changed method bodies (about a second, keeps play mode) or `ucp compile` when you changed fields, types, or signatures (the `apply` response says which under `needsFullCompile`). Finish with `ucp compile` before tests, builds, or handoff.
 - Use `ucp files ...` as a sandboxed fallback for bridge-mediated project file I/O.
-- Run `ucp scene snapshot` before object or prefab work to discover instance IDs.
+- Run `ucp scene snapshot` before object or prefab work: it prints an indented tree of `Name #id` lines; address objects by `--path Root/Child` (stable) or the id (changes after reloads). `--json` output is compact; defaults (active, Untagged, Default layer) are omitted.
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
 - For imported assets such as FBX, textures, and audio, prefer `ucp asset import-settings ...` over raw `.meta` file edits.
 - `ucp files write` and `ucp files patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
@@ -4583,7 +4613,7 @@ ucp object create Crate --primitive Cube
 ucp transform move --id 1234 --to 3 0 0
 ucp transform rotate --id 1234 --euler 0 45 0
 ucp transform scale --id 1234 --uniform 2
-ucp transform look-at --id 1234 --at 0 0 0           # or --target-id <id>
+ucp transform look-at --id 1234 --at 0 0 0           # or --target <path|name|id>
 
 # Place objects on surfaces and reason about geometry.
 ucp spatial ground --id 1234                          # drop onto the surface below
@@ -4592,7 +4622,7 @@ ucp spatial bounds --id 1234                          # world AABB (center/size/
 ucp spatial nearest --point 0 0 0 --max 5
 
 # See the scene. isolate/orbit render a single object so a vision model can read its 3D shape.
-ucp view capture --target-id 1234 --max-edge 768 --output framed.png
+ucp view capture --path Level/Crate --max-edge 768 --output framed.png   # omit --output: saved under .ucp/captures/
 ucp view isolate --id 1234 --output hero.png          # composite Front/Right/Back/Top grid
 ucp view orbit --id 1234 --count 6 --output orbit.png
 ```

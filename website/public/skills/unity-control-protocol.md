@@ -10,7 +10,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (install via npm, cargo, or binary) and the UCP Bridge package installed in the target Unity project. Unity 2021.3+ required.
 metadata:
   author: mflRevan
-  version: '0.7.0'
+  version: '0.7.1'
   homepage: https://github.com/mflRevan/unity-control-protocol
 ---
 
@@ -55,7 +55,7 @@ Use `ucp <command> --help` for flags such as `--project`, `--json`, `--unity`, `
 
 - Prefer direct workspace edits when you already have normal filesystem access, followed by `ucp hot-reload apply <files>` when you changed method bodies (about a second, keeps play mode) or `ucp compile` when you changed fields, types, or signatures (the `apply` response says which under `needsFullCompile`). Finish with `ucp compile` before tests, builds, or handoff.
 - Use `ucp files ...` as a sandboxed fallback for bridge-mediated project file I/O.
-- Run `ucp scene snapshot` before object or prefab work to discover instance IDs.
+- Run `ucp scene snapshot` before object or prefab work: it prints an indented tree of `Name #id` lines; address objects by `--path Root/Child` (stable) or the id (changes after reloads). `--json` output is compact; defaults (active, Untagged, Default layer) are omitted.
 - Treat instance IDs as short-lived handles; refresh them after compilation, reloads, package changes, scene loads, or test runs.
 - For imported assets such as FBX, textures, and audio, prefer `ucp asset import-settings ...` over raw `.meta` file edits.
 - `ucp files write` and `ucp files patch` automatically reimport edited Unity assets and `.meta` files under `Assets/` and `Packages/` unless you pass `--no-reimport`.
@@ -142,7 +142,7 @@ ucp object create Crate --primitive Cube
 ucp transform move --id 1234 --to 3 0 0
 ucp transform rotate --id 1234 --euler 0 45 0
 ucp transform scale --id 1234 --uniform 2
-ucp transform look-at --id 1234 --at 0 0 0           # or --target-id <id>
+ucp transform look-at --id 1234 --at 0 0 0           # or --target <path|name|id>
 
 # Place objects on surfaces and reason about geometry.
 ucp spatial ground --id 1234                          # drop onto the surface below
@@ -151,7 +151,7 @@ ucp spatial bounds --id 1234                          # world AABB (center/size/
 ucp spatial nearest --point 0 0 0 --max 5
 
 # See the scene. isolate/orbit render a single object so a vision model can read its 3D shape.
-ucp view capture --target-id 1234 --max-edge 768 --output framed.png
+ucp view capture --path Level/Crate --max-edge 768 --output framed.png   # omit --output: saved under .ucp/captures/
 ucp view isolate --id 1234 --output hero.png          # composite Front/Right/Back/Top grid
 ucp view orbit --id 1234 --count 6 --output orbit.png
 ```

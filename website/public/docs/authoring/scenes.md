@@ -75,7 +75,7 @@ If the active scene has unsaved changes, `scene load` saves it first; a dirty un
 
 ### `ucp scene snapshot`
 
-Capture a lean hierarchy snapshot of the active scene. By default this returns only root objects with lightweight metadata such as instance ID, name, active state, tags, layers, child counts, and component type names. Use `--depth` to expand into children. Use object-specific commands for full component/property inspection.
+Capture a lean hierarchy snapshot of the active scene as an indented tree: one line per object with its name, instance id, component type names, and anything that is not the default (an inactive object, a tag, a non-Default layer, the number of children a collapsed subtree hides). By default only root objects are listed; `--depth` expands children and `--filter` searches the whole hierarchy. Use object-specific commands for full component/property inspection.
 
 ```bash
 # Root objects only (default depth 0)
@@ -95,16 +95,18 @@ ucp scene snapshot --json
 | -------------------- | -------------------------------------- |
 | `--filter <pattern>` | Case-insensitive name substring; searches the whole hierarchy and prints each match's `path` |
 | `--depth <n>`        | Maximum hierarchy depth without a filter (default: `0`, roots only) |
-| `--json`             | Output as JSON                         |
+| `--json`             | Output as JSON; entries carry `instanceId`, `name`, `path`, `components`, and `active`/`tag`/`layer`/`childCount` only when not the default |
 
 **Example output:**
 
 ```
-[OK] Active scene: SampleScene (3 root objects)
-  Main Camera [46894] children=0 tag=Untagged layer=Default components=Transform, Camera, AudioListener
-  Directional Light [46896] children=0 tag=Untagged layer=Default components=Transform, Light
-  Player [46900] children=4 tag=Player layer=Default components=Transform, Rigidbody, PlayerController
+[OK] SampleScene: 3 root object(s); --depth N expands children, --filter NAME searches
+  Main Camera #46894 tag:MainCamera · Camera, AudioListener
+  Directional Light #46896 · Light
+  Player #46900 tag:Player [4 children] · Rigidbody, PlayerController
 ```
+
+`Transform` is implied on every object and left out of the component list.
 
 ### `ucp scene query`
 

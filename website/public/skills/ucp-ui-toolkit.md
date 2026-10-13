@@ -9,7 +9,7 @@ description: >-
 compatibility: Requires the `ucp` CLI (npm `@mflrevan/ucp`), the UCP bridge package, and Unity 6000.0 or newer in the target project. inspect/screenshot/check need an interactive editor with a graphics device; lint also works headless.
 metadata:
   author: mflRevan
-  version: '0.7.0'
+  version: '0.7.1'
   homepage: https://unityctl.dev/skills/ucp-ui-toolkit
 ---
 

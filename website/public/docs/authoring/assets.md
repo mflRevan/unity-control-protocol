@@ -14,6 +14,9 @@ Search for assets by type and/or name.
 # Find all materials
 ucp asset search -t Material
 
+# Name substring as a bare argument (same as -n)
+ucp asset search Stone -t Material
+
 # Find by name
 ucp asset search -n "Player"
 

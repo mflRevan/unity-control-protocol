@@ -68,15 +68,14 @@ This returns the same child metadata shape used by `ucp scene snapshot`, but sco
       {
         "instanceId": 46910,
         "name": "Body",
-        "depth": 1,
+        "path": "PlayerRoot/Body",
         "childCount": 1,
         "components": ["Transform", "MeshRenderer"],
         "children": [
           {
             "instanceId": 46911,
             "name": "WeaponSocket",
-            "depth": 2,
-            "childCount": 0,
+            "path": "PlayerRoot/Body/WeaponSocket",
             "components": ["Transform"]
           }
         ]
@@ -190,14 +189,15 @@ ucp object create "Crate" --primitive Cube --save
 # An empty container at root
 ucp object create "MyObject"
 
-# Create as child
+# Create as child (parent by path, name, or instance id)
+ucp object create "Child" --parent Level/Props --save
 ucp object create "Child" --parent 46894 --save
 ```
 
 | Flag | Description |
 | ---- | ----------- |
 | `--primitive <Cube\|Sphere\|Capsule\|Cylinder\|Plane\|Quad>` | Build a renderable primitive instead of an empty object |
-| `--parent <id>` | Parent instance ID |
+| `--parent <path\|name\|id>` | Parent object: a hierarchy path, a name, or an instance id |
 | `--save` | Save the active scene afterwards |
 
 New objects become part of the active scene immediately.
@@ -215,7 +215,8 @@ ucp object delete --id -15774 --save
 Move a GameObject in the hierarchy.
 
 ```bash
-# Move under a parent
+# Move under a parent (path, name, or instance id)
+ucp object reparent --path Props/Crate --parent Level/Props --save
 ucp object reparent --id -15774 --parent 46894 --save
 
 # Move to root
