@@ -343,6 +343,27 @@ the whole run (one to two hours): it refuses to start while another harness or a
 that project, and nothing else may open or wipe the project meanwhile. One failing step ends a
 slot with diagnostics; the harness never relaunches an editor to keep going.
 
+#### Which preflight a release needs
+
+The full preflight (every matrix slot, one to two hours) is for releases that meaningfully
+touched the editor-facing surface: bridge controllers or the protocol, the Unity package's
+dependencies or assembly layout, Harmony or hot reload, editor lifecycle (launch, dialogs,
+domain-reload handling), or a large new command surface that talks to the editor in new ways.
+Anything Unity-version-dependent belongs there.
+
+A release that only changes how results are rendered (text and JSON shape, help text, output
+trimming, docs, skills) takes the short preflight instead:
+
+```powershell
+.\scripts\validate-release.ps1 -Version <version> -SkipUnityMatrix   # cargo test/check, website, version/skills checks
+ucp run-tests --mode edit                                            # bridge edit-mode suite in one open editor (ucp-dev or the demo project)
+.\scripts\qa-playground.ps1 -Project unity-project-dev\ucp-dev        # optional: one-version QA when a harness-parsed output changed
+```
+
+then tag and push. The GitHub Release workflow builds the four binaries, publishes npm, and
+runs its own validate job; `gh run watch` confirms it. 0.7.1 (output trimming only) shipped on
+the short path; 0.7.0 (hot reload, focus guard, lifecycle) needed the full one.
+
 #### Unity Compatibility Matrix (`scripts/unity-version-matrix.ps1`)
 
 The matrix runner resolves each requested slot (e.g. `6000.2`) against locally installed Unity editors, preferring the exact minor version, then falling back to the nearest installed same-major editor.
