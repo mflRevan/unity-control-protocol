@@ -68,11 +68,13 @@ prompt, on the Fantasy Kingdom demo project:
 | | 0.7.0 | 0.7.1 |
 |---|---|---|
 | `ucp` calls | 100 | 86 |
-| CLI output tokens (raw) | 455,863 | 28,389 |
-| CLI output tokens, excluding the one base64 dump | 36,420 | 28,389 |
-| `--help` probes / their tokens | 23 / 12,579 | 23 / 4,625 |
-| agent tool calls / total agent tokens | 31 / 77,855 | 24 / 66,121 |
+| CLI output tokens | 455,863 | 28,389 |
+| of which `--help` probes (23 in both runs) | 12,579 | 4,625 |
+| agent tokens for the whole task | 77,855 | 66,121 |
 | CLI wall time | 82 s | 42 s |
+
+419k of the 0.7.0 output tokens were one `view isolate` without `-o`; without it the run cost
+36,420, so the like-for-like saving is about 22%, and 94% including that trap.
 
 ### Fixed
 
